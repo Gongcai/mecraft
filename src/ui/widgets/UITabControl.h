@@ -16,7 +16,7 @@ public:
     UITabControl();
     ~UITabControl() override;
 
-    void init(ResourceMgr& resourceMgr) override;
+    void init(GameResources& resources, RhiDevice& rhiDevice) override;
     void shutdown() override;
 
     // Add a tab with the given title. Returns the tab index.

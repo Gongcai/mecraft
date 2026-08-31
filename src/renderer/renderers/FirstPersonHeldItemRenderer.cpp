@@ -24,7 +24,7 @@
 
 #include "../../Paths.h"
 #include "../../player/Inventory.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../world/chunk/SubChunk.h"
 
 namespace {
@@ -83,11 +83,11 @@ void addSteveQuad(std::vector<FirstPersonHeldItemRenderer::SteveVertex>& vertice
 
 } // namespace
 
-void FirstPersonHeldItemRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
+void FirstPersonHeldItemRenderer::init(GameResources& resources, RhiDevice& rhiDevice) {
     if (m_initialized) {
         shutdown();
     }
-    m_resourceMgr = &resourceMgr;
+    m_resources = &resources;
     m_rhiDevice = &rhiDevice;
     createRhiTextureResources();
     createArmRhiResources();
@@ -102,7 +102,7 @@ void FirstPersonHeldItemRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiD
 }
 
 void FirstPersonHeldItemRenderer::shutdown() {
-    if (!m_initialized && m_resourceMgr == nullptr && !m_rightArmMesh.rhiVertexBuffer.isValid() &&
+    if (!m_initialized && m_resources == nullptr && !m_rightArmMesh.rhiVertexBuffer.isValid() &&
         m_blockMeshes.empty() && m_itemMeshes.empty()) {
         return;
     }
@@ -119,7 +119,7 @@ void FirstPersonHeldItemRenderer::shutdown() {
     destroyItemRhiResources();
     destroyArmRhiResources();
     destroyRhiTextureResources();
-    m_resourceMgr = nullptr;
+    m_resources = nullptr;
     m_rhiDevice = nullptr;
     m_hasPrevSample = false;
     m_prevTimeSeconds = 0.0f;
@@ -218,7 +218,7 @@ void FirstPersonHeldItemRenderer::loadConfig() {
 }
 
 void FirstPersonHeldItemRenderer::saveConfig() const {
-    if (m_resourceMgr == nullptr) {
+    if (m_resources == nullptr) {
         return;
     }
 
@@ -323,7 +323,7 @@ void FirstPersonHeldItemRenderer::setSceneHdrScale(const float scale) {
 }
 
 void FirstPersonHeldItemRenderer::prepareFrameResources(const Inventory& inventory) {
-    if (!m_initialized || m_resourceMgr == nullptr) {
+    if (!m_initialized || m_resources == nullptr) {
         return;
     }
     const ItemID selectedItem = inventory.getSelectedItem();
@@ -331,7 +331,7 @@ void FirstPersonHeldItemRenderer::prepareFrameResources(const Inventory& invento
         return;
     }
     const ItemDef& itemDef = ItemRegistry::get(selectedItem);
-    const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
+    const int itemTileIndex = m_resources->uiTextures.itemTextureIndex(itemDef.iconTextureName);
     const BlockID renderBlock = ItemRegistry::toRenderBlock(selectedItem);
     if (!prefersBlockMeshForItem(renderBlock) && itemTileIndex >= 0) {
         getOrCreateItemMesh(selectedItem);
@@ -342,10 +342,10 @@ void FirstPersonHeldItemRenderer::prepareFrameResources(const Inventory& invento
 
 void FirstPersonHeldItemRenderer::createRhiTextureResources() {
     const RhiTextureHandle textures[] = {
-        m_resourceMgr->getGuiTextureHandle("steve"), m_resourceMgr->getItemTextureAtlas().texture,
-        m_resourceMgr->getTextureArray().texture,    m_resourceMgr->getLightmapDay(),
-        m_resourceMgr->getLightmapNight(),           m_resourceMgr->getGrassColormap(),
-        m_resourceMgr->getFoliageColormap()};
+        m_resources->texture2D.getGuiHandle("steve"), m_resources->uiTextures.itemTextureAtlas().texture,
+        m_resources->blockTextures.textureArray().texture,    m_resources->environmentTextures.getLightmapDay(),
+        m_resources->environmentTextures.getLightmapNight(),           m_resources->environmentTextures.getGrassColormap(),
+        m_resources->environmentTextures.getFoliageColormap()};
     RhiTextureViewHandle* views[] = {&m_steveTextureView,   &m_itemAtlasView,     &m_blockTextureArrayView,
                                      &m_lightmapDayView,    &m_lightmapNightView, &m_grassColormapView,
                                      &m_foliageColormapView};
@@ -777,7 +777,7 @@ FirstPersonHeldItemRenderer::fromFirstPersonShadowData(const FirstPersonShadowDa
 void FirstPersonHeldItemRenderer::prepareFrame(const int width, const int height, const Inventory& inventory,
                                                const FirstPersonHeldItemMotion& motion, const float timeSeconds) {
     m_preparedFrame = {};
-    if (!m_initialized || m_resourceMgr == nullptr) {
+    if (!m_initialized || m_resources == nullptr) {
         return;
     }
     if (width <= 0 || height <= 0) {
@@ -877,7 +877,7 @@ void FirstPersonHeldItemRenderer::prepareFrame(const int width, const int height
     }
 
     const ItemDef& itemDef = ItemRegistry::get(m_visibleItemId);
-    const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
+    const int itemTileIndex = m_resources->uiTextures.itemTextureIndex(itemDef.iconTextureName);
     const BlockID renderBlock = ItemRegistry::toRenderBlock(m_visibleItemId);
     const bool preferBlockMesh = prefersBlockMeshForItem(renderBlock);
     const bool useItemMesh = !preferBlockMesh && itemTileIndex >= 0 && m_itemAtlasView.isValid();
@@ -1050,11 +1050,11 @@ FirstPersonHeldItemRenderer::Mesh* FirstPersonHeldItemRenderer::getOrCreateItemM
 
 FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildBlockMesh(const BlockID blockId) const {
     Mesh mesh;
-    if (m_resourceMgr == nullptr || blockId == 0) {
+    if (m_resources == nullptr || blockId == 0) {
         return mesh;
     }
 
-    renderer::BlockCubeMesh shared = renderer::buildBlockCubeMesh(blockId, *m_resourceMgr);
+    renderer::BlockCubeMesh shared = renderer::buildBlockCubeMesh(blockId, *m_resources, *m_rhiDevice);
     mesh.rhiVertexBuffer = shared.rhiVertexBuffer;
     mesh.rhiDevice = shared.rhiDevice;
     mesh.vertexCount = shared.vertexCount;
@@ -1066,18 +1066,18 @@ FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildBlockMesh(co
 
 FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildItemMesh(const ItemID itemId) const {
     Mesh mesh;
-    if (m_resourceMgr == nullptr || itemId == 0) {
+    if (m_resources == nullptr || itemId == 0) {
         return mesh;
     }
 
     const ItemDef& itemDef = ItemRegistry::get(itemId);
-    const int tileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
+    const int tileIndex = m_resources->uiTextures.itemTextureIndex(itemDef.iconTextureName);
     if (tileIndex < 0) {
         return mesh;
     }
 
     std::vector<ItemModelVertex> vertices;
-    if (!buildExtrudedItemMesh(m_resourceMgr->getItemTextureAtlas(), m_resourceMgr->getItemTexturePixels(), tileIndex,
+    if (!buildExtrudedItemMesh(m_resources->uiTextures.itemTextureAtlas(), m_resources->uiTextures.itemTexturePixels(), tileIndex,
                                vertices)) {
         return mesh;
     }

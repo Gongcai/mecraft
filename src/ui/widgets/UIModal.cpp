@@ -3,7 +3,7 @@
 #include <algorithm>
 
 #include "../font/TextRenderer.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 
 UIModal::UIModal() {
     interactive = true;
@@ -20,25 +20,25 @@ UIModal::~UIModal() {
     shutdown();
 }
 
-void UIModal::init(ResourceMgr& resourceMgr) {
+void UIModal::init(GameResources& resources, RhiDevice& rhiDevice) {
     const UIResolvedModalStyle style = fallbackStyle();
 
     // Overlay panel (full screen dim).
     m_overlayPanel.setBackgroundColor({0.0f, 0.0f, 0.0f, 0.0f});
     m_overlayPanel.setUseLocalColors(true);
-    m_overlayPanel.init(resourceMgr);
+    m_overlayPanel.init(resources, rhiDevice);
     m_overlayPanel.width = 9999.0f;
     m_overlayPanel.height = 9999.0f;
     m_overlayPanel.anchor = Anchor::BottomLeft;
 
     // Content panel.
-    m_contentPanel.init(resourceMgr);
+    m_contentPanel.init(resources, rhiDevice);
     m_contentPanel.width = style.panelWidth;
     m_contentPanel.height = style.panelMinHeight;
     m_contentPanel.anchor = Anchor::Center;
 
     // Title text.
-    m_title.init(resourceMgr);
+    m_title.init(resources, rhiDevice);
     m_title.setTextScale(style.titleTextScale);
     m_title.anchor = Anchor::TopCenter;
     m_title.anchorOffsetY = -style.padding;
@@ -47,7 +47,7 @@ void UIModal::init(ResourceMgr& resourceMgr) {
     m_overlayAlpha.start(0.0f, 0.0f, 0.3f, EasingType::EaseOut);
     m_panelScale.start(0.8f, 0.8f, 0.3f, EasingType::EaseOut);
 
-    UIWidget::init(resourceMgr);
+    UIWidget::init(resources, rhiDevice);
 }
 
 void UIModal::shutdown() {

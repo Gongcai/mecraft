@@ -7,14 +7,14 @@
 #include "../rhi/RhiHandles.h"
 
 class DeferredRenderTargets;
-class ResourceMgr;
+struct GameResources;
 class RhiCommandList;
 class RhiDevice;
 
 /// Screen-space velocity pass: reprojects depth to compute per-pixel velocity.
 class VelocityPass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr);
+    void init(GameResources& resources);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "Velocity"; }
 

@@ -306,7 +306,7 @@ set(SRC_CORE
         src/resource/CubemapLibrary.cpp
         src/resource/EnvironmentTextureLibrary.cpp
         src/resource/EntityTexturePreloader.cpp
-        src/resource/ResourceMgr.cpp
+        src/resource/GameResources.cpp
         src/resource/TextureAtlas.cpp
         src/resource/TextureAtlasBuilders.cpp
         src/resource/TextureResampler.cpp

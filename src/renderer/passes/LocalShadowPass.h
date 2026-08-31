@@ -22,7 +22,7 @@ class FallingBlockRenderer;
 class HumanoidRenderer;
 class IDeferredGeometryProvider;
 class IWorldView;
-class ResourceMgr;
+struct GameResources;
 class RhiCommandList;
 class RhiDevice;
 class StaticMeshRenderer;
@@ -64,7 +64,7 @@ public:
         RhiSamplerHandle sampler;
     };
 
-    void init(ResourceMgr& resourceMgr);
+    void init(GameResources& resources);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "LocalShadow"; }
 
@@ -159,7 +159,7 @@ private:
     [[nodiscard]] static bool sameCacheRecord(const CacheRecord& lhs, const CacheRecord& rhs);
     [[nodiscard]] static bool sameCacheRecordBase(const CacheRecord& lhs, const CacheRecord& rhs);
 
-    ResourceMgr* m_resourceMgr = nullptr;
+    GameResources* m_resources = nullptr;
     RhiDevice* m_rhiDevice = nullptr;
     TerrainRenderer* m_terrainRenderer = nullptr;
     WorldRenderBuffer* m_worldRenderBuffer = nullptr;

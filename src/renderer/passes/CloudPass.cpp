@@ -6,7 +6,7 @@
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../rhi/RhiShaderSourceLoader.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 
 #include <glm/glm.hpp>
 #include <algorithm>
@@ -45,8 +45,8 @@ struct alignas(16) CloudParams {
 static_assert(sizeof(CloudParams) == 256u);
 } // namespace
 
-void CloudPass::init(ResourceMgr& resourceMgr) {
-    m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
+void CloudPass::init(GameResources& resources) {
+    m_noiseTexture = resources.texture2D.getHandle("shader_noise2d");
 }
 
 void CloudPass::shutdown() {

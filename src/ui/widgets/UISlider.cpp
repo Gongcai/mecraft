@@ -4,7 +4,7 @@
 #include <cmath>
 #include <glm/vec4.hpp>
 
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../renderer/rhi/RhiCommandList.h"
 #include "../../renderer/rhi/RhiDevice.h"
 #include "../../renderer/rhi/RhiShaderSourceLoader.h"
@@ -22,8 +22,8 @@ UISlider::~UISlider() {
     shutdown();
 }
 
-void UISlider::init(ResourceMgr& resourceMgr) {
-    m_rhiDevice = &resourceMgr.rhiDevice();
+void UISlider::init(GameResources& resources, RhiDevice& rhiDevice) {
+    m_rhiDevice = &rhiDevice;
     const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
     const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
     if (!vertexSource || !fragmentSource)

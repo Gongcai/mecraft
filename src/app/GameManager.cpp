@@ -492,13 +492,13 @@ bool GameManager::init(int width, int height, const char* title, AppLaunchOption
     }
 #endif
     m_threadPool.start();
-    if (!app::bootstrapGameResources(m_resourceMgr, *m_rhiDevice, *m_commandListPool)) {
+    if (!app::bootstrapGameResources(m_resources, *m_rhiDevice, *m_commandListPool)) {
         return false;
     }
 
     m_audioEngine.init();
     m_bgmSystem.init(m_audioEngine);
-    m_uiRenderer.init(m_resourceMgr);
+    m_uiRenderer.init(m_resources, *m_rhiDevice, *m_commandListPool);
     m_localeManager.loadSettings();
     m_uiRenderer.setLocaleManager(&m_localeManager);
     if (!net::ENetTransport::initialize()) {
@@ -582,7 +582,7 @@ AppStateDependencies GameManager::makeAppStateDependencies() {
             m_input,
             m_actionMap,
             m_contextManager,
-            m_resourceMgr,
+            m_resources,
             m_audioEngine,
             m_bgmSystem,
             m_uiRenderer,
@@ -1079,7 +1079,7 @@ void GameManager::shutdown() {
         m_appStateMachine.popState();
     }
     m_uiRenderer.shutdown();
-    m_resourceMgr.shutdown();
+    m_resources.shutdown();
     m_bgmSystem.shutdown();
     m_audioEngine.shutdown();
     if (m_rhiDevice) {

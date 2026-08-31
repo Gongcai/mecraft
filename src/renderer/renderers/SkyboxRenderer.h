@@ -6,13 +6,13 @@
 #include "../rhi/RhiHandles.h"
 #include "../rhi/RhiRenderGraph.h"
 
-class ResourceMgr;
+struct GameResources;
 class RhiDevice;
 class RhiCommandListPool;
 
 class SkyboxRenderer {
 public:
-    void init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
+    void init(GameResources& resources, RhiDevice& rhiDevice, RhiCommandListPool& commandListPool);
     void shutdown();
     void render(int width, int height, float aspect, float yawDegrees, float pitchDegrees, RhiDevice& rhiDevice);
 

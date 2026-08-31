@@ -20,7 +20,7 @@ class Camera;
 class IWorldView;
 class RhiCommandList;
 class RhiDevice;
-class ResourceMgr;
+struct GameResources;
 class Window;
 class World;
 
@@ -35,7 +35,7 @@ public:
         kRenderMobsOnly // hide only the local Steve model (first-person view)
     };
 
-    [[nodiscard]] bool init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
+    [[nodiscard]] bool init(GameResources& resources, RhiDevice& rhiDevice);
     void shutdown();
     [[nodiscard]] bool prepareFrame(const IWorldView& worldView, ecs::GameplayRegistry& registry,
                                     RenderMode mode = kRenderAll);
@@ -90,7 +90,7 @@ private:
     };
     std::vector<PreparedPartDraw> m_preparedPartDraws;
 
-    ResourceMgr* m_resourceMgr = nullptr;
+    GameResources* m_resources = nullptr;
     RhiDevice* m_rhiDevice = nullptr;
     float m_inventoryPreviewHeadLookX = 0.0f;
     float m_inventoryPreviewHeadLookY = 0.0f;

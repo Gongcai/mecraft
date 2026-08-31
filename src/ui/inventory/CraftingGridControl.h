@@ -28,7 +28,7 @@ struct CraftingGridLayout {
 
 class CraftingGridControl : public UIWidget {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(GameResources& resources, RhiDevice& rhiDevice) override;
     void shutdown() override;
 
     UIEventResult onInput(const UIInputEvent& event, const UIRenderContext& ctx) override;

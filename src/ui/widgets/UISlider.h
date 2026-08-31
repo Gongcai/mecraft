@@ -15,7 +15,7 @@ public:
     UISlider();
     ~UISlider() override;
 
-    void init(ResourceMgr& resourceMgr) override;
+    void init(GameResources& resources, RhiDevice& rhiDevice) override;
     void shutdown() override;
 
     void setRange(float min, float max);

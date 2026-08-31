@@ -12,7 +12,7 @@
 #include <cstdint>
 
 class DeferredRenderTargets;
-class ResourceMgr;
+struct GameResources;
 class RhiDevice;
 class RhiCommandList;
 
@@ -25,7 +25,7 @@ class ShadowRenderer;
 class DebugPass : public RenderPass {
 public:
     static constexpr std::size_t kTextureCount = 33u;
-    void init(ResourceMgr& resourceMgr);
+    void init(GameResources& resources);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "Debug"; }
 

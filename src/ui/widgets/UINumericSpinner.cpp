@@ -10,7 +10,7 @@
 #include "../../renderer/rhi/RhiCommandList.h"
 #include "../../renderer/rhi/RhiDevice.h"
 #include "../../renderer/rhi/RhiShaderSourceLoader.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../font/TextRenderer.h"
 
 UINumericSpinner::UINumericSpinner() {
@@ -24,8 +24,8 @@ UINumericSpinner::~UINumericSpinner() {
     shutdown();
 }
 
-void UINumericSpinner::init(ResourceMgr& resourceMgr) {
-    m_rhiDevice = &resourceMgr.rhiDevice();
+void UINumericSpinner::init(GameResources& resources, RhiDevice& rhiDevice) {
+    m_rhiDevice = &rhiDevice;
     const auto vs = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
     const auto fs = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
     if (!vs || !fs)
@@ -70,7 +70,7 @@ void UINumericSpinner::init(ResourceMgr& resourceMgr) {
     if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() || !m_pipelineLayout.isValid() ||
         !m_pipeline.isValid() || !m_vertexBuffer.isValid())
         std::abort();
-    UIWidget::init(resourceMgr);
+    UIWidget::init(resources, rhiDevice);
 }
 
 void UINumericSpinner::shutdown() {

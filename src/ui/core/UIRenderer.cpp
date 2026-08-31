@@ -10,8 +10,9 @@
 #include "engine/platform/Time.h"
 #include "engine/input/InputManager.h"
 #include "../../player/Inventory.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../renderer/rhi/RhiCommandList.h"
+#include "../../renderer/rhi/RhiCommandListPool.h"
 #include "../../renderer/rhi/RhiDevice.h"
 #include "../../renderer/rhi/RhiResources.h"
 #include "../../renderer/rhi/RhiShaderSourceLoader.h"
@@ -31,70 +32,72 @@ UIRenderer::~UIRenderer() {
     shutdown();
 }
 
-void UIRenderer::init(ResourceMgr& resourceMgr) {
-    m_resourceMgr = &resourceMgr;
+void UIRenderer::init(GameResources& resources, RhiDevice& rhiDevice, RhiCommandListPool& commandListPool) {
+    m_resources = &resources;
+    m_rhiDevice = &rhiDevice;
+    m_commandListPool = &commandListPool;
     m_theme = UIThemePresets::dark();
-    initPanelRhiResources(resourceMgr.rhiDevice());
+    initPanelRhiResources(rhiDevice);
 
     // Crosshair - no scaling (always pixel-perfect)
-    m_crosshair.init(resourceMgr);
+    m_crosshair.init(resources, rhiDevice);
     m_crosshair.setScaleStrategy(UIScaleStrategy::None);
 
-    if (!m_text.init(resourceMgr.rhiDevice(), DEFAULT_FONT_PATH)) {
+    if (!m_text.init(rhiDevice, DEFAULT_FONT_PATH)) {
         std::abort();
     }
 
     // Hotbar - uniform scaling with GUI scale
-    m_hotbar.init(resourceMgr);
+    m_hotbar.init(resources, rhiDevice);
     m_hotbar.visible = true;
     m_hotbar.setScaleStrategy(UIScaleStrategy::Uniform);
 
     // HUD (health/food bars) - uniform scaling
-    m_hud.init(resourceMgr);
+    m_hud.init(resources, rhiDevice);
     m_hud.visible = true;
     m_hud.setScaleStrategy(UIScaleStrategy::Uniform);
 
     // Death screen
-    m_deathBackdrop.init(resourceMgr);
+    m_deathBackdrop.init(resources, rhiDevice);
     m_deathBackdrop.visible = true;
     m_deathBackdrop.setUseLocalColors(true);
     m_deathBackdrop.setBackgroundColor({0.34f, 0.02f, 0.02f, 0.64f});
     m_deathBackdrop.setBorderWidth(0.0f);
-    m_deathTitle.init(resourceMgr);
+    m_deathTitle.init(resources, rhiDevice);
     m_deathTitle.setText("You died");
     m_deathTitle.setTextScale(4.0f);
     m_deathTitle.setTextColor({1.0f, 0.18f, 0.16f, 1.0f});
     m_deathTitle.setShadowEnabled(true);
     m_deathTitle.setShadowOffset(2.0f, -2.0f);
-    m_deathPrompt.init(resourceMgr);
+    m_deathPrompt.init(resources, rhiDevice);
     m_deathPrompt.setText("Press R to respawn");
     m_deathPrompt.setTextScale(1.6f);
     m_deathPrompt.setTextColor({1.0f, 1.0f, 1.0f, 0.92f});
     m_deathPrompt.setShadowEnabled(true);
 
     // Inventory panels - uniform scaling
-    m_inventoryPanel.init(resourceMgr);
+    m_inventoryPanel.init(resources, rhiDevice);
     m_inventoryPanel.visible = false;
     m_inventoryPanel.setScaleStrategy(UIScaleStrategy::Uniform);
 
-    m_storagePanel.init(resourceMgr);
+    m_storagePanel.init(resources, rhiDevice);
     m_storagePanel.visible = false;
     m_storagePanel.setScaleStrategy(UIScaleStrategy::Uniform);
 
-    m_machinePanel.init(resourceMgr);
+    m_machinePanel.init(resources, rhiDevice);
     m_machinePanel.visible = false;
     m_machinePanel.setScaleStrategy(UIScaleStrategy::Uniform);
 
-    m_creativeInventoryPanel.init(resourceMgr);
+    m_creativeInventoryPanel.init(resources, rhiDevice);
     m_creativeInventoryPanel.visible = false;
     m_creativeInventoryPanel.setScaleStrategy(UIScaleStrategy::Uniform);
 
     // Command input and console - text adaptive
-    m_commandInput.init(resourceMgr);
+    m_commandInput.init(resources, rhiDevice);
     m_commandInput.visible = false;
     m_commandInput.setScaleStrategy(UIScaleStrategy::TextOnly);
 
-    m_console.init(resourceMgr);
+    m_console.init(resources, rhiDevice);
     m_console.visible = true;
     m_console.setTextRenderer(&m_text);
     m_console.setMaxLines(m_consoleMaxLines);
@@ -106,7 +109,8 @@ void UIRenderer::init(ResourceMgr& resourceMgr) {
     };
 
     m_lastSceneContext = {};
-    m_lastSceneContext.resourceMgr = m_resourceMgr;
+    m_lastSceneContext.resources = m_resources;
+    m_lastSceneContext.rhiDevice = m_rhiDevice;
     m_lastSceneContext.humanoidRenderer = m_humanoidRenderer;
     m_lastSceneContext.textRenderer = &m_text;
     populatePanelRhiContext(m_lastSceneContext);
@@ -131,7 +135,9 @@ void UIRenderer::shutdown() {
     m_lastSceneContext = {};
     destroyBackdropBlurTargets();
     destroyPanelRhiResources();
-    m_resourceMgr = nullptr;
+    m_resources = nullptr;
+    m_rhiDevice = nullptr;
+    m_commandListPool = nullptr;
     m_humanoidRenderer = nullptr;
 }
 
@@ -290,7 +296,8 @@ UIEventResult UIRenderer::routeUIInput(const UIInputEvent& event) const {
     const float pixelScale = m_lastSceneContext.pixelScale();
     refEvent.x /= pixelScale;
     refEvent.y /= pixelScale;
-    m_lastSceneContext.resourceMgr = m_resourceMgr;
+    m_lastSceneContext.resources = m_resources;
+    m_lastSceneContext.rhiDevice = m_rhiDevice;
     m_lastSceneContext.textRenderer = &m_text;
     m_lastSceneContext.pointerX = refEvent.x;
     m_lastSceneContext.pointerY = refEvent.y;
@@ -546,7 +553,8 @@ UIRenderContext UIRenderer::makeContextFromSurface(const int surfaceWidth, const
     context.screenHeight = context.scaleConfig.virtualHeight;
 
     context.timeSeconds = static_cast<float>(Time::getRawTime());
-    context.resourceMgr = m_resourceMgr;
+    context.resources = m_resources;
+    context.rhiDevice = m_rhiDevice;
     context.humanoidRenderer = m_humanoidRenderer;
     context.inventory = &inventory;
     context.playerStats = &playerStats;
@@ -575,8 +583,12 @@ UIScene* UIRenderer::getActiveScene() const {
     return m_activeScene;
 }
 
-ResourceMgr* UIRenderer::getResourceMgr() const {
-    return m_resourceMgr;
+GameResources* UIRenderer::getResources() const {
+    return m_resources;
+}
+
+RhiDevice* UIRenderer::getRhiDevice() const {
+    return m_rhiDevice;
 }
 
 UIRenderContext UIRenderer::prepareSceneContext(const int surfaceWidth, const int surfaceHeight, RhiDevice& rhiDevice,
@@ -594,7 +606,8 @@ UIRenderContext UIRenderer::prepareSceneContext(const int surfaceWidth, const in
     context.screenWidth = context.scaleConfig.virtualWidth;
     context.screenHeight = context.scaleConfig.virtualHeight;
     context.timeSeconds = static_cast<float>(Time::getRawTime());
-    context.resourceMgr = m_resourceMgr;
+    context.resources = m_resources;
+    context.rhiDevice = m_rhiDevice;
     context.humanoidRenderer = m_humanoidRenderer;
     context.textRenderer = &m_text;
     context.commandInputText = &m_commandInput.getText();
@@ -1215,10 +1228,10 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
     if (!swapchainTexture.isValid()) {
         return;
     }
-    if (m_resourceMgr == nullptr) {
+    if (m_commandListPool == nullptr) {
         std::abort();
     }
-    RhiCommandList* commandListStorage = m_resourceMgr->commandListPool().acquire(RhiCommandListType::Graphics);
+    RhiCommandList* commandListStorage = m_commandListPool->acquire(RhiCommandListType::Graphics);
     if (commandListStorage == nullptr ||
         !commandListStorage->begin({"UiBackdropBlur.Commands", RhiCommandListType::Graphics})) {
         std::abort();

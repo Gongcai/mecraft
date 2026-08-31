@@ -53,8 +53,8 @@ static_assert(sizeof(PanelSolidPushConstants) == 48u);
 
 } // namespace
 
-void CommandInputOverlay::init(ResourceMgr& resourceMgr) {
-    UIWidget::init(resourceMgr);
+void CommandInputOverlay::init(GameResources& resources, RhiDevice& rhiDevice) {
+    UIWidget::init(resources, rhiDevice);
 }
 
 void CommandInputOverlay::shutdown() {

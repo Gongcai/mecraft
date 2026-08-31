@@ -7,7 +7,7 @@
 #include <glm/vec4.hpp>
 
 #include "../../player/Inventory.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../renderer/rhi/RhiCommandList.h"
 #include "../../world/block/Block.h"
 #include "../../item/Item.h"
@@ -39,13 +39,13 @@ static_assert(sizeof(HotbarImagePushConstants) == 64u);
 
 } // namespace
 
-void HotbarControl::init(ResourceMgr& resourceMgr) {
-    UIWidget::init(resourceMgr);
-    m_resourceMgr = &resourceMgr;
+void HotbarControl::init(GameResources& resources, RhiDevice& rhiDevice) {
+    UIWidget::init(resources, rhiDevice);
+    m_resources = &resources;
 }
 
 void HotbarControl::shutdown() {
-    m_resourceMgr = nullptr;
+    m_resources = nullptr;
     m_inventory = nullptr;
     UIWidget::shutdown();
 }
@@ -123,7 +123,7 @@ void HotbarControl::renderInternal(const UIRenderContext& context, const Invento
     const float screenW = static_cast<float>(context.screenWidth);
     const float screenH = static_cast<float>(context.screenHeight);
     const TextRenderer* textRenderer = context.textRenderer;
-    if (!m_resourceMgr) {
+    if (!m_resources) {
         return;
     }
 
@@ -135,9 +135,9 @@ void HotbarControl::renderInternal(const UIRenderContext& context, const Invento
         m_cachedSlotCounts[i] = static_cast<int>(stack.count);
     }
 
-    const TextureAtlas& itemIconAtlas = m_resourceMgr->getItemIconAtlas();
-    const TextureAtlas& itemTextureAtlas = m_resourceMgr->getItemTextureAtlas();
-    const RhiTextureHandle widgetsTexture = m_resourceMgr->getGuiTextureHandle("widgets");
+    const TextureAtlas& itemIconAtlas = m_resources->uiTextures.blockIconAtlas();
+    const TextureAtlas& itemTextureAtlas = m_resources->uiTextures.itemTextureAtlas();
+    const RhiTextureHandle widgetsTexture = m_resources->texture2D.getGuiHandle("widgets");
     if (!widgetsTexture.isValid()) {
         return;
     }
@@ -227,7 +227,7 @@ void HotbarControl::renderInternal(const UIRenderContext& context, const Invento
             if (!itemTextureAtlas.texture.isValid() || itemTextureAtlas.tilesPerRow <= 0) {
                 continue;
             }
-            const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
+            const int itemTileIndex = m_resources->uiTextures.itemTextureIndex(itemDef.iconTextureName);
             if (itemTileIndex < 0) {
                 continue;
             }

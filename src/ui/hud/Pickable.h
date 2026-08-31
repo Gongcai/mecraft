@@ -2,7 +2,7 @@
 
 #include <array>
 
-class ResourceMgr;
+struct GameResources;
 struct TextureAtlas;
 struct UIRenderContext;
 
@@ -38,6 +38,6 @@ public:
     // item-count glyphs to the existing text batch path. The supplied render context owns the
     // shared quad buffer, pipelines, descriptor cache, scissor, and virtual screen dimensions.
     static void render(const SlotInfo* slots, int count, int hoveredIndex, const RenderParams& params,
-                       const UIRenderContext& context, const ResourceMgr& resourceMgr,
+                       const UIRenderContext& context, const GameResources& resources,
                        const TextureAtlas& itemIconAtlas, const TextureAtlas& itemTextureAtlas);
 };

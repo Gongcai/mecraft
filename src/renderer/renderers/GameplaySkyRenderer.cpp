@@ -13,7 +13,6 @@
 #include "../rhi/RhiShaderSourceLoader.h"
 #include "engine/camera/Camera.h"
 #include "../../Paths.h"
-#include "../../resource/ResourceMgr.h"
 #include "stb/stb_image.h"
 #include "../../world/DayNightSystem.h"
 
@@ -163,8 +162,7 @@ void appendGreedySurface(std::vector<CloudVertex>& vertices, const std::vector<u
 }
 } // namespace
 
-void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
-    m_resourceMgr = &resourceMgr;
+void GameplaySkyRenderer::init(RhiDevice& rhiDevice) {
     m_rhiDevice = &rhiDevice;
     RhiBufferDesc captureBufferDesc;
     captureBufferDesc.debugName = "GameplaySky.Capture.UniformBuffer";
@@ -405,7 +403,6 @@ void GameplaySkyRenderer::shutdown() {
     m_captureAtmosphereLutView = {};
     m_captureNoiseView = {};
     m_captureNoiseTexture = {};
-    m_resourceMgr = nullptr;
     m_rhiDevice = nullptr;
 }
 

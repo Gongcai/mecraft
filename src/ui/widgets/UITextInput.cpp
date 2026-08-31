@@ -9,7 +9,7 @@
 
 #include "../core/UITheme.h"
 #include "../font/TextRenderer.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../renderer/rhi/RhiCommandList.h"
 #include "../../renderer/rhi/RhiDevice.h"
 #include "../../renderer/rhi/RhiShaderSourceLoader.h"
@@ -114,8 +114,8 @@ UITextInput::~UITextInput() {
     shutdown();
 }
 
-void UITextInput::init(ResourceMgr& resourceMgr) {
-    m_rhiDevice = &resourceMgr.rhiDevice();
+void UITextInput::init(GameResources& resources, RhiDevice& rhiDevice) {
+    m_rhiDevice = &rhiDevice;
     const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
     const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
     if (!vertexSource || !fragmentSource)
@@ -165,7 +165,7 @@ void UITextInput::init(ResourceMgr& resourceMgr) {
         !m_pipeline.isValid() || !m_vertexBuffer.isValid()) {
         std::abort();
     }
-    UIWidget::init(resourceMgr);
+    UIWidget::init(resources, rhiDevice);
 }
 
 void UITextInput::shutdown() {

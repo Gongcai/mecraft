@@ -6,7 +6,8 @@
 #include "../item/Item.h"
 #include "../resource/AppTextureManifest.h"
 #include "../resource/AtmosphereLutProbe.h"
-#include "../resource/ResourceMgr.h"
+#include "../resource/GameResources.h"
+#include "../resource/EntityTexturePreloader.h"
 #include "../ui/inventory/ContainerUiRegistry.h"
 #include "../world/block/Block.h"
 
@@ -195,20 +196,20 @@ bool collectRegisteredBlockTextureNames(BlockTextureNameSet& textureNames) {
 
 } // namespace
 
-bool bootstrapGameResources(ResourceMgr& resourceMgr, RhiDevice& rhiDevice, RhiCommandListPool& commandListPool) {
-    resourceMgr.init(rhiDevice, commandListPool);
-    if (!resourceMgr.loadBlockTextureCatalog(BLOCK_TEXTURES_CONFIG_PATH, BLOCK_TEXTURE_PACK_CONFIG_PATH)) {
+bool bootstrapGameResources(GameResources& resources, RhiDevice& rhiDevice, RhiCommandListPool& commandListPool) {
+    resources.init(rhiDevice, commandListPool);
+    if (!resources.blockTextures.loadCatalog(BLOCK_TEXTURES_CONFIG_PATH, BLOCK_TEXTURE_PACK_CONFIG_PATH)) {
         return false;
     }
     BlockTextureNameSet blockTextureNames;
     if (!collectRegisteredBlockTextureNames(blockTextureNames)) {
         return false;
     }
-    resourceMgr.buildBlockTextureResources(BLOCKS_TEXTURES_DIR, resourceMgr.getBlockTextureTileSize(),
+    resources.blockTextures.buildTextures(BLOCKS_TEXTURES_DIR, resources.blockTextures.tileSize(),
                                            blockTextureNames);
-    resourceMgr.loadLightmapTextures(LIGHTMAP_DAY_PATH, LIGHTMAP_NIGHT_PATH);
-    resourceMgr.loadColormapTextures(GRASS_TEXTURE_PATH, FOLIAGE_TEXTURE_PATH);
-    if (!resource::loadAppTextureManifest(resourceMgr, APP_TEXTURES_MANIFEST_PATH)) {
+    resources.environmentTextures.loadLightmaps(LIGHTMAP_DAY_PATH, LIGHTMAP_NIGHT_PATH);
+    resources.environmentTextures.loadColormaps(GRASS_TEXTURE_PATH, FOLIAGE_TEXTURE_PATH);
+    if (!resource::loadAppTextureManifest(resources, APP_TEXTURES_MANIFEST_PATH)) {
         return false;
     }
 
@@ -217,30 +218,30 @@ bool bootstrapGameResources(ResourceMgr& resourceMgr, RhiDevice& rhiDevice, RhiC
     resource::probeAtmosphereLut("Irradiance", SHADERPACK_IRRADIANCE_LUT_PATH, 64U * 16U * 16U);
     resource::probeAtmosphereLut("Final", SHADERPACK_FINAL_LUT_PATH);
 
-    resourceMgr.buildItemTextureAtlas(ITEMS_TEXTURES_DIR, 16);
+    resources.uiTextures.buildItemTextureAtlas(ITEMS_TEXTURES_DIR, 16, resources.blockTextures.catalog());
 
     if (!ContainerBehaviorRegistry::init() || !BlockInteractionRegistry::init() || !ui::ContainerUiRegistry::init()) {
         return false;
     }
     for (const auto& [id, def] : ui::ContainerUiRegistry::all()) {
         const std::string texturePath = std::string(ASSETS_DIR) + "/" + def.backgroundTexturePath;
-        if (!resourceMgr.loadGuiTexture(def.backgroundTexture, texturePath, true).isValid()) {
+        if (!resources.texture2D.loadGui(def.backgroundTexture, texturePath, true).isValid()) {
             std::cerr << "Failed to load container UI texture for " << id << ": " << texturePath << '\n';
             return false;
         }
     }
 
-    if (!resourceMgr.preloadEntityTexturesFromConfig(ENTITIES_CONFIG_PATH)) {
+    if (!resource::preloadEntityTexturesFromConfig(resources, ENTITIES_CONFIG_PATH)) {
         return false;
     }
 
-    resourceMgr.buildHudIconAtlas(ICONS_TEXTURE_DIR, 8);
+    resources.uiTextures.buildHudIconAtlas(ICONS_TEXTURE_DIR, 8);
 
-    BlockRegistry::init(&resourceMgr);
+    BlockRegistry::init(&resources.blockTextures);
     if (!ItemRegistry::init()) {
         return false;
     }
-    resourceMgr.buildBlockIconAtlas(64);
+    resources.uiTextures.buildBlockIconAtlas(64, resources.blockTextures);
     return true;
 }
 

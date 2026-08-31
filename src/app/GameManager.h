@@ -15,7 +15,7 @@
 #include "../game/session/GameSessionConfig.h"
 #include "../player/ActionMap.h"
 #include "../engine/input/InputContextManager.h"
-#include "../resource/ResourceMgr.h"
+#include "../resource/GameResources.h"
 #include "../audio/AudioEngine.h"
 #include "../audio/BgmSystem.h"
 #include "../ui/core/UIRenderer.h"
@@ -66,7 +66,7 @@ private:
     InputManager m_input;
     ActionMap m_actionMap;
     InputContextManager m_contextManager;
-    ResourceMgr m_resourceMgr;
+    GameResources m_resources;
     AudioEngine m_audioEngine;
     BgmSystem m_bgmSystem;
     UIRenderer m_uiRenderer;

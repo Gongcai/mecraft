@@ -73,9 +73,9 @@ RenderResourceHub::~RenderResourceHub() {
     shutdown();
 }
 
-bool RenderResourceHub::init(ResourceMgr& resourceMgr, ThreadPool& threadPool, RhiDevice& rhiDevice,
+bool RenderResourceHub::init(GameResources& resources, ThreadPool& threadPool, RhiDevice& rhiDevice,
                              RhiCommandListPool& commandListPool) {
-    m_resourceMgr = &resourceMgr;
+    m_resources = &resources;
     m_rhiDevice = &rhiDevice;
     m_commandListPool = &commandListPool;
 
@@ -87,7 +87,7 @@ bool RenderResourceHub::init(ResourceMgr& resourceMgr, ThreadPool& threadPool, R
     if (!m_terrainCache.init(m_rhiDevice)) {
         return false;
     }
-    if (!m_terrainCache.setOpacityMicromapSource(resourceMgr.getTerrainOpacityMicromapSource())) {
+    if (!m_terrainCache.setOpacityMicromapSource(resources.blockTextures.terrainOpacityMicromapSource())) {
         return false;
     }
     m_terrainCache.setWorldRenderBuffer(&m_worldRenderBuffer);
@@ -105,7 +105,7 @@ bool RenderResourceHub::init(ResourceMgr& resourceMgr, ThreadPool& threadPool, R
     }
     const std::string atmosphereLutPath = resolveAtmosphereFinalLutPath();
     m_deferredTargets.loadAtmosphereLut(atmosphereLutPath.c_str());
-    m_gameplaySkyRenderer.init(resourceMgr, *m_rhiDevice);
+    m_gameplaySkyRenderer.init(*m_rhiDevice);
     if (!m_meshingSubmitBudgetOverridden) {
         const int workerCount = std::max(1, threadPool.numWorkers());
         m_meshingSubmitBudget = 2 + std::max(0, workerCount - 1);
@@ -189,10 +189,10 @@ void RenderResourceHub::setTerrainStreamingService(TerrainStreamingService* svc)
 }
 
 void RenderResourceHub::setAtlasAnisotropy(const float anisotropy) {
-    if (m_resourceMgr == nullptr) {
+    if (m_resources == nullptr) {
         return;
     }
-    m_resourceMgr->setAtlasAnisotropy(anisotropy);
+    m_resources->blockTextures.setAnisotropy(anisotropy);
 }
 
 const RenderSettings& RenderResourceHub::getSettings() const {
@@ -200,17 +200,17 @@ const RenderSettings& RenderResourceHub::getSettings() const {
 }
 
 float RenderResourceHub::getAtlasAnisotropy() const {
-    if (m_resourceMgr == nullptr) {
+    if (m_resources == nullptr) {
         return 1.0f;
     }
-    return m_resourceMgr->getAtlasAnisotropy();
+    return m_resources->blockTextures.anisotropy();
 }
 
 float RenderResourceHub::getAtlasMaxAnisotropy() const {
-    if (m_resourceMgr == nullptr) {
+    if (m_resources == nullptr) {
         return 1.0f;
     }
-    return m_resourceMgr->getAtlasMaxAnisotropy();
+    return m_resources->blockTextures.maxAnisotropy();
 }
 
 #ifdef MECRAFT_DEBUG

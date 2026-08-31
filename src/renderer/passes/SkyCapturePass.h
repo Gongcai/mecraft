@@ -7,7 +7,7 @@
 
 class DeferredRenderTargets;
 class GameplaySkyRenderer;
-class ResourceMgr;
+struct GameResources;
 class DayNightSystem;
 class WeatherSystem;
 class RhiDevice;
@@ -16,7 +16,7 @@ class RhiCommandList;
 /// Sky capture pass: renders equirectangular sky radiance and cloud data for IBL and lighting.
 class SkyCapturePass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr);
+    void init(GameResources& resources);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "SkyCapture"; }
 
@@ -27,7 +27,7 @@ public:
     /// @param rhiDevice RHI device that owns the sky capture resources.
     /// @param targets Deferred render targets for sky capture and atmosphere LUT resources
     /// @param skyRenderer Gameplay sky renderer (owns shaders and rendering)
-    /// @param resourceMgr Resource manager for noise texture
+    /// @param resources Resource manager for noise texture
     /// @param cameraY Camera altitude for atmosphere scattering
     /// @param shaderTime Current shader time
     /// @param cameraPos Camera position for cloud rendering
@@ -35,7 +35,7 @@ public:
     /// @return True when all resources were prepared and commands were recorded.
     [[nodiscard]] bool execute(RhiCommandList& commandList, const DayNightSystem& dayNightSystem,
                                const WeatherSystem& weatherSystem, RhiDevice& rhiDevice, DeferredRenderTargets& targets,
-                               GameplaySkyRenderer& skyRenderer, ResourceMgr& resourceMgr, float cameraY,
+                               GameplaySkyRenderer& skyRenderer, GameResources& resources, float cameraY,
                                float shaderTime, const glm::vec3& cameraPos, float cloudTimeScale);
 
 private:

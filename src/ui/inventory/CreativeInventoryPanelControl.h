@@ -32,7 +32,7 @@ class CreativeInventoryPanelControl : public UIWidget {
 public:
     CreativeInventoryPanelControl();
 
-    void init(ResourceMgr& resourceMgr) override;
+    void init(GameResources& resources, RhiDevice& rhiDevice) override;
     void shutdown() override;
 
     UIEventResult onInput(const UIInputEvent& event, const UIRenderContext& ctx) override;
@@ -105,7 +105,7 @@ private:
     int m_lastActivatedSlot = -1;
     ItemID m_lastActivatedCreativeItem = 0;
 
-    ResourceMgr* m_resourceMgr = nullptr;
+    GameResources* m_resources = nullptr;
     int m_cachedScreenWidth = 1920;
     int m_cachedScreenHeight = 1080;
 

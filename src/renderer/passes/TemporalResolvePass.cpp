@@ -26,7 +26,7 @@ struct TemporalResolvePushConstants {
 }
 } // namespace
 
-void TemporalResolvePass::init(ResourceMgr&) {}
+void TemporalResolvePass::init(GameResources&) {}
 
 void TemporalResolvePass::shutdown() {
     destroyRhiResources();

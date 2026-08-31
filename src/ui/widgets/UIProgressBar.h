@@ -18,7 +18,7 @@ public:
     UIProgressBar();
     ~UIProgressBar() override;
 
-    void init(ResourceMgr& resourceMgr) override;
+    void init(GameResources& resources, RhiDevice& rhiDevice) override;
     void shutdown() override;
 
     // Set the target progress value (0.0 .. 1.0). Animates smoothly to the new value.

@@ -10,7 +10,7 @@
 
 #include <glm/glm.hpp>
 
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../rhi/RhiDevice.h"
 #include "../../world/block/Block.h"
 #include "../../world/block/BlockModelRegistry.h"
@@ -235,8 +235,8 @@ std::string resolveModelFaceTextureName(const BlockModel& model, const ModelFace
     return it->second;
 }
 
-AnimatedTextureRef resolveModelTextureRef(const ResourceMgr& resourceMgr, const std::string& textureName) {
-    const TextureAnimationInfo info = resourceMgr.getTextureAnimation(textureName);
+AnimatedTextureRef resolveModelTextureRef(const GameResources& resources, const std::string& textureName) {
+    const TextureAnimationInfo info = resources.blockTextures.textureAnimation(textureName);
     AnimatedTextureRef ref;
     ref.firstLayer = info.firstLayer;
     ref.frameCount = static_cast<uint16_t>(std::max(1, info.frameCount));
@@ -324,7 +324,7 @@ void appendTorchVertices(std::vector<BlockVertex>& vertices, const BlockDef& def
 }
 
 void appendModelVertices(std::vector<BlockVertex>& vertices, const BlockStateId stateId, const BlockDef& def,
-                         const ResourceMgr& resourceMgr) {
+                         const GameResources& resources) {
     const ModelVariant* variant = BlockStateRegistry::getModelVariant(stateId);
     if (variant == nullptr || variant->model == nullptr) {
         failBlockMeshBuilder("Model block is missing a model variant: " +
@@ -350,7 +350,7 @@ void appendModelVertices(std::vector<BlockVertex>& vertices, const BlockStateId 
             }
 
             const std::string textureName = resolveModelFaceTextureName(model, face);
-            const AnimatedTextureRef textureRef = resolveModelTextureRef(resourceMgr, textureName);
+            const AnimatedTextureRef textureRef = resolveModelTextureRef(resources, textureName);
             const uint8_t tintKind =
                 face.tintIndex >= 0 ? blockTintKindFromBiomeTint(def.biomeTint) : BlockTintKinds::NONE;
 
@@ -386,7 +386,7 @@ BlockCubeMesh uploadBlockCubeMesh(const std::vector<BlockVertex>& vertices, RhiD
     return mesh;
 }
 
-std::vector<BlockVertex> buildBlockMeshVerticesForState(const BlockStateId stateId, const ResourceMgr& resourceMgr) {
+std::vector<BlockVertex> buildBlockMeshVerticesForState(const BlockStateId stateId, const GameResources& resources) {
     std::vector<BlockVertex> vertices;
     if (stateId == NULL_BLOCK_STATE) {
         return vertices;
@@ -397,7 +397,7 @@ std::vector<BlockVertex> buildBlockMeshVerticesForState(const BlockStateId state
     vertices.reserve(36);
 
     if (isModelShape(def)) {
-        appendModelVertices(vertices, stateId, def, resourceMgr);
+        appendModelVertices(vertices, stateId, def, resources);
     } else if (def.renderShape == BlockRenderShape::Cross) {
         int tileIndex = def.faceTop.firstLayer;
         if (tileIndex < 0)
@@ -453,32 +453,30 @@ std::vector<BlockVertex> buildBlockMeshVerticesForState(const BlockStateId state
     return vertices;
 }
 
-std::vector<BlockVertex> buildBlockMeshVertices(const BlockID blockId, const ResourceMgr& resourceMgr) {
+std::vector<BlockVertex> buildBlockMeshVertices(const BlockID blockId, const GameResources& resources) {
     if (blockId == 0) {
         return {};
     }
-    return buildBlockMeshVerticesForState(BlockStateRegistry::getDefaultState(blockId), resourceMgr);
+    return buildBlockMeshVerticesForState(BlockStateRegistry::getDefaultState(blockId), resources);
 }
 
-BlockCubeMesh buildBlockCubeMesh(const BlockID blockId, ResourceMgr& resourceMgr) {
+BlockCubeMesh buildBlockCubeMesh(const BlockID blockId, GameResources& resources, RhiDevice& rhiDevice) {
     BlockCubeMesh mesh;
-    std::vector<BlockVertex> vertices = buildBlockMeshVertices(blockId, resourceMgr);
+    std::vector<BlockVertex> vertices = buildBlockMeshVertices(blockId, resources);
     if (vertices.empty()) {
         return mesh;
     }
 
-    RhiDevice& rhiDevice = resourceMgr.rhiDevice();
     return uploadBlockCubeMesh(vertices, rhiDevice, "BlockCubeMesh.VertexBuffer");
 }
 
-BlockCubeMesh buildBlockStateCubeMesh(const BlockStateId stateId, ResourceMgr& resourceMgr) {
+BlockCubeMesh buildBlockStateCubeMesh(const BlockStateId stateId, GameResources& resources, RhiDevice& rhiDevice) {
     BlockCubeMesh mesh;
-    std::vector<BlockVertex> vertices = buildBlockMeshVerticesForState(stateId, resourceMgr);
+    std::vector<BlockVertex> vertices = buildBlockMeshVerticesForState(stateId, resources);
     if (vertices.empty()) {
         return mesh;
     }
 
-    RhiDevice& rhiDevice = resourceMgr.rhiDevice();
     return uploadBlockCubeMesh(vertices, rhiDevice, "BlockStateCubeMesh.VertexBuffer");
 }
 

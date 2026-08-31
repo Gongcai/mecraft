@@ -5,7 +5,7 @@
 #ifndef MECRAFT_RENDERER_H
 #define MECRAFT_RENDERER_H
 #include "engine/camera/Camera.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../thread/ThreadPool.h"
 #include "engine/platform/Window.h"
 #include "../mesh/ChunkMeshingService.h"
@@ -130,7 +130,7 @@ public:
 #endif
 
     ~RenderResourceHub();
-    [[nodiscard]] bool init(ResourceMgr& resourceMgr, ThreadPool& threadPool, RhiDevice& rhiDevice,
+    [[nodiscard]] bool init(GameResources& resources, ThreadPool& threadPool, RhiDevice& rhiDevice,
                             RhiCommandListPool& commandListPool);
     void shutdown();
     void setMeshingSubmitBudget(int budget);
@@ -191,7 +191,7 @@ private:
     WorldRenderBuffer m_worldRenderBuffer;
     TerrainRhiPipelineSet m_terrainRhiPipelines;
 
-    ResourceMgr* m_resourceMgr = nullptr;
+    GameResources* m_resources = nullptr;
     RhiDevice* m_rhiDevice = nullptr;
     RhiCommandListPool* m_commandListPool = nullptr;
 

@@ -13,7 +13,7 @@
 #include "../../player/Inventory.h"
 #include "../../renderer/renderers/HumanoidRenderer.h"
 #include "../../renderer/rhi/RhiCommandList.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../locale/LocaleManager.h"
 #include "../ItemIconPolicy.h"
 #include "../core/UIRenderer.h"
@@ -67,13 +67,13 @@ void drawTexturedQuad(const UIRenderContext& context, const RhiTextureHandle tex
 }
 } // namespace
 
-void InventoryPanelControl::init(ResourceMgr& resourceMgr) {
-    UIWidget::init(resourceMgr);
-    m_resourceMgr = &resourceMgr;
+void InventoryPanelControl::init(GameResources& resources, RhiDevice& rhiDevice) {
+    UIWidget::init(resources, rhiDevice);
+    m_resources = &resources;
 
-    m_itemGrid.init(resourceMgr);
-    m_craftingGrid.init(resourceMgr);
-    m_tooltip.init(resourceMgr);
+    m_itemGrid.init(resources, rhiDevice);
+    m_craftingGrid.init(resources, rhiDevice);
+    m_tooltip.init(resources, rhiDevice);
 }
 
 void InventoryPanelControl::shutdown() {
@@ -82,7 +82,7 @@ void InventoryPanelControl::shutdown() {
     m_itemGrid.shutdown();
     m_inventory = nullptr;
     m_craftingSystem = nullptr;
-    m_resourceMgr = nullptr;
+    m_resources = nullptr;
     UIWidget::shutdown();
 }
 
@@ -254,12 +254,12 @@ void InventoryPanelControl::syncCraftingGridPosition(const ResolvedPanelRect& pa
 }
 
 void InventoryPanelControl::renderBackground(const UIRenderContext& context) const {
-    if (!m_resourceMgr || context.screenWidth <= 0 || context.screenHeight <= 0 ||
+    if (!m_resources || context.screenWidth <= 0 || context.screenHeight <= 0 ||
         m_layout.backgroundAtlasWidth <= 0.0f || m_layout.backgroundAtlasHeight <= 0.0f) {
         return;
     }
 
-    const RhiTextureHandle texture = m_resourceMgr->getGuiTextureHandle(m_layout.backgroundTextureName);
+    const RhiTextureHandle texture = m_resources->texture2D.getGuiHandle(m_layout.backgroundTextureName);
     if (!texture.isValid()) {
         return;
     }
@@ -298,12 +298,12 @@ void InventoryPanelControl::renderPlayerPreview(const UIRenderContext& context,
 }
 
 void InventoryPanelControl::renderDraggedItem(const UIRenderContext& context) const {
-    if (!context.hasDraggedItem || context.draggedItemId <= 0 || !m_resourceMgr) {
+    if (!context.hasDraggedItem || context.draggedItemId <= 0 || !m_resources) {
         return;
     }
 
-    const TextureAtlas& itemIconAtlas = m_resourceMgr->getItemIconAtlas();
-    const TextureAtlas& itemTextureAtlas = m_resourceMgr->getItemTextureAtlas();
+    const TextureAtlas& itemIconAtlas = m_resources->uiTextures.blockIconAtlas();
+    const TextureAtlas& itemTextureAtlas = m_resources->uiTextures.itemTextureAtlas();
 
     const ResolvedPanelRect panelRect = resolvePanelRect(context.screenWidth, context.screenHeight);
     const float iconSize = std::max(1.0f, m_layout.slotSize * panelRect.scale);
@@ -329,7 +329,7 @@ void InventoryPanelControl::renderDraggedItem(const UIRenderContext& context) co
         if (!itemTextureAtlas.texture.isValid() || itemTextureAtlas.tilesPerRow <= 0) {
             return;
         }
-        const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
+        const int itemTileIndex = m_resources->uiTextures.itemTextureIndex(itemDef.iconTextureName);
         if (itemTileIndex < 0) {
             return;
         }

@@ -1,7 +1,7 @@
 #include "EntityTexturePreloader.h"
 
 #include "Paths.h"
-#include "ResourceMgr.h"
+#include "GameResources.h"
 #include "../Diagnostics.h"
 
 #include <cstdio>
@@ -11,7 +11,7 @@
 
 namespace resource {
 
-bool preloadEntityTexturesFromConfig(ResourceMgr& resourceMgr, const std::string& entitiesConfigPath) {
+bool preloadEntityTexturesFromConfig(GameResources& resources, const std::string& entitiesConfigPath) {
     std::ifstream file(entitiesConfigPath);
     if (!file.is_open()) {
         MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to open entity config for texture preload: %s\n",
@@ -61,7 +61,7 @@ bool preloadEntityTexturesFromConfig(ResourceMgr& resourceMgr, const std::string
 
         loadedTextureKeys.insert(textureKey);
         const std::string texturePath = std::string(MOBS_TEXTURE_DIR) + "/" + textureKey + ".png";
-        resourceMgr.loadGuiTexture(textureKey, texturePath, true);
+        resources.texture2D.loadGui(textureKey, texturePath, true);
     }
     return true;
 }

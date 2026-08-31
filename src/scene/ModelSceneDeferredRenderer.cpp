@@ -25,7 +25,7 @@
 #include "renderer/shadow/ShadowRenderer.h"
 #include "renderer/targets/DeferredRenderTargets.h"
 #include "renderer/upscaling/Fsr31TemporalConfig.h"
-#include "resource/ResourceMgr.h"
+#include "resource/GameResources.h"
 #include "ui/imgui/ImGuiRhiRenderer.h"
 #include "world/DayNightSystem.h"
 #include "world/WeatherSystem.h"
@@ -340,7 +340,7 @@ struct ModelSceneDeferredRenderer::Impl {
         return context;
     }
 
-    ResourceMgr* resourceMgr = nullptr;
+    GameResources* resources = nullptr;
     RhiDevice* rhiDevice = nullptr;
     RhiCommandListPool* commandListPool = nullptr;
     ImGuiRhiRenderer* imguiRenderer = nullptr;
@@ -383,12 +383,12 @@ ModelSceneDeferredRenderer::~ModelSceneDeferredRenderer() {
     shutdown();
 }
 
-bool ModelSceneDeferredRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice,
+bool ModelSceneDeferredRenderer::init(GameResources& resources, RhiDevice& rhiDevice,
                                       RhiCommandListPool& commandListPool, ImGuiRhiRenderer& imguiRenderer,
                                       IDeferredGeometryProvider& geometryProvider) {
     shutdown();
     Impl& state = *m_impl;
-    state.resourceMgr = &resourceMgr;
+    state.resources = &resources;
     state.rhiDevice = &rhiDevice;
     state.commandListPool = &commandListPool;
     state.imguiRenderer = &imguiRenderer;
@@ -399,9 +399,9 @@ bool ModelSceneDeferredRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDe
         shutdown();
         return false;
     }
-    state.sky.init(resourceMgr, rhiDevice);
-    state.postProcess.init(resourceMgr, commandListPool);
-    state.fsr1.init(resourceMgr, commandListPool);
+    state.sky.init(rhiDevice);
+    state.postProcess.init(resources, commandListPool);
+    state.fsr1.init(commandListPool);
     state.temporalUpscale.init(rhiDevice, commandListPool);
     state.debugService.init(rhiDevice);
     if (!state.sceneTlasCache.init(&rhiDevice)) {
@@ -442,7 +442,7 @@ bool ModelSceneDeferredRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDe
     state.shared.deferredTargets = &state.targets;
     state.shared.sky = &state.sky;
     state.shared.shadowRenderer = &state.shadowRenderer;
-    state.shared.resources = &resourceMgr;
+    state.shared.resources = &resources;
     state.shared.deferredGeometryProvider = &geometryProvider;
     state.pipeline.init(state.shared);
     state.initialized = true;
@@ -474,7 +474,7 @@ void ModelSceneDeferredRenderer::shutdown() {
     }
     state.viewportSampler = {};
     state.shared = {};
-    state.resourceMgr = nullptr;
+    state.resources = nullptr;
     state.rhiDevice = nullptr;
     state.commandListPool = nullptr;
     state.imguiRenderer = nullptr;

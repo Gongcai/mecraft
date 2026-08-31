@@ -14,7 +14,7 @@ public:
     UIDropdown();
     ~UIDropdown() override;
 
-    void init(ResourceMgr& resourceMgr) override;
+    void init(GameResources& resources, RhiDevice& rhiDevice) override;
     void shutdown() override;
 
     void setOptions(std::vector<std::string> options);

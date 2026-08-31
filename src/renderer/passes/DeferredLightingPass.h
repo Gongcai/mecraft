@@ -10,7 +10,7 @@
 #include <cstdint>
 
 class DeferredRenderTargets;
-class ResourceMgr;
+struct GameResources;
 class RhiCommandList;
 class RhiDevice;
 class ClusteredLightingPass;
@@ -25,7 +25,7 @@ public:
     /// Identifies the exact RGB encoding stored in the Vulkan RTGI diffuse input.
     enum class RtgiDiffuseEncoding : uint8_t { Disabled = 0u, LinearRgb = 1u, ReblurYCoCg = 2u };
 
-    void init(ResourceMgr& resourceMgr);
+    void init(GameResources& resources);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "DeferredLighting"; }
 

@@ -16,7 +16,7 @@
 #include "../../world/block/BlockStateRegistry.h"
 
 class IWorldView;
-class ResourceMgr;
+struct GameResources;
 class RhiCommandList;
 class RhiDevice;
 class Chunk;
@@ -25,7 +25,7 @@ class SubChunk;
 /// Renders world block entities whose visual geometry is not emitted by terrain meshing.
 class BlockEntityRenderer {
 public:
-    [[nodiscard]] bool init(ResourceMgr& resourceMgr);
+    [[nodiscard]] bool init(GameResources& resources, RhiDevice& rhiDevice);
     void shutdown();
     void beginFrame();
     [[nodiscard]] bool prepareFrame(const IWorldView& worldView);
@@ -135,7 +135,7 @@ private:
         std::vector<BlockEntityInstance> instances;
     };
 
-    ResourceMgr* m_resourceMgr = nullptr;
+    GameResources* m_resources = nullptr;
     RhiDevice* m_rhiDevice = nullptr;
     std::unordered_map<BlockID, ModelEntry> m_models;
     std::unordered_map<SectionKey, SectionCache, SectionKeyHash> m_sectionCaches;

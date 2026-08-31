@@ -9,7 +9,7 @@
 #include "../rhi/RhiShaderSourceLoader.h"
 #include "../shadow/ShadowRenderer.h"
 #include "../targets/DeferredRenderTargets.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 
 #include <algorithm>
 #include <cmath>
@@ -93,11 +93,11 @@ struct alignas(16) DeferredLightingParams {
 static_assert(sizeof(DeferredLightingParams) == 1344u);
 } // namespace
 
-void DeferredLightingPass::init(ResourceMgr& resourceMgr) {
-    m_lightmapDayTexture = resourceMgr.getLightmapDay();
-    m_lightmapNightTexture = resourceMgr.getLightmapNight();
-    m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
-    m_rippleNormalTexture = resourceMgr.getTexture2DHandle("shader_ripple_normal");
+void DeferredLightingPass::init(GameResources& resources) {
+    m_lightmapDayTexture = resources.environmentTextures.getLightmapDay();
+    m_lightmapNightTexture = resources.environmentTextures.getLightmapNight();
+    m_noiseTexture = resources.texture2D.getHandle("shader_noise2d");
+    m_rippleNormalTexture = resources.texture2D.getHandle("shader_ripple_normal");
 }
 
 void DeferredLightingPass::shutdown() {

@@ -11,7 +11,7 @@
 
 // Forward declarations
 class World;
-class ResourceMgr;
+struct GameResources;
 class ThreadPool;
 namespace physics {
 class PhysicsSystem;
@@ -55,7 +55,7 @@ public:
     ~GameSession();
 
     /// Initialize the session with config and external dependencies.
-    void init(const GameSessionConfig& config, ResourceMgr& resourceMgr, ThreadPool* threadPool);
+    void init(const GameSessionConfig& config, GameResources& resources, ThreadPool* threadPool);
 
     /// Initialize world (seed, spawn).
     void initWorld(int seed);

@@ -19,11 +19,11 @@ public:
         m_ctx.context.pushContext(InputContextType::UI);
         m_ctx.input.captureMouse(false);
 
-        ResourceMgr* rm = m_ctx.uiRenderer.getResourceMgr();
+        GameResources* rm = m_ctx.uiRenderer.getResources();
         if (rm) {
             // -- Pause menu --
             m_pauseScreen.setLocaleManager(&m_ctx.localeManager);
-            m_pauseScreen.init(*rm);
+            m_pauseScreen.init(*rm, *m_ctx.uiRenderer.getRhiDevice());
             m_pauseScreen.onResume = [this]() {
                 m_ctx.fsm.popState();
             };
@@ -41,7 +41,7 @@ public:
             m_settingsScreen.setRenderDistanceSetter(m_ctx.renderDistanceSetter);
             m_settingsScreen.setWindow(m_ctx.window);
             m_settingsScreen.setPresentationController(m_ctx.presentationController);
-            m_settingsScreen.init(*rm);
+            m_settingsScreen.init(*rm, *m_ctx.uiRenderer.getRhiDevice());
             m_settingsScreen.onBack = [this]() {
                 switchToPause();
             };

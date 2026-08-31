@@ -8,7 +8,7 @@
 #include "../ecs/components/Components.h"
 #include "../ecs/GameplayRegistry.h"
 #include "../ecs/util/ParticleEventBuffer.h"
-#include "../resource/ResourceMgr.h"
+#include "../resource/GameResources.h"
 #include "../renderer/rhi/RhiCommandList.h"
 #include "../renderer/rhi/RhiDevice.h"
 #include "../renderer/rhi/RhiShaderSourceLoader.h"
@@ -29,9 +29,9 @@ void ParticleSystem::bindRegistry(ecs::GameplayRegistry& registry) {
     m_registry = &registry;
 }
 
-bool ParticleSystem::init(ResourceMgr& resourceMgr) {
-    m_rhiDevice = &resourceMgr.rhiDevice();
-    m_texArray = &resourceMgr.getTextureArray();
+bool ParticleSystem::init(GameResources& resources, RhiDevice& rhiDevice) {
+    m_rhiDevice = &rhiDevice;
+    m_texArray = &resources.blockTextures.textureArray();
     if (!m_texArray->texture.isValid()) {
         shutdown();
         return false;

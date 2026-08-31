@@ -13,7 +13,7 @@
 #include "../../item/Item.h"
 
 class IWorldView;
-class ResourceMgr;
+struct GameResources;
 class RhiCommandList;
 class RhiDevice;
 class World;
@@ -21,7 +21,7 @@ class DropSystem;
 
 class DropRenderer {
 public:
-    void init(ResourceMgr& resourceMgr);
+    void init(GameResources& resources, RhiDevice& rhiDevice);
     void shutdown();
     [[nodiscard]] bool prepareFrame(const IWorldView& worldView, const DropSystem& dropSystem);
     void renderItemsToGBuffer(RhiCommandList& commandList, const glm::mat4& viewProj,
@@ -62,7 +62,7 @@ private:
     // Falls back to (1.0, 0.0) if chunk is not loaded.
     static glm::vec2 queryWorldLight(const IWorldView& worldView, const glm::vec3& position);
 
-    ResourceMgr* m_resourceMgr = nullptr;
+    GameResources* m_resources = nullptr;
     std::unordered_map<BlockID, Mesh> m_blockMeshes;
     std::unordered_map<ItemID, Mesh> m_itemMeshes;
     // Per-object velocity: stores previous-frame model matrix per drop (by drop ID).

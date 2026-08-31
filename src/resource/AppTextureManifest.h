@@ -3,7 +3,7 @@
 
 #include <string>
 
-class ResourceMgr;
+struct GameResources;
 
 namespace resource {
 
@@ -16,14 +16,14 @@ namespace resource {
 /// Each "textures" entry requires "name" and "path" (relative to ASSETS_DIR). Optional
 /// fields: "kind" ("2d" default or "gui"), "srgb" (bool, default false), "flip"
 /// (bool, default true for gui, false for 2d), and "queueSharing" ("exclusive" default
-/// or "graphicsComputeConcurrent"). GUI textures route to loadGuiTexture; plain 2D textures
-/// route to loadTexture2D.
+/// or "graphicsComputeConcurrent"). GUI textures route to Texture2DLibrary::loadGui; plain
+/// 2D textures route to Texture2DLibrary::load. Cubemaps route to CubemapLibrary::load.
 ///
-/// @param resourceMgr   Destination resource manager that stores the loaded textures.
+/// @param resources   Destination game-resources aggregate that stores the loaded textures.
 /// @param manifestPath  Absolute path to the manifest JSON file.
 /// @return true when the manifest parses and every declared texture loads successfully.
 ///         Any parse error or failed load aborts startup (no silent fallback).
-[[nodiscard]] bool loadAppTextureManifest(ResourceMgr& resourceMgr, const std::string& manifestPath);
+[[nodiscard]] bool loadAppTextureManifest(GameResources& resources, const std::string& manifestPath);
 
 } // namespace resource
 

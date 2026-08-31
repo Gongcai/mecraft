@@ -15,7 +15,7 @@
 class Inventory;
 class RhiCommandList;
 class RhiDevice;
-class ResourceMgr;
+struct GameResources;
 
 struct FirstPersonHeldItemMotion {
     bool moving = false;
@@ -88,7 +88,7 @@ public:
         float nz = 0.0f;
     };
 
-    void init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
+    void init(GameResources& resources, RhiDevice& rhiDevice);
     void shutdown();
     void loadConfig();
     void saveConfig() const;
@@ -181,7 +181,7 @@ private:
     void synchronizeShadowTextureViews();
     void destroyShadowTextureViews();
 
-    ResourceMgr* m_resourceMgr = nullptr;
+    GameResources* m_resources = nullptr;
     RhiDevice* m_rhiDevice = nullptr;
     RhiTextureViewHandle m_steveTextureView;
     RhiTextureViewHandle m_itemAtlasView;

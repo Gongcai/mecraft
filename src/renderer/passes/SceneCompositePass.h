@@ -10,14 +10,14 @@
 #include <array>
 
 class DeferredRenderTargets;
-class ResourceMgr;
+struct GameResources;
 class RhiCommandList;
 class RhiDevice;
 
 /// Scene composite pass: combines lighting, reflections, clouds, and atmosphere into final HDR scene.
 class SceneCompositePass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr);
+    void init(GameResources& resources);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "SceneComposite"; }
 

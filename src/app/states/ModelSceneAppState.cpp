@@ -100,7 +100,7 @@ void ModelSceneAppState::onEnter() {
         failValidationInitialization("model validation ImGui renderer initialization failed");
         return;
     }
-    if (!m_scene.init(m_deps.resourceMgr, m_deps.rhiDevice, m_deps.commandListPool, m_imguiRenderer)) {
+    if (!m_scene.init(m_deps.resources, m_deps.rhiDevice, m_deps.commandListPool, m_imguiRenderer)) {
         MECRAFT_LOG_STREAM(std::cerr << "[ModelSceneAppState] " << m_scene.lastError() << '\n');
         failValidationInitialization(m_scene.lastError());
         return;

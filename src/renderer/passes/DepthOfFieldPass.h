@@ -10,13 +10,13 @@
 #include <cstdint>
 
 class DeferredRenderTargets;
-class ResourceMgr;
+struct GameResources;
 class RhiDevice;
 
 /// Depth of field pass: circle-of-confusion based blur.
 class DepthOfFieldPass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr);
+    void init(GameResources& resources);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "DepthOfField"; }
 

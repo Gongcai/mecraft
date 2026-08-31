@@ -1,7 +1,7 @@
 #include "PostProcessPass.h"
 
 #include "../../Diagnostics.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../debug/RenderDebugService.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiCommandListPool.h"
@@ -100,8 +100,8 @@ PostProcessPass::~PostProcessPass() {
     shutdown();
 }
 
-void PostProcessPass::init(ResourceMgr& resourceMgr, RhiCommandListPool& commandListPool) {
-    m_noiseTexture = resourceMgr.getTexture2DHandle("shader_bayer256");
+void PostProcessPass::init(GameResources& resources, RhiCommandListPool& commandListPool) {
+    m_noiseTexture = resources.texture2D.getHandle("shader_bayer256");
     m_commandListPool = &commandListPool;
 }
 

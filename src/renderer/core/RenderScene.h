@@ -25,7 +25,7 @@
 
 // Forward declarations
 class RenderResourceHub;
-class ResourceMgr;
+struct GameResources;
 class RhiDevice;
 class RhiCommandListPool;
 class IWorldView;
@@ -92,7 +92,7 @@ struct SharedRenderResources {
     GameplaySkyRenderer* sky = nullptr;
     shadow::ShadowRenderer* shadowRenderer = nullptr;
     BlockInteractionOverlayRenderer* overlayRenderer = nullptr;
-    ResourceMgr* resources = nullptr;
+    GameResources* resources = nullptr;
     ThreadPool* threadPool = nullptr;
 
     // Sub-renderers (non-owning)
@@ -140,7 +140,7 @@ public:
     ~RenderScene();
 
     // Lifecycle
-    void init(ResourceMgr& resourceMgr);
+    void init(GameResources& resources, RhiDevice& rhiDevice);
     void shutdown();
 
     /// Main render entry point (called from Game)

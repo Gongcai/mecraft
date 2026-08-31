@@ -6,7 +6,7 @@
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../rhi/RhiShaderSourceLoader.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../shadow/ShadowRenderer.h"
 
 #include <glm/glm.hpp>
@@ -71,9 +71,9 @@ struct alignas(16) VolumetricFogParams {
 static_assert(sizeof(VolumetricFogParams) == 1056u);
 } // namespace
 
-void VolumetricPass::init(ResourceMgr& resourceMgr) {
-    m_resourceMgr = &resourceMgr;
-    m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
+void VolumetricPass::init(GameResources& resources) {
+    m_resources = &resources;
+    m_noiseTexture = resources.texture2D.getHandle("shader_noise2d");
 }
 
 void VolumetricPass::shutdown() {
@@ -82,7 +82,7 @@ void VolumetricPass::shutdown() {
     destroyTemporalRhiResources();
     destroyCompositeRhiResources();
     m_shadowRenderer = nullptr;
-    m_resourceMgr = nullptr;
+    m_resources = nullptr;
     m_noiseTexture = {};
     m_hasRenderedFog = false;
     m_graphFramePrepared = false;

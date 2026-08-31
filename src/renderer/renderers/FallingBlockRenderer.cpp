@@ -13,7 +13,7 @@
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiShaderSourceLoader.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../world/IWorldView.h"
 #include "../../world/chunk/Chunk.h"
 #include "../../world/chunk/SubChunk.h"
@@ -61,9 +61,9 @@ glm::vec2 queryWorldLight(const IWorldView& worldView, const glm::vec3& position
 
 } // namespace
 
-bool FallingBlockRenderer::init(ResourceMgr& resourceMgr) {
-    m_resourceMgr = &resourceMgr;
-    m_rhiDevice = &resourceMgr.rhiDevice();
+bool FallingBlockRenderer::init(GameResources& resources, RhiDevice& rhiDevice) {
+    m_resources = &resources;
+    m_rhiDevice = &rhiDevice;
     return createGBufferRhiResources();
 }
 
@@ -77,7 +77,7 @@ void FallingBlockRenderer::shutdown() {
     m_currentModelMatrices.clear();
     m_objectIds.clear();
     m_renderInstances.clear();
-    m_resourceMgr = nullptr;
+    m_resources = nullptr;
 }
 
 bool FallingBlockRenderer::prepareFrame(const IWorldView& worldView, const ecs::GameplayRegistry& registry) {
@@ -146,7 +146,7 @@ const renderer::BlockCubeMesh* FallingBlockRenderer::getOrCreateMesh(BlockStateI
     if (it != m_meshes.end()) {
         return &it->second;
     }
-    auto inserted = m_meshes.emplace(stateId, renderer::buildBlockStateCubeMesh(stateId, *m_resourceMgr));
+    auto inserted = m_meshes.emplace(stateId, renderer::buildBlockStateCubeMesh(stateId, *m_resources, *m_rhiDevice));
     return &inserted.first->second;
 }
 
@@ -235,8 +235,8 @@ bool FallingBlockRenderer::createGBufferRhiResources() {
     if (!vertexSource || !fragmentSource || !shadowVertexSource || !shadowFragmentSource || !forwardVertexSource ||
         !forwardFragmentSource)
         return false;
-    const RhiTextureHandle textures[] = {m_resourceMgr->getTextureArray().texture, m_resourceMgr->getGrassColormap(),
-                                         m_resourceMgr->getFoliageColormap()};
+    const RhiTextureHandle textures[] = {m_resources->blockTextures.textureArray().texture, m_resources->environmentTextures.getGrassColormap(),
+                                         m_resources->environmentTextures.getFoliageColormap()};
     RhiTextureViewHandle* views[] = {&m_textureArrayView, &m_grassColormapView, &m_foliageColormapView};
     for (uint32_t i = 0; i < 3u; ++i) {
         RhiTextureViewDesc desc;

@@ -2,21 +2,22 @@
 
 #include <algorithm>
 
-void UIScene::init(ResourceMgr& resourceMgr) {
+void UIScene::init(GameResources& resources, RhiDevice& rhiDevice) {
     if (m_initialized) {
         shutdown();
     }
-    m_resourceMgr = &resourceMgr;
-    buildUI(resourceMgr);
+    m_resources = &resources;
+    m_rhiDevice = &rhiDevice;
+    buildUI(resources, rhiDevice);
     for (auto& root : m_roots) {
-        root->init(resourceMgr);
+        root->init(resources, rhiDevice);
     }
     ensureFocusableSelection();
     m_initialized = true;
 }
 
 void UIScene::shutdown() {
-    if (!m_initialized && m_roots.empty() && m_resourceMgr == nullptr) {
+    if (!m_initialized && m_roots.empty() && m_resources == nullptr) {
         return;
     }
     setFocusedWidget(nullptr);
@@ -28,7 +29,8 @@ void UIScene::shutdown() {
     }
     m_roots.clear();
     m_animations.clear();
-    m_resourceMgr = nullptr;
+    m_resources = nullptr;
+    m_rhiDevice = nullptr;
     m_currentContext = {};
     m_initialized = false;
     m_hasInputContext = false;

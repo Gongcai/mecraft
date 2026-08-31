@@ -19,7 +19,7 @@ public:
     UIScene() { visible = true; }
     ~UIScene() override = default;
 
-    void init(ResourceMgr& resourceMgr) override;
+    void init(GameResources& resources, RhiDevice& rhiDevice) override;
     void shutdown() override;
     void layout(const UIRenderContext& context) override;
     void render(const UIRenderContext& context) const override;
@@ -51,9 +51,13 @@ protected:
     virtual void onSceneExit() {}
 
     // Called during init to create widgets
-    virtual void buildUI(ResourceMgr& resourceMgr) { (void)resourceMgr; }
+    virtual void buildUI(GameResources& resources, RhiDevice& rhiDevice) {
+        (void)resources;
+        (void)rhiDevice;
+    }
 
-    [[nodiscard]] ResourceMgr* getResourceMgr() const { return m_resourceMgr; }
+    [[nodiscard]] GameResources* getResources() const { return m_resources; }
+    [[nodiscard]] RhiDevice* getRhiDevice() const { return m_rhiDevice; }
     [[nodiscard]] const LocaleManager* getLocaleManager() const { return m_locale; }
 
 private:
@@ -65,7 +69,8 @@ private:
     std::vector<std::unique_ptr<UIWidget>> m_roots;
     TweenGroup m_animations;
     Phase m_phase = Phase::Active;
-    ResourceMgr* m_resourceMgr = nullptr;
+    GameResources* m_resources = nullptr;
+    RhiDevice* m_rhiDevice = nullptr;
     const LocaleManager* m_locale = nullptr;
     mutable UIRenderContext m_currentContext;
     bool m_initialized = false;

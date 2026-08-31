@@ -5,7 +5,7 @@
 #include <glm/vec4.hpp>
 
 #include "../font/TextRenderer.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../renderer/rhi/RhiCommandList.h"
 
 namespace {
@@ -59,8 +59,8 @@ UITabControl::~UITabControl() {
     shutdown();
 }
 
-void UITabControl::init(ResourceMgr& resourceMgr) {
-    UIWidget::init(resourceMgr);
+void UITabControl::init(GameResources& resources, RhiDevice& rhiDevice) {
+    UIWidget::init(resources, rhiDevice);
 }
 
 void UITabControl::shutdown() {

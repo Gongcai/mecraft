@@ -35,7 +35,6 @@
 #include "../rhi/RhiCommandListPool.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiShaderSourceLoader.h"
-#include "../../resource/ResourceMgr.h"
 #include "../../world/IWorldView.h"
 
 namespace {
@@ -578,10 +577,10 @@ void setTangent(const SMikkTSpaceContext* context, const float tangent[], const 
 
 } // namespace
 
-bool StaticMeshRenderer::init(ResourceMgr& resourceMgr, const std::string& modelPath,
+bool StaticMeshRenderer::init(RhiDevice& rhiDevice, RhiCommandListPool& commandListPool, const std::string& modelPath,
                               renderer::core::GlobalBindlessSet* globalBindlessSet) {
     shutdown();
-    m_rhiDevice = &resourceMgr.rhiDevice();
+    m_rhiDevice = &rhiDevice;
     if (!m_staticBlasCache.init(m_rhiDevice)) {
         const std::string error = m_staticBlasCache.lastError();
         shutdown();
@@ -596,8 +595,8 @@ bool StaticMeshRenderer::init(ResourceMgr& resourceMgr, const std::string& model
         return false;
     }
     m_objectId = *objectId;
-    if (!createPipelineResources() || !loadAsset(modelPath, resourceMgr) ||
-        !buildStaticBlas(resourceMgr.commandListPool())) {
+    if (!createPipelineResources() || !loadAsset(modelPath, commandListPool) ||
+        !buildStaticBlas(commandListPool)) {
         const std::string error = m_lastError;
         shutdown();
         m_lastError = error;
@@ -964,7 +963,7 @@ bool StaticMeshRenderer::ensureTransparentPipelines(const RhiBindGroupLayoutHand
     return true;
 }
 
-bool StaticMeshRenderer::loadAsset(const std::string& modelPath, ResourceMgr& resourceMgr) {
+bool StaticMeshRenderer::loadAsset(const std::string& modelPath, RhiCommandListPool& commandListPool) {
     cgltf_options options{};
     cgltf_data* rawData = nullptr;
     cgltf_result result = cgltf_parse_file(&options, modelPath.c_str(), &rawData);
@@ -1579,7 +1578,7 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath, ResourceMgr& re
         return false;
     }
 
-    RhiCommandList* commandList = resourceMgr.commandListPool().acquire(RhiCommandListType::Graphics);
+    RhiCommandList* commandList = commandListPool.acquire(RhiCommandListType::Graphics);
     if (commandList == nullptr ||
         !commandList->begin({"StaticMesh.TextureMipCommands", RhiCommandListType::Graphics})) {
         setError("failed to begin static mesh texture mip commands");

@@ -5,7 +5,7 @@
 #include <cstdio>
 
 #include "../font/TextRenderer.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../renderer/rhi/RhiCommandList.h"
 #include "../../renderer/rhi/RhiDevice.h"
 #include "../../renderer/rhi/RhiShaderSourceLoader.h"
@@ -24,8 +24,8 @@ UIProgressBar::~UIProgressBar() {
     shutdown();
 }
 
-void UIProgressBar::init(ResourceMgr& resourceMgr) {
-    m_rhiDevice = &resourceMgr.rhiDevice();
+void UIProgressBar::init(GameResources& resources, RhiDevice& rhiDevice) {
+    m_rhiDevice = &rhiDevice;
     const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
     const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
     if (!vertexSource || !fragmentSource)
@@ -74,7 +74,7 @@ void UIProgressBar::init(ResourceMgr& resourceMgr) {
         std::abort();
     initMesh();
     m_progressTween.start(0.0f, m_progress, 0.3f, EasingType::EaseOut);
-    UIWidget::init(resourceMgr);
+    UIWidget::init(resources, rhiDevice);
 }
 
 void UIProgressBar::shutdown() {

@@ -16,7 +16,7 @@ public:
     UIScrollArea();
     ~UIScrollArea() override;
 
-    void init(ResourceMgr& resourceMgr) override;
+    void init(GameResources& resources, RhiDevice& rhiDevice) override;
     void shutdown() override;
 
     void setContentHeight(float contentHeight);

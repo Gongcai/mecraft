@@ -6,8 +6,8 @@
 
 #include <algorithm>
 
-void LoadingScreen::buildUI(ResourceMgr& resourceMgr) {
-    (void)resourceMgr;
+void LoadingScreen::buildUI(GameResources& resources, RhiDevice& rhiDevice) {
+    (void)resources;
 
     auto background = std::make_unique<UIPanel>();
     background->setTone(UIPanelTone::ScreenBackground);

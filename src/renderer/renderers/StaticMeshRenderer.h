@@ -18,8 +18,8 @@
 
 class FrameContext;
 class IWorldView;
-class ResourceMgr;
 class RhiCommandList;
+class RhiCommandListPool;
 class RhiDevice;
 namespace renderer::core {
 class GlobalBindlessSet;
@@ -35,10 +35,11 @@ public:
     };
 
     /// Creates the asset's CPU and GPU resources.
-    /// @param resourceMgr Provides the active RHI device and command pool.
+    /// @param rhiDevice GPU device used to create all RHI objects.
+    /// @param commandListPool Pool used for one-shot upload command lists.
     /// @param modelPath Filesystem path to a glTF 2.0 GLB or JSON document.
     /// @return True when the complete asset and all graphics pipelines are ready.
-    [[nodiscard]] bool init(ResourceMgr& resourceMgr, const std::string& modelPath,
+    [[nodiscard]] bool init(RhiDevice& rhiDevice, RhiCommandListPool& commandListPool, const std::string& modelPath,
                             renderer::core::GlobalBindlessSet* globalBindlessSet);
 
     /// Releases every GPU object owned by the renderer.
@@ -230,7 +231,7 @@ private:
     [[nodiscard]] bool createPipelineResources();
     [[nodiscard]] bool rebuildReflectionProbeCaptureBindGroup();
     [[nodiscard]] bool ensureTransparentPipelines(RhiBindGroupLayoutHandle clusteredLightingLayout);
-    [[nodiscard]] bool loadAsset(const std::string& modelPath, ResourceMgr& resourceMgr);
+    [[nodiscard]] bool loadAsset(const std::string& modelPath, RhiCommandListPool& commandListPool);
     [[nodiscard]] bool buildStaticBlas(RhiCommandListPool& commandListPool);
     [[nodiscard]] bool publishRayTracingResources(renderer::core::GlobalBindlessSet& globalBindlessSet);
     void destroyTransparentPipelines();

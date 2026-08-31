@@ -18,7 +18,7 @@ namespace {
 }
 } // namespace
 
-void MotionBlurPass::init(ResourceMgr&) {}
+void MotionBlurPass::init(GameResources&) {}
 
 void MotionBlurPass::shutdown() {
     destroyRhiResources();

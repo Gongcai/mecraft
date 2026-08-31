@@ -11,11 +11,12 @@
 #include "UIScaleConfig.h"
 #include "../layout/UILayout.h"
 
-class ResourceMgr;
+struct GameResources;
 class LocaleManager;
 class Inventory;
 class TextRenderer;
 class HumanoidRenderer;
+class RhiDevice;
 class RhiCommandList;
 class UIRenderer;
 
@@ -42,7 +43,8 @@ struct UIRenderContext {
     UIScaleConfig scaleConfig;
 
     float timeSeconds = 0.0f;
-    ResourceMgr* resourceMgr = nullptr;
+    GameResources* resources = nullptr;
+    RhiDevice* rhiDevice = nullptr;
     HumanoidRenderer* humanoidRenderer = nullptr;
     const Inventory* inventory = nullptr;
     const PlayerStatsData* playerStats = nullptr;

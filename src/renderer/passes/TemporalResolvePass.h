@@ -8,13 +8,13 @@
 #include "../rhi/RhiRenderGraph.h"
 
 class DeferredRenderTargets;
-class ResourceMgr;
+struct GameResources;
 class RhiDevice;
 
 /// TAA resolve pass: blends current frame with reprojected history.
 class TemporalResolvePass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr);
+    void init(GameResources& resources);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "TemporalResolve"; }
 

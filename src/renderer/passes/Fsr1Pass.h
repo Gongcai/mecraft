@@ -8,7 +8,6 @@
 #include <cstdint>
 #include <glm/vec4.hpp>
 
-class ResourceMgr;
 class RhiDevice;
 class RhiCommandList;
 class RhiCommandListPool;
@@ -18,7 +17,7 @@ class Fsr1Pass : public RenderPass {
 public:
     ~Fsr1Pass() override;
 
-    void init(ResourceMgr& resourceMgr, RhiCommandListPool& commandListPool);
+    void init(RhiCommandListPool& commandListPool);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "FSR1"; }
     [[nodiscard]] static bool isSupported(const RhiDevice& rhiDevice);

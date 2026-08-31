@@ -12,7 +12,7 @@
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
-class ResourceMgr;
+struct GameResources;
 class RhiCommandList;
 class RhiCommandListPool;
 class RhiDevice;
@@ -77,7 +77,7 @@ class PostProcessPass : public RenderPass {
 public:
     ~PostProcessPass() override;
 
-    void init(ResourceMgr& resourceMgr, RhiCommandListPool& commandListPool);
+    void init(GameResources& resources, RhiCommandListPool& commandListPool);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "PostProcess"; }
 

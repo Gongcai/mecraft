@@ -12,7 +12,7 @@ class Window;
 class InputManager;
 class ActionMap;
 class InputContextManager;
-class ResourceMgr;
+struct GameResources;
 class AudioEngine;
 class BgmSystem;
 class UIRenderer;
@@ -55,7 +55,7 @@ struct GameSessionDependencies {
     InputManager& input;
     ActionMap& actionMap;
     InputContextManager& contextManager;
-    ResourceMgr& resourceMgr;
+    GameResources& resources;
     AudioEngine& audioEngine;
     BgmSystem& bgmSystem;
     UIRenderer& uiRenderer;

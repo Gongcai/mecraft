@@ -130,7 +130,7 @@ GameplayRenderRuntime::GameplayRenderRuntime() : m_impl(std::make_unique<Impl>()
 
 GameplayRenderRuntime::~GameplayRenderRuntime() = default;
 
-bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr, GameSession& session, UIRenderer& uiRenderer,
+bool GameplayRenderRuntime::init(GameResources& resources, GameSession& session, UIRenderer& uiRenderer,
                                  ThreadPool& threadPool, Window& window, RhiDevice& rhiDevice,
                                  RhiCommandListPool& commandListPool, const GameRenderSettingsSource settingsSource,
                                  const RenderSettings& fixedSettings) {
@@ -164,12 +164,12 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr, GameSession& session,
     }
 
     // Core GPU infrastructure
-    if (!renderer.init(resourceMgr, threadPool, rhiDevice, commandListPool)) {
+    if (!renderer.init(resources, threadPool, rhiDevice, commandListPool)) {
         return false;
     }
 
     // Initialize RenderScene and connect to RenderResourceHub
-    renderScene.init(resourceMgr);
+    renderScene.init(resources, rhiDevice);
     RenderSettings initialSettings;
     switch (settingsSource) {
     case GameRenderSettingsSource::UserProfile:
@@ -207,19 +207,20 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr, GameSession& session,
     renderer.setDebugService(&renderScene.debugService());
 
     // Entity renderers
-    if (!blockEntityRenderer.init(resourceMgr)) {
+    if (!blockEntityRenderer.init(resources, rhiDevice)) {
         return false;
     }
-    if (!staticMeshRenderer.init(resourceMgr, DAMAGED_HELMET_MODEL_PATH, renderScene.globalBindlessSet())) {
+    if (!staticMeshRenderer.init(rhiDevice, commandListPool, DAMAGED_HELMET_MODEL_PATH,
+                                 renderScene.globalBindlessSet())) {
         std::cerr << "GameplayRenderRuntime: " << staticMeshRenderer.lastError() << '\n';
         return false;
     }
-    dropRenderer.init(resourceMgr);
-    if (!fallingBlockRenderer.init(resourceMgr)) {
+    dropRenderer.init(resources, rhiDevice);
+    if (!fallingBlockRenderer.init(resources, rhiDevice)) {
         return false;
     }
-    firstPersonHeldItemRenderer.init(resourceMgr, renderer.rhiDevice());
-    if (!humanoidRenderer.init(resourceMgr, renderer.rhiDevice())) {
+    firstPersonHeldItemRenderer.init(resources, renderer.rhiDevice());
+    if (!humanoidRenderer.init(resources, renderer.rhiDevice())) {
         return false;
     }
 
@@ -236,14 +237,14 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr, GameSession& session,
     // UI needs humanoid renderer for inventory preview
     uiRenderer.setHumanoidRenderer(&humanoidRenderer);
 
-    // Particle and rain systems (owned by session, init requires ResourceMgr)
+    // Particle and rain systems (owned by session; need textures and the GPU device)
     m_impl->particleSystem = &session.particleSystem();
-    if (!m_impl->particleSystem->init(resourceMgr)) {
+    if (!m_impl->particleSystem->init(resources, rhiDevice)) {
         m_impl->particleSystem = nullptr;
         return false;
     }
     m_impl->rainRenderer = &session.rainRenderer();
-    if (!m_impl->rainRenderer->init(resourceMgr)) {
+    if (!m_impl->rainRenderer->init(resources, rhiDevice)) {
         m_impl->rainRenderer = nullptr;
         return false;
     }

@@ -99,7 +99,7 @@ void LoadingAppState::onEnter() {
     m_deps.input.captureMouse(false);
 
     m_screen.setLocaleManager(&m_deps.localeManager);
-    m_screen.init(m_deps.resourceMgr);
+    m_screen.init(m_deps.resources, m_deps.rhiDevice);
     m_screen.enterScene();
     m_deps.uiRenderer.setActiveScene(&m_screen);
     refreshScreen();
@@ -206,7 +206,7 @@ std::unique_ptr<Game> LoadingAppState::createGame() const {
                                  m_deps.input,
                                  m_deps.actionMap,
                                  m_deps.contextManager,
-                                 m_deps.resourceMgr,
+                                 m_deps.resources,
                                  m_deps.audioEngine,
                                  m_deps.bgmSystem,
                                  m_deps.uiRenderer,

@@ -10,7 +10,7 @@
 #include "renderer/rhi/RhiHandles.h"
 #include "renderer/rhi/RhiPipeline.h"
 
-class ResourceMgr;
+struct GameResources;
 class RhiDevice;
 
 namespace renderer {
@@ -29,19 +29,19 @@ struct BlockCubeMesh {
 /// Model-shaped blocks use their default state model variant; cube, cross, and
 /// torch blocks use compact local meshes. The geometry occupies [0,1]^3 and
 /// uses full brightness vertex values so entity renderers can shade it per draw.
-[[nodiscard]] std::vector<BlockVertex> buildBlockMeshVertices(BlockID blockId, const ResourceMgr& resourceMgr);
+[[nodiscard]] std::vector<BlockVertex> buildBlockMeshVertices(BlockID blockId, const GameResources& resources);
 
 /// Build local-space geometry for a specific block state.
 /// Model-shaped blocks use the state's selected model variant.
 [[nodiscard]] std::vector<BlockVertex> buildBlockMeshVerticesForState(BlockStateId stateId,
-                                                                      const ResourceMgr& resourceMgr);
+                                                                      const GameResources& resources);
 
 /// Build and upload a block-backed item/entity mesh. Returns an empty mesh
 /// (vertexCount=0) if the block has no renderable geometry.
-BlockCubeMesh buildBlockCubeMesh(BlockID blockId, ResourceMgr& resourceMgr);
+BlockCubeMesh buildBlockCubeMesh(BlockID blockId, GameResources& resources, RhiDevice& rhiDevice);
 
 /// Build and upload a block-backed item/entity mesh for a specific state.
-BlockCubeMesh buildBlockStateCubeMesh(BlockStateId stateId, ResourceMgr& resourceMgr);
+BlockCubeMesh buildBlockStateCubeMesh(BlockStateId stateId, GameResources& resources, RhiDevice& rhiDevice);
 
 /// Destroy RHI resources owned by `mesh`. Safe to call on a zero-initialized mesh.
 void destroyBlockCubeMesh(BlockCubeMesh& mesh);

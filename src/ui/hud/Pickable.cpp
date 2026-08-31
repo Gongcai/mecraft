@@ -8,7 +8,7 @@
 
 #include "../../item/Item.h"
 #include "../../renderer/rhi/RhiCommandList.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../ItemIconPolicy.h"
 #include "../core/UIRenderContext.h"
 #include "../core/UIRenderer.h"
@@ -59,7 +59,7 @@ int Pickable::hitTest(const SlotInfo* slots, const int count, const float mouseX
 }
 
 void Pickable::render(const SlotInfo* slots, const int count, const int hoveredIndex, const RenderParams& params,
-                      const UIRenderContext& context, const ResourceMgr& resourceMgr, const TextureAtlas& itemIconAtlas,
+                      const UIRenderContext& context, const GameResources& resources, const TextureAtlas& itemIconAtlas,
                       const TextureAtlas& itemTextureAtlas) {
     if (slots == nullptr || count <= 0 || context.screenWidth <= 0 || context.screenHeight <= 0) {
         return;
@@ -118,7 +118,7 @@ void Pickable::render(const SlotInfo* slots, const int count, const int hoveredI
                     }
                     const int tileIndex = drawBakedBlockIcons
                                               ? static_cast<int>(itemDef.renderBlock)
-                                              : resourceMgr.getItemTextureIndex(itemDef.iconTextureName);
+                                              : resources.uiTextures.itemTextureIndex(itemDef.iconTextureName);
                     if (tileIndex < 0) {
                         continue;
                     }

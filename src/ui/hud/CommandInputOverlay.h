@@ -5,12 +5,12 @@
 
 #include "../core/UIWidget.h"
 
-class ResourceMgr;
+struct GameResources;
 class TextRenderer;
 
 class CommandInputOverlay : public UIWidget {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(GameResources& resources, RhiDevice& rhiDevice) override;
     void shutdown() override;
 
     void setText(std::string text);

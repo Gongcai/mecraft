@@ -4,7 +4,7 @@
 #include "../widgets/UIPanel.h"
 #include "../widgets/UIText.h"
 #include "../widgets/UITextInput.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../locale/LocaleManager.h"
 
 #include <charconv>
@@ -16,8 +16,8 @@
 // buildUI
 // ---------------------------------------------------------------------------
 
-void CreateWorldScreen::buildUI(ResourceMgr& resourceMgr) {
-    (void)resourceMgr;
+void CreateWorldScreen::buildUI(GameResources& resources, RhiDevice& rhiDevice) {
+    (void)resources;
 
     // -- Background overlay --
     auto bgPanel = std::make_unique<UIPanel>();

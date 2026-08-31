@@ -18,7 +18,7 @@ public:
     UITextInput();
     ~UITextInput() override;
 
-    void init(ResourceMgr& resourceMgr) override;
+    void init(GameResources& resources, RhiDevice& rhiDevice) override;
     void shutdown() override;
 
     void setText(const std::string& text);

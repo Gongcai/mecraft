@@ -57,7 +57,7 @@ void GameplayAppState::onEnter() {
                                  m_deps.input,
                                  m_deps.actionMap,
                                  m_deps.contextManager,
-                                 m_deps.resourceMgr,
+                                 m_deps.resources,
                                  m_deps.audioEngine,
                                  m_deps.bgmSystem,
                                  m_deps.uiRenderer,

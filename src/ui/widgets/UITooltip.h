@@ -13,10 +13,10 @@ class UITooltip : public UIWidget {
 public:
     UITooltip() = default;
 
-    void init(ResourceMgr& resourceMgr) override {
+    void init(GameResources& resources, RhiDevice& rhiDevice) override {
         const UIResolvedTooltipStyle style = fallbackStyle();
-        m_panel.init(resourceMgr);
-        m_label.init(resourceMgr);
+        m_panel.init(resources, rhiDevice);
+        m_label.init(resources, rhiDevice);
         m_label.setTextScale(style.textScale);
         m_label.setTextColor(style.text);
         m_label.setShadowEnabled(true);

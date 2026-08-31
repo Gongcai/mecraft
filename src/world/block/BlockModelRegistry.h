@@ -7,11 +7,11 @@
 #include "Block.h"
 #include "BlockModel.h"
 
-class ResourceMgr;
+class BlockTextureLibrary;
 
 class BlockModelRegistry {
 public:
-    [[nodiscard]] static bool init(ResourceMgr* resourceMgr);
+    [[nodiscard]] static bool init(const BlockTextureLibrary* blockTextures);
     [[nodiscard]] static const BlockModel* get(const std::string& name);
     [[nodiscard]] static AnimatedTextureRef resolveTextureRef(const std::string& textureName);
 
@@ -24,5 +24,5 @@ private:
     static bool validateFaceTextureVariables(const BlockModel& model, std::string& error);
 
     static std::unordered_map<std::string, std::unique_ptr<BlockModel>> s_models;
-    static ResourceMgr* s_resourceMgr;
+    static const BlockTextureLibrary* s_blockTextures;
 };

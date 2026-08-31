@@ -52,10 +52,10 @@ UIContextMenu::~UIContextMenu() {
     shutdown();
 }
 
-void UIContextMenu::init(ResourceMgr& resourceMgr) {
+void UIContextMenu::init(GameResources& resources, RhiDevice& rhiDevice) {
     m_showTween.start(0.0f, 0.0f, 0.15f, EasingType::EaseOut);
 
-    UIWidget::init(resourceMgr);
+    UIWidget::init(resources, rhiDevice);
 }
 
 void UIContextMenu::shutdown() {

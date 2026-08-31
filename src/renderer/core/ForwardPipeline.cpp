@@ -11,7 +11,7 @@
 #include "../renderers/BlockEntityRenderer.h"
 #include "../renderers/HumanoidRenderer.h"
 #include "../renderers/DropRenderer.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../engine/camera/Camera.h"
 #include "../../engine/platform/Window.h"
 #include "../../world/IWorldView.h"
@@ -32,7 +32,7 @@ void ForwardPipeline::init(SharedRenderResources& shared) {
     m_terrainCache = shared.terrainCache;
     m_worldRenderBuffer = shared.worldRenderBuffer;
     m_skyRenderer = shared.sky;
-    m_resourceMgr = shared.resources;
+    m_resources = shared.resources;
 
     // Enable forward vanilla shaders on sub-renderers (no deferred/shaderpack contracts)
 
@@ -53,7 +53,7 @@ void ForwardPipeline::shutdown() {
     m_terrainCache = nullptr;
     m_worldRenderBuffer = nullptr;
     m_skyRenderer = nullptr;
-    m_resourceMgr = nullptr;
+    m_resources = nullptr;
     m_transparentBatch.clear();
     m_transparentPassPlan = {};
     m_initialized = false;
@@ -330,7 +330,7 @@ void ForwardPipeline::renderSky(const FrameContext& ctx, RhiCommandList& command
 // ============================================================================
 
 bool ForwardPipeline::prepareTerrain(const FrameContext& ctx, RhiCommandList& commandList) {
-    if (!m_shared || !m_shared->terrainRhiPipelines || !m_terrainRenderer || !m_resourceMgr || !m_worldRenderBuffer) {
+    if (!m_shared || !m_shared->terrainRhiPipelines || !m_terrainRenderer || !m_resources || !m_worldRenderBuffer) {
         return false;
     }
 
@@ -366,7 +366,7 @@ bool ForwardPipeline::prepareTerrain(const FrameContext& ctx, RhiCommandList& co
         worldBuffer.addTransparent(entry.range);
     }
 
-    if (!m_shared->terrainRhiPipelines->prepareForward(commandList, *m_resourceMgr, tfd) ||
+    if (!m_shared->terrainRhiPipelines->prepareForward(commandList, *m_resources, tfd) ||
         !worldBuffer.prepareRhiOpaqueAndCutout(commandList, m_shared->terrainRhiPipelines->forwardMetadataLayout()) ||
         !worldBuffer.prepareRhiTransparent(commandList, m_shared->terrainRhiPipelines->forwardMetadataLayout())) {
         return false;

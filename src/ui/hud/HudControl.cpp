@@ -6,7 +6,7 @@
 #include <glm/vec4.hpp>
 
 #include "../../renderer/rhi/RhiCommandList.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../layout/UILayout.h"
 #include "../core/UIRenderer.h"
 
@@ -34,20 +34,20 @@ static_assert(sizeof(HudImagePushConstants) == 64u);
 
 } // namespace
 
-void HudControl::init(ResourceMgr& resourceMgr) {
-    UIWidget::init(resourceMgr);
-    m_resourceMgr = &resourceMgr;
+void HudControl::init(GameResources& resources, RhiDevice& rhiDevice) {
+    UIWidget::init(resources, rhiDevice);
+    m_resources = &resources;
 
-    m_heartFull = resourceMgr.getHudIconIndex("heart_full");
-    m_heartHalf = resourceMgr.getHudIconIndex("heart_half");
-    m_armorFull = resourceMgr.getHudIconIndex("armor_full");
-    m_armorHalf = resourceMgr.getHudIconIndex("armor_half");
-    m_foodFull = resourceMgr.getHudIconIndex("food_full");
-    m_foodHalf = resourceMgr.getHudIconIndex("food_half");
+    m_heartFull = resources.uiTextures.hudIconIndex("heart_full");
+    m_heartHalf = resources.uiTextures.hudIconIndex("heart_half");
+    m_armorFull = resources.uiTextures.hudIconIndex("armor_full");
+    m_armorHalf = resources.uiTextures.hudIconIndex("armor_half");
+    m_foodFull = resources.uiTextures.hudIconIndex("food_full");
+    m_foodHalf = resources.uiTextures.hudIconIndex("food_half");
 }
 
 void HudControl::shutdown() {
-    m_resourceMgr = nullptr;
+    m_resources = nullptr;
     UIWidget::shutdown();
 }
 
@@ -93,13 +93,13 @@ void HudControl::drawIconRow(const UIRenderContext& context, const TextureAtlas&
 }
 
 void HudControl::renderSelf(const UIRenderContext& context) const {
-    if (!visible || !context.playerStats || !m_resourceMgr || context.commandList == nullptr ||
+    if (!visible || !context.playerStats || !m_resources || context.commandList == nullptr ||
         context.uiRenderer == nullptr || !context.panelQuadVertexBuffer.isValid() ||
         !context.imageTexturePipeline.isValid() || context.screenWidth <= 0 || context.screenHeight <= 0) {
         return;
     }
 
-    const TextureAtlas& atlas = m_resourceMgr->getHudIconAtlas();
+    const TextureAtlas& atlas = m_resources->uiTextures.hudIconAtlas();
     if (!atlas.texture.isValid()) {
         return;
     }

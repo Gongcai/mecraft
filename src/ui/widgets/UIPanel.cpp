@@ -6,7 +6,7 @@
 #include <glm/vec4.hpp>
 
 #include "../../renderer/rhi/RhiCommandList.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 
 namespace {
 
@@ -45,8 +45,8 @@ UIPanel::~UIPanel() {
     shutdown();
 }
 
-void UIPanel::init(ResourceMgr& resourceMgr) {
-    UIWidget::init(resourceMgr);
+void UIPanel::init(GameResources& resources, RhiDevice& rhiDevice) {
+    UIWidget::init(resources, rhiDevice);
 }
 
 void UIPanel::shutdown() {

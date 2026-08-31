@@ -15,7 +15,7 @@
 #include "../../renderer/rhi/RhiDevice.h"
 #include "../../renderer/rhi/RhiDeviceFactory.h"
 #include "../../renderer/presentation/PresentationController.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../world/World.h"
 #include "../../app/AppSettings.h"
 #include "../../engine/platform/Window.h"
@@ -60,8 +60,8 @@ constexpr float kSettingsSectionTextScale = 1.70f;
 // buildUI
 // ===========================================================================
 
-void SettingsScreen::buildUI(ResourceMgr& resourceMgr) {
-    (void)resourceMgr;
+void SettingsScreen::buildUI(GameResources& resources, RhiDevice& rhiDevice) {
+    m_rhiDevice = &rhiDevice;
     m_tabLayouts.clear();
     m_settingRows.clear();
 
@@ -104,12 +104,12 @@ void SettingsScreen::buildUI(ResourceMgr& resourceMgr) {
     }
 
     // Build each tab's content
-    buildGeneralTab(tabs->getContentPanel(0), resourceMgr);
-    buildShadowsTab(tabs->getContentPanel(1), resourceMgr);
-    buildLightingTab(tabs->getContentPanel(2), resourceMgr);
-    buildPostProcessTab(tabs->getContentPanel(3), resourceMgr);
-    buildVolumetricTab(tabs->getContentPanel(4), resourceMgr);
-    buildUpscaleTab(tabs->getContentPanel(5), resourceMgr);
+    buildGeneralTab(tabs->getContentPanel(0), resources);
+    buildShadowsTab(tabs->getContentPanel(1), resources);
+    buildLightingTab(tabs->getContentPanel(2), resources);
+    buildPostProcessTab(tabs->getContentPanel(3), resources);
+    buildVolumetricTab(tabs->getContentPanel(4), resources);
+    buildUpscaleTab(tabs->getContentPanel(5), resources);
 
     m_tabControl = tabs.get();
 
@@ -257,7 +257,7 @@ void SettingsScreen::updateAnimations(float dt) {
 // ===========================================================================
 
 SettingsScreen::SettingsTabLayout SettingsScreen::setupScrollableTab(UIWidget* contentPanel,
-                                                                     ResourceMgr& /*resourceMgr*/, float tabWidth,
+                                                                     GameResources& /*resources*/, float tabWidth,
                                                                      float tabHeight) {
     auto scroll = std::make_unique<UIScrollArea>();
     scroll->width = tabWidth;
@@ -351,7 +351,7 @@ static void resizeSettingsStack(UIStackLayout* stack, const std::vector<UIStackL
 // Helper implementations
 // ===========================================================================
 
-void SettingsScreen::addSectionHeader(UIWidget* parent, ResourceMgr& /*resourceMgr*/, const std::string& text) {
+void SettingsScreen::addSectionHeader(UIWidget* parent, GameResources& /*resources*/, const std::string& text) {
     auto header = std::make_unique<UIText>();
     header->setText(text);
     header->setTextScale(kSettingsSectionTextScale);
@@ -361,9 +361,9 @@ void SettingsScreen::addSectionHeader(UIWidget* parent, ResourceMgr& /*resourceM
     parent->addChild(std::move(header));
 }
 
-void SettingsScreen::addToggle(UIWidget* parent, ResourceMgr& resourceMgr, const std::string& label, bool checked,
+void SettingsScreen::addToggle(UIWidget* parent, GameResources& resources, const std::string& label, bool checked,
                                std::function<void(bool)> onChanged, const bool interactive) {
-    (void)resourceMgr;
+    (void)resources;
     auto toggle = std::make_unique<UIToggle>();
     toggle->setLabel(label);
     toggle->setLabelTextScale(kSettingsRowTextScale);
@@ -375,10 +375,10 @@ void SettingsScreen::addToggle(UIWidget* parent, ResourceMgr& resourceMgr, const
     parent->addChild(std::move(toggle));
 }
 
-void SettingsScreen::addSliderRow(UIWidget* parent, ResourceMgr& resourceMgr, const std::string& label, float minVal,
+void SettingsScreen::addSliderRow(UIWidget* parent, GameResources& resources, const std::string& label, float minVal,
                                   float maxVal, float currentVal, float step, std::function<void(float)> onValueChanged,
                                   const bool interactive) {
-    (void)resourceMgr;
+    (void)resources;
     auto row = std::make_unique<UIStackLayout>();
     row->setDirection(StackDirection::Horizontal);
     row->setSpacing(10.0f);
@@ -426,11 +426,11 @@ void SettingsScreen::addSliderRow(UIWidget* parent, ResourceMgr& resourceMgr, co
     parent->addChild(std::move(row));
 }
 
-void SettingsScreen::addDropdownRow(UIWidget* parent, ResourceMgr& resourceMgr, const std::string& label,
+void SettingsScreen::addDropdownRow(UIWidget* parent, GameResources& resources, const std::string& label,
                                     const std::vector<std::string>& options, int currentIndex,
                                     std::function<void(int, const std::string&)> onSelectionChanged,
                                     const bool interactive) {
-    (void)resourceMgr;
+    (void)resources;
     auto row = std::make_unique<UIStackLayout>();
     row->setDirection(StackDirection::Horizontal);
     row->setSpacing(10.0f);
@@ -464,18 +464,18 @@ void SettingsScreen::addDropdownRow(UIWidget* parent, ResourceMgr& resourceMgr, 
 // Tab builders
 // ===========================================================================
 
-void SettingsScreen::buildGeneralTab(UIWidget* contentPanel, ResourceMgr& resourceMgr) {
+void SettingsScreen::buildGeneralTab(UIWidget* contentPanel, GameResources& resources) {
     // Tab content area is approximately 700 x (460 - headerHeight)
     constexpr float tabContentH = 420.0f;
-    const SettingsTabLayout tabLayout = setupScrollableTab(contentPanel, resourceMgr, 700.0f, tabContentH);
+    const SettingsTabLayout tabLayout = setupScrollableTab(contentPanel, resources, 700.0f, tabContentH);
     m_tabLayouts.push_back(tabLayout);
     UIStackLayout* stack = tabLayout.stack;
 
-    addSectionHeader(stack, resourceMgr, loc(getLocaleManager(), "setting_render_distance", "Render Distance"));
+    addSectionHeader(stack, resources, loc(getLocaleManager(), "setting_render_distance", "Render Distance"));
 
     if (m_world) {
         const int rd = m_world->getRenderDistance();
-        addSliderRow(stack, resourceMgr, loc(getLocaleManager(), "setting_render_distance", "Render Distance"), 2.0f,
+        addSliderRow(stack, resources, loc(getLocaleManager(), "setting_render_distance", "Render Distance"), 2.0f,
                      32.0f, static_cast<float>(rd), 1.0f, [this](float val) {
                          const int distance = static_cast<int>(std::round(val));
                          if (m_renderDistanceSetter) {
@@ -487,7 +487,7 @@ void SettingsScreen::buildGeneralTab(UIWidget* contentPanel, ResourceMgr& resour
                      });
     }
 
-    const RhiBackend currentBackend = resourceMgr.rhiDevice().backend();
+    const RhiBackend currentBackend = m_rhiDevice->backend();
     const app::RhiBackendSettingResult backendSetting = app::loadRhiBackend();
     const RhiBackend selectedBackend = backendSetting.backend.value_or(currentBackend);
     const std::array<RhiBackend, 2> knownBackends = {
@@ -510,11 +510,11 @@ void SettingsScreen::buildGeneralTab(UIWidget* contentPanel, ResourceMgr& resour
 
     const std::string backendSection = loc(getLocaleManager(), "setting_graphics_backend", "Graphics Backend") + " - " +
                                        loc(getLocaleManager(), "setting_restart_to_apply", "Applies After Restart");
-    addSectionHeader(stack, resourceMgr, backendSection);
+    addSectionHeader(stack, resources, backendSection);
 
     const std::string currentBackendLabel = loc(getLocaleManager(), "setting_current_backend", "Current") + ": " +
                                             renderer::rhi::rhiBackendDisplayName(currentBackend);
-    addDropdownRow(stack, resourceMgr, currentBackendLabel, backendNames, selectedIndex,
+    addDropdownRow(stack, resources, currentBackendLabel, backendNames, selectedIndex,
                    [availableBackends = std::move(availableBackends)](const int index, const std::string&) {
                        if (index < 0 || index >= static_cast<int>(availableBackends.size())) {
                            return;
@@ -522,13 +522,13 @@ void SettingsScreen::buildGeneralTab(UIWidget* contentPanel, ResourceMgr& resour
                        app::saveRhiBackend(availableBackends[static_cast<size_t>(index)]);
                    });
 
-    addSectionHeader(stack, resourceMgr, loc(getLocaleManager(), "setting_display", "Display"));
+    addSectionHeader(stack, resources, loc(getLocaleManager(), "setting_display", "Display"));
     if (m_presentationController == nullptr || m_window == nullptr) {
         std::abort();
     }
     PresentationController* const presentation = m_presentationController;
     addToggle(
-        stack, resourceMgr, loc(getLocaleManager(), "setting_vsync", "Vertical Sync"), presentation->vsyncEnabled(),
+        stack, resources, loc(getLocaleManager(), "setting_vsync", "Vertical Sync"), presentation->vsyncEnabled(),
         [presentation](const bool enabled) {
             if (!presentation->requestVsyncEnabled(enabled)) {
                 std::abort();
@@ -537,7 +537,7 @@ void SettingsScreen::buildGeneralTab(UIWidget* contentPanel, ResourceMgr& resour
         },
         presentation->vsyncControlAvailable());
     addToggle(
-        stack, resourceMgr, loc(getLocaleManager(), "setting_fullscreen", "Fullscreen"),
+        stack, resources, loc(getLocaleManager(), "setting_fullscreen", "Fullscreen"),
         presentation->fullscreenEnabled(),
         [presentation](const bool enabled) {
             if (!presentation->requestFullscreenEnabled(enabled)) {
@@ -550,9 +550,9 @@ void SettingsScreen::buildGeneralTab(UIWidget* contentPanel, ResourceMgr& resour
     finalizeScrollTab(tabLayout.scroll, stack);
 }
 
-void SettingsScreen::buildShadowsTab(UIWidget* contentPanel, ResourceMgr& resourceMgr) {
+void SettingsScreen::buildShadowsTab(UIWidget* contentPanel, GameResources& resources) {
     constexpr float tabContentH = 420.0f;
-    const SettingsTabLayout tabLayout = setupScrollableTab(contentPanel, resourceMgr, 700.0f, tabContentH);
+    const SettingsTabLayout tabLayout = setupScrollableTab(contentPanel, resources, 700.0f, tabContentH);
     m_tabLayouts.push_back(tabLayout);
     UIStackLayout* stack = tabLayout.stack;
 
@@ -562,88 +562,88 @@ void SettingsScreen::buildShadowsTab(UIWidget* contentPanel, ResourceMgr& resour
     }
     RenderSettings s = m_renderScene->getSettings();
 
-    addSectionHeader(stack, resourceMgr, "Shadows");
+    addSectionHeader(stack, resources, "Shadows");
 
-    addToggle(stack, resourceMgr, "Sun Shadows", s.shadow.enabled, [this](bool v) {
+    addToggle(stack, resources, "Sun Shadows", s.shadow.enabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.shadow.enabled = v;
         m_renderScene->setSettings(s);
     });
-    addToggle(stack, resourceMgr, "Soft Shadows", s.shadow.softShadowsEnabled, [this](bool v) {
+    addToggle(stack, resources, "Soft Shadows", s.shadow.softShadowsEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.shadow.softShadowsEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addToggle(stack, resourceMgr, "PCSS Shadows", s.shadow.pcssShadowsEnabled, [this](bool v) {
+    addToggle(stack, resources, "PCSS Shadows", s.shadow.pcssShadowsEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.shadow.pcssShadowsEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addToggle(stack, resourceMgr, "Contact Shadows", s.shadow.contactShadowsEnabled, [this](bool v) {
+    addToggle(stack, resources, "Contact Shadows", s.shadow.contactShadowsEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.shadow.contactShadowsEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addToggle(stack, resourceMgr, "Cloud Shadows", s.cloud.shadowsEnabled, [this](bool v) {
+    addToggle(stack, resources, "Cloud Shadows", s.cloud.shadowsEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.cloud.shadowsEnabled = v;
         m_renderScene->setSettings(s);
     });
 
-    addSliderRow(stack, resourceMgr, "Shadow Resolution", 512.0f, 4096.0f, static_cast<float>(s.shadow.resolution),
+    addSliderRow(stack, resources, "Shadow Resolution", 512.0f, 4096.0f, static_cast<float>(s.shadow.resolution),
                  256.0f, [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.shadow.resolution = static_cast<int>(v);
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Shadow Distance", 64.0f, 192.0f, s.shadow.distance, 1.0f, [this](float v) {
+    addSliderRow(stack, resources, "Shadow Distance", 64.0f, 192.0f, s.shadow.distance, 1.0f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.shadow.distance = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Shadow Softness", 0.1f, 4.0f, s.shadow.softness, 0.1f, [this](float v) {
+    addSliderRow(stack, resources, "Shadow Softness", 0.1f, 4.0f, s.shadow.softness, 0.1f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.shadow.softness = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "PCSS Strength", 0.0f, 1.5f, s.shadow.pcssStrength, 0.01f, [this](float v) {
+    addSliderRow(stack, resources, "PCSS Strength", 0.0f, 1.5f, s.shadow.pcssStrength, 0.01f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.shadow.pcssStrength = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Const Bias", 0.0f, 0.004f, s.shadow.constantBias, 0.0001f, [this](float v) {
+    addSliderRow(stack, resources, "Const Bias", 0.0f, 0.004f, s.shadow.constantBias, 0.0001f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.shadow.constantBias = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Slope Bias", 0.0f, 0.012f, s.shadow.slopeBias, 0.0001f, [this](float v) {
+    addSliderRow(stack, resources, "Slope Bias", 0.0f, 0.012f, s.shadow.slopeBias, 0.0001f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.shadow.slopeBias = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Normal Offset", 0.0f, 0.12f, s.shadow.normalOffset, 0.001f, [this](float v) {
+    addSliderRow(stack, resources, "Normal Offset", 0.0f, 0.12f, s.shadow.normalOffset, 0.001f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.shadow.normalOffset = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Contact Shadow Strength", 0.0f, 0.6f, s.shadow.contactShadowStrength, 0.01f,
+    addSliderRow(stack, resources, "Contact Shadow Strength", 0.0f, 0.6f, s.shadow.contactShadowStrength, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.shadow.contactShadowStrength = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Cloud Shadow Strength", 0.0f, 0.8f, s.cloud.shadowStrength, 0.01f,
+    addSliderRow(stack, resources, "Cloud Shadow Strength", 0.0f, 0.8f, s.cloud.shadowStrength, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.cloud.shadowStrength = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Cloud Shadow Scale", 0.001f, 0.02f, s.cloud.shadowScale, 0.001f, [this](float v) {
+    addSliderRow(stack, resources, "Cloud Shadow Scale", 0.001f, 0.02f, s.cloud.shadowScale, 0.001f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.cloud.shadowScale = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Cloud Shadow Speed", 0.0f, 0.08f, s.cloud.shadowSpeed, 0.001f, [this](float v) {
+    addSliderRow(stack, resources, "Cloud Shadow Speed", 0.0f, 0.08f, s.cloud.shadowSpeed, 0.001f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.cloud.shadowSpeed = v;
         m_renderScene->setSettings(s);
@@ -652,9 +652,9 @@ void SettingsScreen::buildShadowsTab(UIWidget* contentPanel, ResourceMgr& resour
     finalizeScrollTab(tabLayout.scroll, stack);
 }
 
-void SettingsScreen::buildLightingTab(UIWidget* contentPanel, ResourceMgr& resourceMgr) {
+void SettingsScreen::buildLightingTab(UIWidget* contentPanel, GameResources& resources) {
     constexpr float tabContentH = 420.0f;
-    const SettingsTabLayout tabLayout = setupScrollableTab(contentPanel, resourceMgr, 700.0f, tabContentH);
+    const SettingsTabLayout tabLayout = setupScrollableTab(contentPanel, resources, 700.0f, tabContentH);
     m_tabLayouts.push_back(tabLayout);
     UIStackLayout* stack = tabLayout.stack;
 
@@ -664,229 +664,229 @@ void SettingsScreen::buildLightingTab(UIWidget* contentPanel, ResourceMgr& resou
     }
     RenderSettings s = m_renderScene->getSettings();
 
-    addSectionHeader(stack, resourceMgr, "SSGI");
+    addSectionHeader(stack, resources, "SSGI");
 
-    addToggle(stack, resourceMgr, "SSGI", s.ssgi.enabled, [this](bool v) {
+    addToggle(stack, resources, "SSGI", s.ssgi.enabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.ssgi.enabled = v;
         m_renderScene->setSettings(s);
     });
-    addToggle(stack, resourceMgr, "SSGI Temporal", s.ssgi.temporalEnabled, [this](bool v) {
+    addToggle(stack, resources, "SSGI Temporal", s.ssgi.temporalEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.ssgi.temporalEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addToggle(stack, resourceMgr, "SSGI Denoise", s.ssgi.denoiseEnabled, [this](bool v) {
+    addToggle(stack, resources, "SSGI Denoise", s.ssgi.denoiseEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.ssgi.denoiseEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "SSGI Radius", 0.5f, 24.0f, s.ssgi.radius, 0.05f, [this](float v) {
+    addSliderRow(stack, resources, "SSGI Radius", 0.5f, 24.0f, s.ssgi.radius, 0.05f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.ssgi.radius = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "SSGI Strength", 0.0f, 4.0f, s.ssgi.strength, 0.01f, [this](float v) {
+    addSliderRow(stack, resources, "SSGI Strength", 0.0f, 4.0f, s.ssgi.strength, 0.01f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.ssgi.strength = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "SSGI Samples", 1.0f, 32.0f, static_cast<float>(s.ssgi.samples), 1.0f,
+    addSliderRow(stack, resources, "SSGI Samples", 1.0f, 32.0f, static_cast<float>(s.ssgi.samples), 1.0f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.ssgi.samples = static_cast<int>(v);
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "SSGI Max Distance", 1.0f, 48.0f, s.ssgi.maxDistance, 0.5f, [this](float v) {
+    addSliderRow(stack, resources, "SSGI Max Distance", 1.0f, 48.0f, s.ssgi.maxDistance, 0.5f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.ssgi.maxDistance = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "SSGI Thickness", 0.1f, 8.0f, s.ssgi.thickness, 0.05f, [this](float v) {
+    addSliderRow(stack, resources, "SSGI Thickness", 0.1f, 8.0f, s.ssgi.thickness, 0.05f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.ssgi.thickness = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "SSGI Denoise Passes", 0.0f, 4.0f, static_cast<float>(s.ssgi.denoiseIterations),
+    addSliderRow(stack, resources, "SSGI Denoise Passes", 0.0f, 4.0f, static_cast<float>(s.ssgi.denoiseIterations),
                  1.0f, [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.ssgi.denoiseIterations = static_cast<int>(v);
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "SSGI Denoise Strength", 0.0f, 1.0f, s.ssgi.denoiseStrength, 0.01f,
+    addSliderRow(stack, resources, "SSGI Denoise Strength", 0.0f, 1.0f, s.ssgi.denoiseStrength, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.ssgi.denoiseStrength = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "SSGI Radiance Filter", 0.0f, 1.0f, s.ssgi.radianceFilterStrength, 0.01f,
+    addSliderRow(stack, resources, "SSGI Radiance Filter", 0.0f, 1.0f, s.ssgi.radianceFilterStrength, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.ssgi.radianceFilterStrength = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "SSGI Color Bleed", 0.0f, 1.0f, s.ssgi.colorBleedStrength, 0.01f, [this](float v) {
+    addSliderRow(stack, resources, "SSGI Color Bleed", 0.0f, 1.0f, s.ssgi.colorBleedStrength, 0.01f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.ssgi.colorBleedStrength = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "SSGI History Weight", 0.0f, 0.98f, s.ssgi.historyWeight, 0.01f, [this](float v) {
+    addSliderRow(stack, resources, "SSGI History Weight", 0.0f, 0.98f, s.ssgi.historyWeight, 0.01f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.ssgi.historyWeight = v;
         m_renderScene->setSettings(s);
     });
 
-    addSectionHeader(stack, resourceMgr, "SSAO");
+    addSectionHeader(stack, resources, "SSAO");
 
-    addToggle(stack, resourceMgr, "SSAO", s.ssao.enabled, [this](bool v) {
+    addToggle(stack, resources, "SSAO", s.ssao.enabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.ssao.enabled = v;
         m_renderScene->setSettings(s);
     });
-    addToggle(stack, resourceMgr, "SSAO Temporal", s.ssao.temporalEnabled, [this](bool v) {
+    addToggle(stack, resources, "SSAO Temporal", s.ssao.temporalEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.ssao.temporalEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "SSAO Radius", 0.25f, 8.0f, s.ssao.radius, 0.05f, [this](float v) {
+    addSliderRow(stack, resources, "SSAO Radius", 0.25f, 8.0f, s.ssao.radius, 0.05f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.ssao.radius = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "SSAO Strength", 0.0f, 2.0f, s.ssao.strength, 0.01f, [this](float v) {
+    addSliderRow(stack, resources, "SSAO Strength", 0.0f, 2.0f, s.ssao.strength, 0.01f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.ssao.strength = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "SSAO Samples", 1.0f, 64.0f, static_cast<float>(s.ssao.samples), 1.0f,
+    addSliderRow(stack, resources, "SSAO Samples", 1.0f, 64.0f, static_cast<float>(s.ssao.samples), 1.0f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.ssao.samples = static_cast<int>(v);
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "SSAO History Weight", 0.0f, 0.98f, s.ssao.historyWeight, 0.01f, [this](float v) {
+    addSliderRow(stack, resources, "SSAO History Weight", 0.0f, 0.98f, s.ssao.historyWeight, 0.01f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.ssao.historyWeight = v;
         m_renderScene->setSettings(s);
     });
 
-    addSectionHeader(stack, resourceMgr, "Lighting");
+    addSectionHeader(stack, resources, "Lighting");
 
-    addSliderRow(stack, resourceMgr, "Direct Sun Strength", 0.0f, 3.0f, s.postProcess.directSunStrength, 0.01f,
+    addSliderRow(stack, resources, "Direct Sun Strength", 0.0f, 3.0f, s.postProcess.directSunStrength, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.directSunStrength = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Sky Ambient", 0.0f, 1.5f, s.postProcess.skyAmbientStrength, 0.01f,
+    addSliderRow(stack, resources, "Sky Ambient", 0.0f, 1.5f, s.postProcess.skyAmbientStrength, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.skyAmbientStrength = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Minimum Ambient", 0.0f, 0.4f, s.postProcess.minimumAmbient, 0.005f,
+    addSliderRow(stack, resources, "Minimum Ambient", 0.0f, 0.4f, s.postProcess.minimumAmbient, 0.005f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.minimumAmbient = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Shadow Min Light", 0.0f, 0.5f, s.postProcess.shadowMinLight, 0.01f,
+    addSliderRow(stack, resources, "Shadow Min Light", 0.0f, 0.5f, s.postProcess.shadowMinLight, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.shadowMinLight = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Shadow Contrast", 0.5f, 2.5f, s.postProcess.shadowContrast, 0.01f,
+    addSliderRow(stack, resources, "Shadow Contrast", 0.5f, 2.5f, s.postProcess.shadowContrast, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.shadowContrast = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Block Light", 0.0f, 2.5f, s.postProcess.blockLightStrength, 0.01f,
+    addSliderRow(stack, resources, "Block Light", 0.0f, 2.5f, s.postProcess.blockLightStrength, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.blockLightStrength = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Fake Bounce", 0.0f, 0.3f, s.postProcess.fakeBounceStrength, 0.005f,
+    addSliderRow(stack, resources, "Fake Bounce", 0.0f, 0.3f, s.postProcess.fakeBounceStrength, 0.005f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.fakeBounceStrength = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Sun Warmth", 0.0f, 1.5f, s.postProcess.sunWarmth, 0.01f, [this](float v) {
+    addSliderRow(stack, resources, "Sun Warmth", 0.0f, 1.5f, s.postProcess.sunWarmth, 0.01f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.sunWarmth = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Sky Coolness", 0.0f, 1.0f, s.postProcess.skyCoolness, 0.01f, [this](float v) {
+    addSliderRow(stack, resources, "Sky Coolness", 0.0f, 1.0f, s.postProcess.skyCoolness, 0.01f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.skyCoolness = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Shadow Desaturation", 0.0f, 1.0f, s.postProcess.shadowDesaturation, 0.01f,
+    addSliderRow(stack, resources, "Shadow Desaturation", 0.0f, 1.0f, s.postProcess.shadowDesaturation, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.shadowDesaturation = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Shadow Tint Strength", 0.0f, 0.8f, s.postProcess.shadowTintStrength, 0.01f,
+    addSliderRow(stack, resources, "Shadow Tint Strength", 0.0f, 0.8f, s.postProcess.shadowTintStrength, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.shadowTintStrength = v;
                      m_renderScene->setSettings(s);
                  });
 
-    addSectionHeader(stack, resourceMgr, "Block Materials");
+    addSectionHeader(stack, resources, "Block Materials");
 
-    addToggle(stack, resourceMgr, "Block PBR Maps", s.blockMaterialMaps.enabled, [this](bool v) {
+    addToggle(stack, resources, "Block PBR Maps", s.blockMaterialMaps.enabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.blockMaterialMaps.enabled = v;
         m_renderScene->setSettings(s);
     });
-    addToggle(stack, resourceMgr, "Block Normal Maps", s.blockMaterialMaps.normalMapsEnabled, [this](bool v) {
+    addToggle(stack, resources, "Block Normal Maps", s.blockMaterialMaps.normalMapsEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.blockMaterialMaps.normalMapsEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addToggle(stack, resourceMgr, "Block Specular Maps", s.blockMaterialMaps.specularMapsEnabled, [this](bool v) {
+    addToggle(stack, resources, "Block Specular Maps", s.blockMaterialMaps.specularMapsEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.blockMaterialMaps.specularMapsEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addToggle(stack, resourceMgr, "Block Parallax Maps", s.blockMaterialMaps.parallaxMapsEnabled, [this](bool v) {
+    addToggle(stack, resources, "Block Parallax Maps", s.blockMaterialMaps.parallaxMapsEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.blockMaterialMaps.parallaxMapsEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Block Parallax Depth", 0.0f, 0.12f, s.blockMaterialMaps.parallaxDepth, 0.001f,
+    addSliderRow(stack, resources, "Block Parallax Depth", 0.0f, 0.12f, s.blockMaterialMaps.parallaxDepth, 0.001f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.blockMaterialMaps.parallaxDepth = v;
                      m_renderScene->setSettings(s);
                  });
 
-    addSectionHeader(stack, resourceMgr, "Transparent");
+    addSectionHeader(stack, resources, "Transparent");
 
-    addToggle(stack, resourceMgr, "Water Effects", s.transparent.waterEffectsEnabled, [this](bool v) {
+    addToggle(stack, resources, "Water Effects", s.transparent.waterEffectsEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.transparent.waterEffectsEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addToggle(stack, resourceMgr, "Transparent Composite", s.transparent.compositeEnabled, [this](bool v) {
+    addToggle(stack, resources, "Transparent Composite", s.transparent.compositeEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.transparent.compositeEnabled = v;
         m_renderScene->setSettings(s);
     });
 
-    addSectionHeader(stack, resourceMgr, "Rain Surfaces");
+    addSectionHeader(stack, resources, "Rain Surfaces");
 
-    addToggle(stack, resourceMgr, "Wet Surfaces", s.weather.wetSurfacesEnabled, [this](bool v) {
+    addToggle(stack, resources, "Wet Surfaces", s.weather.wetSurfacesEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.weather.wetSurfacesEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addToggle(stack, resourceMgr, "Surface Ripples", s.weather.surfaceRipplesEnabled, [this](bool v) {
+    addToggle(stack, resources, "Surface Ripples", s.weather.surfaceRipplesEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.weather.surfaceRipplesEnabled = v;
         m_renderScene->setSettings(s);
@@ -895,9 +895,9 @@ void SettingsScreen::buildLightingTab(UIWidget* contentPanel, ResourceMgr& resou
     finalizeScrollTab(tabLayout.scroll, stack);
 }
 
-void SettingsScreen::buildPostProcessTab(UIWidget* contentPanel, ResourceMgr& resourceMgr) {
+void SettingsScreen::buildPostProcessTab(UIWidget* contentPanel, GameResources& resources) {
     constexpr float tabContentH = 420.0f;
-    const SettingsTabLayout tabLayout = setupScrollableTab(contentPanel, resourceMgr, 700.0f, tabContentH);
+    const SettingsTabLayout tabLayout = setupScrollableTab(contentPanel, resources, 700.0f, tabContentH);
     m_tabLayouts.push_back(tabLayout);
     UIStackLayout* stack = tabLayout.stack;
 
@@ -907,184 +907,184 @@ void SettingsScreen::buildPostProcessTab(UIWidget* contentPanel, ResourceMgr& re
     }
     RenderSettings s = m_renderScene->getSettings();
 
-    addSectionHeader(stack, resourceMgr, "Bloom");
+    addSectionHeader(stack, resources, "Bloom");
 
-    addToggle(stack, resourceMgr, "Bloom", s.postProcess.bloomEnabled, [this](bool v) {
+    addToggle(stack, resources, "Bloom", s.postProcess.bloomEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.bloomEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Bloom Threshold", 0.0f, 3.0f, s.postProcess.bloomThreshold, 0.01f,
+    addSliderRow(stack, resources, "Bloom Threshold", 0.0f, 3.0f, s.postProcess.bloomThreshold, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.bloomThreshold = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Bloom Strength", 0.0f, 20.0f, s.postProcess.bloomStrength, 0.1f, [this](float v) {
+    addSliderRow(stack, resources, "Bloom Strength", 0.0f, 20.0f, s.postProcess.bloomStrength, 0.1f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.bloomStrength = v;
         m_renderScene->setSettings(s);
     });
 
-    addSectionHeader(stack, resourceMgr, "Exposure");
+    addSectionHeader(stack, resources, "Exposure");
 
-    addToggle(stack, resourceMgr, "Auto Exposure", s.postProcess.autoExposureEnabled, [this](bool v) {
+    addToggle(stack, resources, "Auto Exposure", s.postProcess.autoExposureEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.autoExposureEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Auto Exp Min", 0.001f, 1.0f, s.postProcess.autoExposureMin, 0.001f,
+    addSliderRow(stack, resources, "Auto Exp Min", 0.001f, 1.0f, s.postProcess.autoExposureMin, 0.001f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.autoExposureMin = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Auto Exp Max", 1.0f, 64.0f, s.postProcess.autoExposureMax, 0.1f, [this](float v) {
+    addSliderRow(stack, resources, "Auto Exp Max", 1.0f, 64.0f, s.postProcess.autoExposureMax, 0.1f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.autoExposureMax = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Auto Exp Speed", 0.1f, 6.0f, s.postProcess.autoExposureSpeed, 0.1f,
+    addSliderRow(stack, resources, "Auto Exp Speed", 0.1f, 6.0f, s.postProcess.autoExposureSpeed, 0.1f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.autoExposureSpeed = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Auto Exp Bias", -2.0f, 2.0f, s.postProcess.autoExposureBias, 0.05f,
+    addSliderRow(stack, resources, "Auto Exp Bias", -2.0f, 2.0f, s.postProcess.autoExposureBias, 0.05f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.autoExposureBias = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Manual Exposure", 0.1f, 50.0f, s.postProcess.exposure, 0.1f, [this](float v) {
+    addSliderRow(stack, resources, "Manual Exposure", 0.1f, 50.0f, s.postProcess.exposure, 0.1f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.exposure = v;
         m_renderScene->setSettings(s);
     });
 
-    addSectionHeader(stack, resourceMgr, "Tonemap & Color");
+    addSectionHeader(stack, resources, "Tonemap & Color");
 
-    addDropdownRow(stack, resourceMgr, "Tonemap Mode",
+    addDropdownRow(stack, resources, "Tonemap Mode",
                    {"Reinhard", "AcademyFit", "Filmic", "AgX Minimal", "AcademyFull", "AgX Full"},
                    s.postProcess.tonemapMode, [this](int idx, const std::string&) {
                        auto s = m_renderScene->getSettings();
                        s.postProcess.tonemapMode = idx;
                        m_renderScene->setSettings(s);
                    });
-    addSliderRow(stack, resourceMgr, "Gamma", 1.0f, 3.0f, s.postProcess.gamma, 0.01f, [this](float v) {
+    addSliderRow(stack, resources, "Gamma", 1.0f, 3.0f, s.postProcess.gamma, 0.01f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.gamma = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Saturation", 0.0f, 2.0f, s.postProcess.saturation, 0.01f, [this](float v) {
+    addSliderRow(stack, resources, "Saturation", 0.0f, 2.0f, s.postProcess.saturation, 0.01f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.saturation = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Contrast", 0.5f, 2.0f, s.postProcess.contrast, 0.01f, [this](float v) {
+    addSliderRow(stack, resources, "Contrast", 0.5f, 2.0f, s.postProcess.contrast, 0.01f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.contrast = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Color Temperature", 0.0f, 2.0f, s.postProcess.colorTemperature, 0.01f,
+    addSliderRow(stack, resources, "Color Temperature", 0.0f, 2.0f, s.postProcess.colorTemperature, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.colorTemperature = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Vibrance", -0.5f, 0.8f, s.postProcess.vibrance, 0.01f, [this](float v) {
+    addSliderRow(stack, resources, "Vibrance", -0.5f, 0.8f, s.postProcess.vibrance, 0.01f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.vibrance = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Highlight Compression", 0.0f, 1.5f, s.postProcess.highlightCompression, 0.01f,
+    addSliderRow(stack, resources, "Highlight Compression", 0.0f, 1.5f, s.postProcess.highlightCompression, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.highlightCompression = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Vignette", 0.0f, 0.5f, s.postProcess.vignetteStrength, 0.01f, [this](float v) {
+    addSliderRow(stack, resources, "Vignette", 0.0f, 0.5f, s.postProcess.vignetteStrength, 0.01f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.vignetteStrength = v;
         m_renderScene->setSettings(s);
     });
 
-    addSectionHeader(stack, resourceMgr, "Effects");
+    addSectionHeader(stack, resources, "Effects");
 
-    addToggle(stack, resourceMgr, "Sun Rays", s.postProcess.sunRaysEnabled, [this](bool v) {
+    addToggle(stack, resources, "Sun Rays", s.postProcess.sunRaysEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.sunRaysEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Sun Ray Strength", 0.0f, 0.6f, s.postProcess.sunRayStrength, 0.01f,
+    addSliderRow(stack, resources, "Sun Ray Strength", 0.0f, 0.6f, s.postProcess.sunRayStrength, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.sunRayStrength = v;
                      m_renderScene->setSettings(s);
                  });
-    addToggle(stack, resourceMgr, "Aerial Perspective", s.postProcess.aerialPerspectiveEnabled, [this](bool v) {
+    addToggle(stack, resources, "Aerial Perspective", s.postProcess.aerialPerspectiveEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.aerialPerspectiveEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Aerial Strength", 0.0f, 1.5f, s.postProcess.aerialStrength, 0.01f,
+    addSliderRow(stack, resources, "Aerial Strength", 0.0f, 1.5f, s.postProcess.aerialStrength, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.aerialStrength = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Horizon Scatter", 0.0f, 1.5f, s.postProcess.horizonScatterStrength, 0.01f,
+    addSliderRow(stack, resources, "Horizon Scatter", 0.0f, 1.5f, s.postProcess.horizonScatterStrength, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.horizonScatterStrength = v;
                      m_renderScene->setSettings(s);
                  });
-    addToggle(stack, resourceMgr, "Bloomy Fog", s.postProcess.bloomyFogEnabled, [this](bool v) {
+    addToggle(stack, resources, "Bloomy Fog", s.postProcess.bloomyFogEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.bloomyFogEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addToggle(stack, resourceMgr, "Purkinje Shift", s.postProcess.purkinjeShiftEnabled, [this](bool v) {
+    addToggle(stack, resources, "Purkinje Shift", s.postProcess.purkinjeShiftEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.purkinjeShiftEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addToggle(stack, resourceMgr, "Shaderpack Grading", s.postProcess.shaderpackGradingEnabled, [this](bool v) {
+    addToggle(stack, resources, "Shaderpack Grading", s.postProcess.shaderpackGradingEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.shaderpackGradingEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "CAS Sharpen", 0.0f, 0.5f, s.postProcess.sharpenStrength, 0.01f, [this](float v) {
+    addSliderRow(stack, resources, "CAS Sharpen", 0.0f, 0.5f, s.postProcess.sharpenStrength, 0.01f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.sharpenStrength = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Noise Dither", 0.0f, 0.05f, s.postProcess.noiseDitherStrength, 0.001f,
+    addSliderRow(stack, resources, "Noise Dither", 0.0f, 0.05f, s.postProcess.noiseDitherStrength, 0.001f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.noiseDitherStrength = v;
                      m_renderScene->setSettings(s);
                  });
 
-    addSectionHeader(stack, resourceMgr, "Depth of Field");
+    addSectionHeader(stack, resources, "Depth of Field");
 
-    addToggle(stack, resourceMgr, "Depth of Field", s.postProcess.dofEnabled, [this](bool v) {
+    addToggle(stack, resources, "Depth of Field", s.postProcess.dofEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.dofEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "DoF Focus Distance", 0.5f, 50.0f, s.postProcess.dofFocusDistance, 0.5f,
+    addSliderRow(stack, resources, "DoF Focus Distance", 0.5f, 50.0f, s.postProcess.dofFocusDistance, 0.5f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.dofFocusDistance = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "DoF Aperture", 0.8f, 22.0f, s.postProcess.dofAperture, 0.1f, [this](float v) {
+    addSliderRow(stack, resources, "DoF Aperture", 0.8f, 22.0f, s.postProcess.dofAperture, 0.1f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.dofAperture = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "DoF Intensity", 0.0f, 1.0f, s.postProcess.dofIntensity, 0.01f, [this](float v) {
+    addSliderRow(stack, resources, "DoF Intensity", 0.0f, 1.0f, s.postProcess.dofIntensity, 0.01f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.dofIntensity = v;
         m_renderScene->setSettings(s);
@@ -1093,9 +1093,9 @@ void SettingsScreen::buildPostProcessTab(UIWidget* contentPanel, ResourceMgr& re
     finalizeScrollTab(tabLayout.scroll, stack);
 }
 
-void SettingsScreen::buildVolumetricTab(UIWidget* contentPanel, ResourceMgr& resourceMgr) {
+void SettingsScreen::buildVolumetricTab(UIWidget* contentPanel, GameResources& resources) {
     constexpr float tabContentH = 420.0f;
-    const SettingsTabLayout tabLayout = setupScrollableTab(contentPanel, resourceMgr, 700.0f, tabContentH);
+    const SettingsTabLayout tabLayout = setupScrollableTab(contentPanel, resources, 700.0f, tabContentH);
     m_tabLayouts.push_back(tabLayout);
     UIStackLayout* stack = tabLayout.stack;
 
@@ -1105,142 +1105,142 @@ void SettingsScreen::buildVolumetricTab(UIWidget* contentPanel, ResourceMgr& res
     }
     RenderSettings s = m_renderScene->getSettings();
 
-    addSectionHeader(stack, resourceMgr, "Volumetric Light & Fog");
+    addSectionHeader(stack, resources, "Volumetric Light & Fog");
 
-    addToggle(stack, resourceMgr, "Volumetric Light", s.volumetric.lightEnabled, [this](bool v) {
+    addToggle(stack, resources, "Volumetric Light", s.volumetric.lightEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.volumetric.lightEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addToggle(stack, resourceMgr, "Volumetric Fog", s.volumetric.fogEnabled, [this](bool v) {
+    addToggle(stack, resources, "Volumetric Fog", s.volumetric.fogEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.volumetric.fogEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addToggle(stack, resourceMgr, "VFog Sky Ray March", s.volumetric.skyRayEnabled, [this](bool v) {
+    addToggle(stack, resources, "VFog Sky Ray March", s.volumetric.skyRayEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.volumetric.skyRayEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addToggle(stack, resourceMgr, "VFog Time Fade", s.volumetric.timeFadeEnabled, [this](bool v) {
+    addToggle(stack, resources, "VFog Time Fade", s.volumetric.timeFadeEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.volumetric.timeFadeEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addToggle(stack, resourceMgr, "VFog Temporal", s.volumetric.temporalEnabled, [this](bool v) {
+    addToggle(stack, resources, "VFog Temporal", s.volumetric.temporalEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.volumetric.temporalEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addDropdownRow(stack, resourceMgr, "VFog Quality", {"Low", "Medium", "High", "Ultra"}, s.volumetric.qualityTier,
+    addDropdownRow(stack, resources, "VFog Quality", {"Low", "Medium", "High", "Ultra"}, s.volumetric.qualityTier,
                    [this](int idx, const std::string&) {
                        auto s = m_renderScene->getSettings();
                        s.volumetric.qualityTier = idx;
                        m_renderScene->setSettings(s);
                    });
-    addSliderRow(stack, resourceMgr, "VFog Samples", 2.0f, 50.0f, static_cast<float>(s.volumetric.fogSamples), 1.0f,
+    addSliderRow(stack, resources, "VFog Samples", 2.0f, 50.0f, static_cast<float>(s.volumetric.fogSamples), 1.0f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.volumetric.fogSamples = static_cast<int>(v);
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "VFog Temporal Weight", 0.0f, 0.99f, s.volumetric.temporalWeight, 0.01f,
+    addSliderRow(stack, resources, "VFog Temporal Weight", 0.0f, 0.99f, s.volumetric.temporalWeight, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.volumetric.temporalWeight = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "VFog Center Height", 0.0f, 255.0f, s.volumetric.fogCenterHeight, 1.0f,
+    addSliderRow(stack, resources, "VFog Center Height", 0.0f, 255.0f, s.volumetric.fogCenterHeight, 1.0f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.volumetric.fogCenterHeight = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "VFog Height Spread", 1.0f, 200.0f, s.volumetric.fogHeightSpread, 1.0f,
+    addSliderRow(stack, resources, "VFog Height Spread", 1.0f, 200.0f, s.volumetric.fogHeightSpread, 1.0f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.volumetric.fogHeightSpread = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "VFog Noise Scale", 0.001f, 0.200f, s.volumetric.fogNoiseScale, 0.001f,
+    addSliderRow(stack, resources, "VFog Noise Scale", 0.001f, 0.200f, s.volumetric.fogNoiseScale, 0.001f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.volumetric.fogNoiseScale = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "VFog Light Strength", 0.0f, 1.0f, s.volumetric.fogLightStrength, 0.01f,
+    addSliderRow(stack, resources, "VFog Light Strength", 0.0f, 1.0f, s.volumetric.fogLightStrength, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.volumetric.fogLightStrength = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "VFog Density Scale", 0.0f, 10.0f, s.volumetric.fogDensityScale, 0.1f,
+    addSliderRow(stack, resources, "VFog Density Scale", 0.0f, 10.0f, s.volumetric.fogDensityScale, 0.1f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.volumetric.fogDensityScale = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "VFog Strength", 0.0f, 2.0f, s.volumetric.fogStrength, 0.01f, [this](float v) {
+    addSliderRow(stack, resources, "VFog Strength", 0.0f, 2.0f, s.volumetric.fogStrength, 0.01f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.volumetric.fogStrength = v;
         m_renderScene->setSettings(s);
     });
-    addToggle(stack, resourceMgr, "UW Volumetric Light", s.volumetric.uwLightEnabled, [this](bool v) {
+    addToggle(stack, resources, "UW Volumetric Light", s.volumetric.uwLightEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.volumetric.uwLightEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "UW VL Strength", 0.0f, 2.0f, s.volumetric.underwaterLightStrength, 0.01f,
+    addSliderRow(stack, resources, "UW VL Strength", 0.0f, 2.0f, s.volumetric.underwaterLightStrength, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.volumetric.underwaterLightStrength = v;
                      m_renderScene->setSettings(s);
                  });
 
-    addSectionHeader(stack, resourceMgr, "Clouds");
+    addSectionHeader(stack, resources, "Clouds");
 
-    addToggle(stack, resourceMgr, "Cloud Shadows", s.cloud.shadowsEnabled, [this](bool v) {
+    addToggle(stack, resources, "Cloud Shadows", s.cloud.shadowsEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.cloud.shadowsEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Cloud Coverage", 0.0f, 1.0f, s.cloud.coverage, 0.01f, [this](float v) {
+    addSliderRow(stack, resources, "Cloud Coverage", 0.0f, 1.0f, s.cloud.coverage, 0.01f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.cloud.coverage = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Cloud Density", 0.0f, 2.5f, s.cloud.density, 0.01f, [this](float v) {
+    addSliderRow(stack, resources, "Cloud Density", 0.0f, 2.5f, s.cloud.density, 0.01f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.cloud.density = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Cloud Height", 300.0f, 9000.0f, s.cloud.height, 50.0f, [this](float v) {
+    addSliderRow(stack, resources, "Cloud Height", 300.0f, 9000.0f, s.cloud.height, 50.0f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.cloud.height = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Cloud Thickness", 100.0f, 3000.0f, s.cloud.thickness, 25.0f, [this](float v) {
+    addSliderRow(stack, resources, "Cloud Thickness", 100.0f, 3000.0f, s.cloud.thickness, 25.0f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.cloud.thickness = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Cloud Shadow Strength", 0.0f, 0.8f, s.cloud.shadowStrength, 0.01f,
+    addSliderRow(stack, resources, "Cloud Shadow Strength", 0.0f, 0.8f, s.cloud.shadowStrength, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.cloud.shadowStrength = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Cloud Shadow Scale", 0.001f, 0.02f, s.cloud.shadowScale, 0.001f, [this](float v) {
+    addSliderRow(stack, resources, "Cloud Shadow Scale", 0.001f, 0.02f, s.cloud.shadowScale, 0.001f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.cloud.shadowScale = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Cloud Time Scale", 0.05f, 2.0f, s.cloud.timeScale, 0.05f, [this](float v) {
+    addSliderRow(stack, resources, "Cloud Time Scale", 0.05f, 2.0f, s.cloud.timeScale, 0.05f, [this](float v) {
         auto s = m_renderScene->getSettings();
         s.cloud.timeScale = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Cloud Composite", 0.0f, 1.0f, s.cloud.sceneCloudCompositeStrength, 0.01f,
+    addSliderRow(stack, resources, "Cloud Composite", 0.0f, 1.0f, s.cloud.sceneCloudCompositeStrength, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.cloud.sceneCloudCompositeStrength = v;
@@ -1250,9 +1250,9 @@ void SettingsScreen::buildVolumetricTab(UIWidget* contentPanel, ResourceMgr& res
     finalizeScrollTab(tabLayout.scroll, stack);
 }
 
-void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resourceMgr) {
+void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, GameResources& resources) {
     constexpr float tabContentH = 420.0f;
-    const SettingsTabLayout tabLayout = setupScrollableTab(contentPanel, resourceMgr, 700.0f, tabContentH);
+    const SettingsTabLayout tabLayout = setupScrollableTab(contentPanel, resources, 700.0f, tabContentH);
     m_tabLayouts.push_back(tabLayout);
     UIStackLayout* stack = tabLayout.stack;
 
@@ -1269,9 +1269,9 @@ void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resour
                                               m_presentationController->frameGenerationAvailable() &&
                                               m_renderScene->supportsFrameGenerationInputs();
 
-    addSectionHeader(stack, resourceMgr, "NVIDIA Low Latency and Frame Generation");
+    addSectionHeader(stack, resources, "NVIDIA Low Latency and Frame Generation");
     addDropdownRow(
-        stack, resourceMgr, "NVIDIA Reflex", {"Off", "On", "On + Boost"}, static_cast<int>(s.nvidia.reflexMode),
+        stack, resources, "NVIDIA Reflex", {"Off", "On", "On + Boost"}, static_cast<int>(s.nvidia.reflexMode),
         [this](const int index, const std::string&) {
             if (index < static_cast<int>(ReflexLowLatencyMode::Off) ||
                 index > static_cast<int>(ReflexLowLatencyMode::OnWithBoost)) {
@@ -1286,7 +1286,7 @@ void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resour
         },
         reflexSupported);
     addToggle(
-        stack, resourceMgr, "DLSS Frame Generation (2x)", s.nvidia.frameGeneration == FrameGenerationType::Dlss,
+        stack, resources, "DLSS Frame Generation (2x)", s.nvidia.frameGeneration == FrameGenerationType::Dlss,
         [this](const bool enabled) {
             auto settings = m_renderScene->getSettings();
             settings.nvidia.frameGeneration = enabled ? FrameGenerationType::Dlss : FrameGenerationType::Disabled;
@@ -1297,7 +1297,7 @@ void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resour
         },
         dlssFrameGenerationSupported);
 
-    addSectionHeader(stack, resourceMgr, "Temporal Upscaling");
+    addSectionHeader(stack, resources, "Temporal Upscaling");
 
     std::vector<std::string> temporalUpscalers{"Native"};
     std::vector<TemporalUpscalerType> temporalUpscalerTypes{TemporalUpscalerType::Native};
@@ -1316,7 +1316,7 @@ void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resour
             break;
         }
     }
-    addDropdownRow(stack, resourceMgr, "Temporal Upscaler", temporalUpscalers, selectedUpscaler,
+    addDropdownRow(stack, resources, "Temporal Upscaler", temporalUpscalers, selectedUpscaler,
                    [this, temporalUpscalerTypes](const int index, const std::string&) {
                        if (index < 0 || static_cast<size_t>(index) >= temporalUpscalerTypes.size()) {
                            return;
@@ -1337,7 +1337,7 @@ void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resour
             ? static_cast<int>(s.upscale.quality) - static_cast<int>(TemporalUpscaleQuality::Quality)
             : 0;
     addDropdownRow(
-        stack, resourceMgr, "Temporal Upscale Quality", {"Quality", "Balanced", "Performance", "Ultra Performance"},
+        stack, resources, "Temporal Upscale Quality", {"Quality", "Balanced", "Performance", "Ultra Performance"},
         selectedQuality,
         [this](const int index, const std::string&) {
             auto settings = m_renderScene->getSettings();
@@ -1347,7 +1347,7 @@ void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resour
         },
         fsr31Supported || dlssSupported);
     addToggle(
-        stack, resourceMgr, "FSR 3.1 Sharpening", s.upscale.sharpeningEnabled,
+        stack, resources, "FSR 3.1 Sharpening", s.upscale.sharpeningEnabled,
         [this](const bool enabled) {
             auto settings = m_renderScene->getSettings();
             settings.upscale.sharpeningEnabled = enabled;
@@ -1355,7 +1355,7 @@ void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resour
         },
         fsr31Supported);
     addSliderRow(
-        stack, resourceMgr, "FSR 3.1 Sharpness", 0.0f, 1.0f, s.upscale.sharpeningStrength, 0.01f,
+        stack, resources, "FSR 3.1 Sharpness", 0.0f, 1.0f, s.upscale.sharpeningStrength, 0.01f,
         [this](const float strength) {
             auto settings = m_renderScene->getSettings();
             settings.upscale.sharpeningStrength = strength;
@@ -1363,7 +1363,7 @@ void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resour
         },
         fsr31Supported);
     addToggle(
-        stack, resourceMgr, "FSR 3.1 Debug View", s.upscale.debugVisualizationEnabled,
+        stack, resources, "FSR 3.1 Debug View", s.upscale.debugVisualizationEnabled,
         [this](const bool enabled) {
             auto settings = m_renderScene->getSettings();
             settings.upscale.debugVisualizationEnabled = enabled;
@@ -1371,10 +1371,10 @@ void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resour
         },
         fsr31Supported);
 
-    addSectionHeader(stack, resourceMgr, "Legacy Spatial Upscaling");
+    addSectionHeader(stack, resources, "Legacy Spatial Upscaling");
 
     addToggle(
-        stack, resourceMgr, "FSR1 Upscale (OpenGL only)", fsr1Supported && s.upscale.fsr1Enabled,
+        stack, resources, "FSR1 Upscale (OpenGL only)", fsr1Supported && s.upscale.fsr1Enabled,
         [this](bool v) {
             auto s = m_renderScene->getSettings();
             s.upscale.fsr1Enabled = v;
@@ -1382,7 +1382,7 @@ void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resour
         },
         fsr1Supported);
     addSliderRow(
-        stack, resourceMgr, "FSR1 Render Scale", 0.50f, 1.0f, s.upscale.fsr1RenderScale, 0.01f,
+        stack, resources, "FSR1 Render Scale", 0.50f, 1.0f, s.upscale.fsr1RenderScale, 0.01f,
         [this](float v) {
             auto s = m_renderScene->getSettings();
             s.upscale.fsr1RenderScale = v;
@@ -1390,7 +1390,7 @@ void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resour
         },
         fsr1Supported);
     addSliderRow(
-        stack, resourceMgr, "FSR1 Sharpness", 0.0f, 2.0f, s.upscale.fsr1Sharpness, 0.01f,
+        stack, resources, "FSR1 Sharpness", 0.0f, 2.0f, s.upscale.fsr1Sharpness, 0.01f,
         [this](float v) {
             auto s = m_renderScene->getSettings();
             s.upscale.fsr1Sharpness = v;
@@ -1398,59 +1398,59 @@ void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resour
         },
         fsr1Supported);
 
-    addSectionHeader(stack, resourceMgr, "Anti-Aliasing");
+    addSectionHeader(stack, resources, "Anti-Aliasing");
 
-    addToggle(stack, resourceMgr, "TAA", s.taa.enabled, [this](bool v) {
+    addToggle(stack, resources, "TAA", s.taa.enabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.taa.enabled = v;
         m_renderScene->setSettings(s);
     });
 
-    addSectionHeader(stack, resourceMgr, "Reflection");
+    addSectionHeader(stack, resources, "Reflection");
 
-    addToggle(stack, resourceMgr, "Reflection Filter", s.reflection.filterEnabled, [this](bool v) {
+    addToggle(stack, resources, "Reflection Filter", s.reflection.filterEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.reflection.filterEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addToggle(stack, resourceMgr, "Reflection Temporal", s.reflection.temporalEnabled, [this](bool v) {
+    addToggle(stack, resources, "Reflection Temporal", s.reflection.temporalEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.reflection.temporalEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Reflection Filter Strength", 0.0f, 2.0f, s.reflection.filterStrength, 0.01f,
+    addSliderRow(stack, resources, "Reflection Filter Strength", 0.0f, 2.0f, s.reflection.filterStrength, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.reflection.filterStrength = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Reflection History Weight", 0.0f, 0.98f, s.reflection.historyWeight, 0.01f,
+    addSliderRow(stack, resources, "Reflection History Weight", 0.0f, 0.98f, s.reflection.historyWeight, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.reflection.historyWeight = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Reflection Composite", 0.0f, 1.0f, s.reflection.sceneReflectionCompositeStrength,
+    addSliderRow(stack, resources, "Reflection Composite", 0.0f, 1.0f, s.reflection.sceneReflectionCompositeStrength,
                  0.01f, [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.reflection.sceneReflectionCompositeStrength = v;
                      m_renderScene->setSettings(s);
                  });
 
-    addSectionHeader(stack, resourceMgr, "Motion Blur");
+    addSectionHeader(stack, resources, "Motion Blur");
 
-    addToggle(stack, resourceMgr, "Motion Blur", s.postProcess.motionBlurEnabled, [this](bool v) {
+    addToggle(stack, resources, "Motion Blur", s.postProcess.motionBlurEnabled, [this](bool v) {
         auto s = m_renderScene->getSettings();
         s.postProcess.motionBlurEnabled = v;
         m_renderScene->setSettings(s);
     });
-    addSliderRow(stack, resourceMgr, "Motion Blur Strength", 0.0f, 3.0f, s.postProcess.motionBlurStrength, 0.1f,
+    addSliderRow(stack, resources, "Motion Blur Strength", 0.0f, 3.0f, s.postProcess.motionBlurStrength, 0.1f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.motionBlurStrength = v;
                      m_renderScene->setSettings(s);
                  });
-    addSliderRow(stack, resourceMgr, "Motion Blur Samples", 2.0f, 16.0f,
+    addSliderRow(stack, resources, "Motion Blur Samples", 2.0f, 16.0f,
                  static_cast<float>(s.postProcess.motionBlurSamples), 1.0f, [this](float v) {
                      auto s = m_renderScene->getSettings();
                      s.postProcess.motionBlurSamples = static_cast<int>(v);

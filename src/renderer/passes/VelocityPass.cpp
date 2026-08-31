@@ -27,7 +27,7 @@ static_assert(sizeof(VelocityPushConstants) == 128u);
 }
 } // namespace
 
-void VelocityPass::init(ResourceMgr&) {}
+void VelocityPass::init(GameResources&) {}
 
 void VelocityPass::shutdown() {
     destroyRhiResources();

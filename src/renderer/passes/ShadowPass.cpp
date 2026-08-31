@@ -12,7 +12,7 @@
 #include "../mesh/TerrainRhiPipelineSet.h"
 #include "../mesh/TerrainRenderer.h"
 #include "../mesh/WorldRenderBuffer.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../world/IWorldView.h"
 
 #include "../renderers/BlockEntityRenderer.h"
@@ -54,8 +54,8 @@ struct ShadowCullPushConstants {
 };
 } // namespace
 
-void ShadowPass::init(ResourceMgr& resourceMgr) {
-    m_resourceMgr = &resourceMgr;
+void ShadowPass::init(GameResources& resources) {
+    m_resources = &resources;
 }
 
 void ShadowPass::shutdown() {
@@ -63,7 +63,7 @@ void ShadowPass::shutdown() {
         m_frameDebugService->cancelShadowFrame();
     }
     destroyCullResources();
-    m_resourceMgr = nullptr;
+    m_resources = nullptr;
     m_frameContext = nullptr;
     m_frameTargets = nullptr;
     m_frameDebugService = nullptr;
@@ -115,7 +115,7 @@ void ShadowPass::renderShadowFallingBlocks(RhiCommandList& commandList, const gl
 
 bool ShadowPass::prepareGraphFrame(const FrameContext& ctx, const RenderSettings& settings,
                                    DeferredRenderTargets& targets, const IWorldView* worldView) {
-    if (m_graphFramePrepared || m_shadowRenderer == nullptr || m_resourceMgr == nullptr || ctx.shared == nullptr ||
+    if (m_graphFramePrepared || m_shadowRenderer == nullptr || m_resources == nullptr || ctx.shared == nullptr ||
         ctx.shared->rhiDevice == nullptr) {
         return false;
     }
@@ -466,7 +466,7 @@ bool ShadowPass::recordOpaquePass(RhiCommandList& commandList, const int cascade
     shadowFrame.animationTime = ctx.animationTime;
     shadowFrame.shaderTime = ctx.shaderTime;
     shadowFrame.passMode = 0;
-    if (!ctx.shared->terrainRhiPipelines->prepareShadow(commandList, *m_resourceMgr, shadowFrame) ||
+    if (!ctx.shared->terrainRhiPipelines->prepareShadow(commandList, *m_resources, shadowFrame) ||
         !m_worldRenderBuffer->prepareRhiOpaqueAndCutout(commandList,
                                                         ctx.shared->terrainRhiPipelines->shadowMetadataLayout())) {
         return false;
@@ -888,7 +888,7 @@ bool ShadowPass::recordTransparentPass(RhiCommandList& commandList, const int ca
         shadowFrame.animationTime = ctx.animationTime;
         shadowFrame.shaderTime = ctx.shaderTime;
         shadowFrame.passMode = 1;
-        if (!ctx.shared->terrainRhiPipelines->prepareShadow(commandList, *m_resourceMgr, shadowFrame) ||
+        if (!ctx.shared->terrainRhiPipelines->prepareShadow(commandList, *m_resources, shadowFrame) ||
             !m_worldRenderBuffer->prepareRhiTransparent(commandList,
                                                         ctx.shared->terrainRhiPipelines->shadowMetadataLayout())) {
             return false;

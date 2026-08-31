@@ -8,7 +8,7 @@
 
 class ItemGridControl : public UIWidget {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(GameResources& resources, RhiDevice& rhiDevice) override;
     void shutdown() override;
 
     UIEventResult onInput(const UIInputEvent& event, const UIRenderContext& ctx) override;
@@ -33,7 +33,7 @@ protected:
 private:
     int hitTest(float mouseX, float mouseY) const;
 
-    ResourceMgr* m_resourceMgr = nullptr;
+    GameResources* m_resources = nullptr;
     Pickable::RenderParams m_renderParams;
     std::vector<Pickable::SlotInfo> m_slots;
     int m_hoveredIndex = -1;

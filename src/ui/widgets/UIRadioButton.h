@@ -18,7 +18,7 @@ public:
     UIRadioButtonGroup();
     ~UIRadioButtonGroup() override;
 
-    void init(ResourceMgr& resourceMgr) override;
+    void init(GameResources& resources, RhiDevice& rhiDevice) override;
     void shutdown() override;
 
     // Add a radio option with the given label text. Returns the option index.

@@ -22,7 +22,7 @@
 #include <string>
 #include <string_view>
 
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/BlockTextureLibrary.h"
 
 IdRegistry BlockRegistry::s_idRegistry{};
 std::vector<BlockDef> BlockRegistry::s_blocks{};
@@ -512,7 +512,7 @@ BlockRenderLayer parseRenderLayer(const nlohmann::json& blockJson, const bool is
 }
 } // namespace
 
-void BlockRegistry::init(ResourceMgr* resourceMgr) {
+void BlockRegistry::init(const BlockTextureLibrary* blockTextures) {
     if (s_initialized) {
         return;
     }
@@ -520,7 +520,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
     // Load config from JSON before registering blocks so RuntimeId order follows the data file.
     PlacementStrategyRegistry::initBuiltinStrategies();
     MeshBuilderRegistry::initBuiltinBuilders();
-    if (!BlockModelRegistry::init(resourceMgr)) {
+    if (!BlockModelRegistry::init(blockTextures)) {
         std::cerr << "Failed to initialize block model registry\n";
         std::abort();
     }
@@ -970,10 +970,10 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             static_cast<void>(name);
             return makeStaticWorldTexture(0);
 #else
-            if (resourceMgr == nullptr) {
+            if (blockTextures == nullptr) {
                 return makeStaticWorldTexture(0);
             }
-            const BiomeTintKind resolvedTint = biomeTintKindFromResourceTint(resourceMgr->getTextureTint(name));
+            const BiomeTintKind resolvedTint = biomeTintKindFromResourceTint(blockTextures->textureTint(name));
             if (resolvedTint == BiomeTintKind::None) {
                 hasUntintedTexture = true;
             } else {
@@ -984,7 +984,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
                     hasUntintedTexture = true;
                 }
             }
-            return makeStaticWorldTexture(resourceMgr->getTextureArrayLayer(name), resolvedTint);
+            return makeStaticWorldTexture(blockTextures->textureArrayLayer(name), resolvedTint);
 #endif
         };
 
@@ -1161,8 +1161,8 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
                 animation.ref.isAnimated = animation.ref.frameCount > 1;
 
 #ifndef MECRAFT_NO_TEXTURES
-                if (resourceMgr != nullptr) {
-                    const TextureAnimationInfo resolved = resourceMgr->getTextureAnimation(animation.textureName);
+                if (blockTextures != nullptr) {
+                    const TextureAnimationInfo resolved = blockTextures->textureAnimation(animation.textureName);
                     if (!resolved.isAnimated) {
                         failBlockRegistry("Block animated texture is not declared as animated: " +
                                           def.namespacedId.full() + "." + it.key());

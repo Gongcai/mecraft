@@ -1,5 +1,4 @@
 #include "BlockInteractionOverlayRenderer.h"
-#include "../../resource/ResourceMgr.h"
 #include "../../world/IWorldView.h"
 #include "../../world/block/Block.h"
 #include "../../world/block/BlockSelection.h"
@@ -34,9 +33,8 @@ BlockSelectionBox selectionBoxForTarget(const BlockStateId targetState, const gl
 
 } // namespace
 
-void BlockInteractionOverlayRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
+void BlockInteractionOverlayRenderer::init(RhiDevice& rhiDevice) {
     m_rhiDevice = &rhiDevice;
-    static_cast<void>(resourceMgr);
     initOutlineMesh();
     initBreakOverlayMesh();
     const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/block_outline_rhi.vert");

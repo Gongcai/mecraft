@@ -11,7 +11,7 @@
 #include <cstdint>
 
 class DeferredRenderTargets;
-class ResourceMgr;
+struct GameResources;
 class RhiDevice;
 class RhiCommandList;
 
@@ -22,17 +22,17 @@ class ShadowRenderer;
 /// Volumetric fog pass: ray-marched fog with temporal reprojection and scene composite.
 class VolumetricPass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr);
+    void init(GameResources& resources);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "Volumetric"; }
 
     void setShadowRenderer(shadow::ShadowRenderer* sr) { m_shadowRenderer = sr; }
 
     /// Check if all required shaders are loaded.
-    [[nodiscard]] bool hasShaders() const { return m_resourceMgr != nullptr; }
+    [[nodiscard]] bool hasShaders() const { return m_resources != nullptr; }
 
     /// Check if temporal shader is available.
-    [[nodiscard]] bool hasTemporalShader() const { return m_resourceMgr != nullptr; }
+    [[nodiscard]] bool hasTemporalShader() const { return m_resources != nullptr; }
 
     struct GraphResources {
         RgTextureHandle depth;
@@ -111,7 +111,7 @@ private:
     void destroyFogNoiseTextureView();
 
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
-    ResourceMgr* m_resourceMgr = nullptr;
+    GameResources* m_resources = nullptr;
     RhiTextureHandle m_noiseTexture;
     RhiTextureViewHandle m_fogNoiseTextureView;
     RhiDevice* m_fogNoiseViewDevice = nullptr;

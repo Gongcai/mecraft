@@ -30,7 +30,7 @@ public:
     static std::string generateWorldName(const std::filesystem::path& saveRoot);
 
 protected:
-    void buildUI(ResourceMgr& resourceMgr) override;
+    void buildUI(GameResources& resources, RhiDevice& rhiDevice) override;
     void onSceneEnter() override;
 
 private:

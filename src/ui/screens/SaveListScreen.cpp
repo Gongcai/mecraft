@@ -6,7 +6,7 @@
 #include "../widgets/UIText.h"
 #include "../widgets/UIImage.h"
 #include "../layout/UIStackLayout.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../locale/LocaleManager.h"
 #include "../../save/SaveManager.h"
 
@@ -118,8 +118,9 @@ private:
 // SaveListScreen implementation
 // ===========================================================================
 
-void SaveListScreen::buildUI(ResourceMgr& resourceMgr) {
-    m_resMgr = &resourceMgr;
+void SaveListScreen::buildUI(GameResources& resources, RhiDevice& rhiDevice) {
+    m_resources = &resources;
+    m_rhiDevice = &rhiDevice;
 
     // -- Background overlay --
     auto bgPanel = std::make_unique<UIPanel>();
@@ -287,7 +288,7 @@ void SaveListScreen::refreshSaveList() {
 // ---------------------------------------------------------------------------
 
 void SaveListScreen::rebuildList() {
-    if (!m_saveListStack || !m_scrollArea || !m_resMgr) {
+    if (!m_saveListStack || !m_scrollArea || !m_resources) {
         return;
     }
 
@@ -336,7 +337,7 @@ void SaveListScreen::rebuildList() {
             std::error_code ec;
             bool thumbLoaded = !save.screenshotPath.empty() && std::filesystem::exists(save.screenshotPath, ec);
             if (thumbLoaded) {
-                thumb->loadTexture(*m_resMgr, "thumb_" + save.folderName, save.screenshotPath);
+                thumb->loadTexture(*m_resources, "thumb_" + save.folderName, save.screenshotPath);
                 const float tw = thumb->width > 0.0f ? thumb->width : kThumbSize;
                 const float th = thumb->height > 0.0f ? thumb->height : kThumbSize;
                 const float s = kThumbSize / std::max(tw, th);
@@ -395,7 +396,7 @@ void SaveListScreen::rebuildList() {
         // Init the panel and all its children.
         // UIPanel::init() creates GPU resources for the panel itself,
         // then recurses into children (UIImage gets VAO + shaders, etc.).
-        panel->init(*m_resMgr);
+        panel->init(*m_resources, *m_rhiDevice);
 
         m_saveListStack->addChild(std::move(panel));
     }

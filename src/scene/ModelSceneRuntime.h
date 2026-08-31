@@ -18,7 +18,7 @@
 #include "ModelSceneDocument.h"
 
 class ImGuiRhiRenderer;
-class ResourceMgr;
+struct GameResources;
 struct GpuFrameStats;
 struct RenderGraphFrameStats;
 struct RenderFrameClock;
@@ -42,7 +42,7 @@ public:
     ModelSceneRuntime& operator=(const ModelSceneRuntime&) = delete;
 
     /// Initializes rendering resources for an empty editable scene.
-    [[nodiscard]] bool init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice, RhiCommandListPool& commandListPool,
+    [[nodiscard]] bool init(GameResources& resources, RhiDevice& rhiDevice, RhiCommandListPool& commandListPool,
                             ImGuiRhiRenderer& imguiRenderer);
     void shutdown();
 
@@ -245,9 +245,9 @@ private:
         uint32_t captureRevision = 1u;
     };
 
-    [[nodiscard]] bool createMeshAsset(ResourceMgr& resourceMgr, scene::SceneAssetId assetId, const std::string& name,
+    [[nodiscard]] bool createMeshAsset(scene::SceneAssetId assetId, const std::string& name,
                                        const std::string& path, MeshAsset& asset);
-    [[nodiscard]] bool loadMeshAsset(ResourceMgr& resourceMgr, const std::string& name, const std::string& path,
+    [[nodiscard]] bool loadMeshAsset(const std::string& name, const std::string& path,
                                      scene::SceneAssetId& assetId);
     [[nodiscard]] entt::entity instantiateAsset(scene::SceneAssetId assetId, const std::string& instanceName);
     [[nodiscard]] entt::entity createEntity(const std::string& baseName);
@@ -267,7 +267,9 @@ private:
     entt::registry m_registry;
     std::vector<MeshAsset> m_assets;
     std::unordered_map<scene::SceneAssetId, uint32_t> m_assetIndices;
-    ResourceMgr* m_resourceMgr = nullptr;
+    GameResources* m_resources = nullptr;
+    RhiDevice* m_rhiDevice = nullptr;
+    RhiCommandListPool* m_commandListPool = nullptr;
     std::unique_ptr<ModelSceneDeferredRenderer> m_deferredRenderer;
     entt::entity m_selectedEntity = entt::null;
     scene::SceneEntityId m_nextEntityId = 1u;

@@ -25,8 +25,9 @@
 #include "UITheme.h"
 #include "UIScaleConfig.h"
 
-class ResourceMgr;
+struct GameResources;
 class RhiDevice;
+class RhiCommandListPool;
 class Inventory;
 class LocaleManager;
 class CraftingSystem;
@@ -44,7 +45,7 @@ public:
     void setGUIScale(GUIScale scale);
     [[nodiscard]] GUIScale getGUIScale() const;
 
-    void init(ResourceMgr& resourceMgr);
+    void init(GameResources& resources, RhiDevice& rhiDevice, RhiCommandListPool& commandListPool);
     void shutdown();
 
     UIRenderContext prepareRenderContext(int surfaceWidth, int surfaceHeight, RhiDevice& rhiDevice,
@@ -109,7 +110,8 @@ public:
     // Scene management for menu screens
     void setActiveScene(UIScene* scene);
     [[nodiscard]] UIScene* getActiveScene() const;
-    [[nodiscard]] ResourceMgr* getResourceMgr() const;
+    [[nodiscard]] GameResources* getResources() const;
+    [[nodiscard]] RhiDevice* getRhiDevice() const;
     UIRenderContext prepareSceneContext(int surfaceWidth, int surfaceHeight, RhiDevice& rhiDevice,
                                         const InputSnapshot& inputSnapshot);
     void renderSceneOnlyPrepared(const UIRenderContext& context);
@@ -194,7 +196,9 @@ private:
     CommandInputOverlay m_commandInput;
     ConsoleOverlay m_console;
     std::vector<UIWidget*> m_widgetControls;
-    ResourceMgr* m_resourceMgr = nullptr;
+    GameResources* m_resources = nullptr;
+    RhiDevice* m_rhiDevice = nullptr;
+    RhiCommandListPool* m_commandListPool = nullptr;
     HumanoidRenderer* m_humanoidRenderer = nullptr;
     UIScene* m_activeScene = nullptr;
     UITheme m_theme;

@@ -13,7 +13,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
-class ResourceMgr;
+struct GameResources;
 namespace ecs {
 class GameplayRegistry;
 }
@@ -31,8 +31,8 @@ public:
     void connect(std::unique_ptr<net::ITransportEndpoint> transport);
 
     /// Initialize the entity store with the ECS registry.
-    void initEntityStore(entt::registry& registry, ResourceMgr* resourceMgr);
-    void initEntityStore(ecs::GameplayRegistry& registry, ResourceMgr* resourceMgr);
+    void initEntityStore(entt::registry& registry, GameResources* resources);
+    void initEntityStore(ecs::GameplayRegistry& registry, GameResources* resources);
 
     /// Send a hello message to the server.
     void sendHello();

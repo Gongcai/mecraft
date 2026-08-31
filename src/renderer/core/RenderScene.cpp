@@ -208,15 +208,15 @@ glm::vec2 sampleHeldItemLight(const IWorldView& worldView, const glm::vec3& came
 RenderScene::RenderScene() = default;
 RenderScene::~RenderScene() = default;
 
-void RenderScene::init(ResourceMgr& resourceMgr) {
+void RenderScene::init(GameResources& resources, RhiDevice& rhiDevice) {
     // Phase 9: Populate shared resources
-    m_shared.resources = &resourceMgr;
+    m_shared.resources = &resources;
 
     // Phase R4: Initialize terrain streaming service
     // Note: Thread pool initialization is deferred until setupResources() is called
 
     // Phase R6: Initialize debug service
-    m_debugService.init(resourceMgr.rhiDevice());
+    m_debugService.init(rhiDevice);
 
     // Phase 9: Initialize pipelines
     m_forwardPipeline = std::make_unique<ForwardPipeline>();
@@ -969,7 +969,7 @@ void RenderScene::setupResources(ThreadPool* threadPool, RhiDevice* rhiDevice, R
         std::abort();
     }
     if (m_shared.resources == nullptr ||
-        !m_terrainStreamingService.setOpacityMicromapSource(m_shared.resources->getTerrainOpacityMicromapSource())) {
+        !m_terrainStreamingService.setOpacityMicromapSource(m_shared.resources->blockTextures.terrainOpacityMicromapSource())) {
         std::abort();
     }
     if (!m_terrainStreamingService.setOpacityMicromapEnabled(initialSettings.rtgi.cutoutTraversal ==
@@ -999,9 +999,9 @@ void RenderScene::setupResources(ThreadPool* threadPool, RhiDevice* rhiDevice, R
     m_postProcessPass.init(*m_shared.resources, *commandListPool);
     m_fsr1Supported = Fsr1Pass::isSupported(*rhiDevice);
     if (m_fsr1Supported) {
-        m_fsr1Pass.init(*m_shared.resources, *commandListPool);
+        m_fsr1Pass.init(*commandListPool);
     }
-    m_overlayRenderer.init(*m_shared.resources, *rhiDevice);
+    m_overlayRenderer.init(*rhiDevice);
     m_shared.terrainCache = &m_terrainStreamingService.terrainCache();
     m_shared.terrainStreaming = &m_terrainStreamingService;
     m_shared.terrain = terrain;

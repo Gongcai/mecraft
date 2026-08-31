@@ -8,11 +8,11 @@
 #include <system_error>
 #include <unordered_set>
 
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/BlockTextureLibrary.h"
 #include "Paths.h"
 
 std::unordered_map<std::string, std::unique_ptr<BlockModel>> BlockModelRegistry::s_models{};
-ResourceMgr* BlockModelRegistry::s_resourceMgr = nullptr;
+const BlockTextureLibrary* BlockModelRegistry::s_blockTextures = nullptr;
 
 namespace {
 constexpr const char* kModelFormat = "mecraft_model_v1";
@@ -146,8 +146,8 @@ bool resolveTextureVariable(const std::unordered_map<std::string, std::string>& 
 }
 } // namespace
 
-bool BlockModelRegistry::init(ResourceMgr* resourceMgr) {
-    s_resourceMgr = resourceMgr;
+bool BlockModelRegistry::init(const BlockTextureLibrary* blockTextures) {
+    s_blockTextures = blockTextures;
     s_models.clear();
 
     const std::filesystem::path modelDir(kBlockModelsDir);
@@ -234,12 +234,12 @@ const BlockModel* BlockModelRegistry::get(const std::string& name) {
 }
 
 AnimatedTextureRef BlockModelRegistry::resolveTextureRef(const std::string& textureName) {
-    if (s_resourceMgr == nullptr) {
-        std::cerr << "Cannot resolve model texture without ResourceMgr: " << textureName << '\n';
+    if (s_blockTextures == nullptr) {
+        std::cerr << "Cannot resolve model texture without a block texture library: " << textureName << '\n';
         std::abort();
     }
 
-    const TextureAnimationInfo info = s_resourceMgr->getTextureAnimation(textureName);
+    const TextureAnimationInfo info = s_blockTextures->textureAnimation(textureName);
     AnimatedTextureRef ref;
     ref.firstLayer = info.firstLayer;
     ref.frameCount = static_cast<uint16_t>(std::max(1, info.frameCount));

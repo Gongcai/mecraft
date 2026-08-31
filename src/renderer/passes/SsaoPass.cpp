@@ -6,7 +6,7 @@
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../rhi/RhiShaderSourceLoader.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -31,8 +31,8 @@ template <size_t Count>
 }
 } // namespace
 
-void SsaoPass::init(ResourceMgr& resourceMgr) {
-    m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
+void SsaoPass::init(GameResources& resources) {
+    m_noiseTexture = resources.texture2D.getHandle("shader_noise2d");
 }
 
 void SsaoPass::shutdown() {

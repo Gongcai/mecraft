@@ -46,7 +46,7 @@ public:
     void updateAnimations(float dt) override;
 
 protected:
-    void buildUI(ResourceMgr& resourceMgr) override;
+    void buildUI(GameResources& resources, RhiDevice& rhiDevice) override;
     void onSceneEnter() override;
 
 private:
@@ -62,7 +62,8 @@ private:
 
     Tween<float> m_titleSlideY;
 
-    ResourceMgr* m_resMgr = nullptr;
+    GameResources* m_resources = nullptr;
+    RhiDevice* m_rhiDevice = nullptr;
     std::filesystem::path m_savesRoot;
     std::vector<SaveEntry> m_saves;
 

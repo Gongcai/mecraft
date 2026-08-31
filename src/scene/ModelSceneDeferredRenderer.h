@@ -15,7 +15,7 @@
 
 class IDeferredGeometryProvider;
 class ImGuiRhiRenderer;
-class ResourceMgr;
+struct GameResources;
 class RhiCommandListPool;
 class RhiDevice;
 namespace renderer::core {
@@ -36,7 +36,7 @@ public:
     ModelSceneDeferredRenderer& operator=(const ModelSceneDeferredRenderer&) = delete;
 
     /// Initializes deferred targets, atmosphere, shadows, and post-processing.
-    [[nodiscard]] bool init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice, RhiCommandListPool& commandListPool,
+    [[nodiscard]] bool init(GameResources& resources, RhiDevice& rhiDevice, RhiCommandListPool& commandListPool,
                             ImGuiRhiRenderer& imguiRenderer, IDeferredGeometryProvider& geometryProvider);
     void shutdown();
 

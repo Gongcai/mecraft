@@ -4,7 +4,7 @@
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/RhiShaderSourceLoader.h"
 #include "renderer/targets/DeferredRenderTargets.h"
-#include "resource/ResourceMgr.h"
+#include "resource/GameResources.h"
 #include "resource/TextureAtlas.h"
 
 #include <glm/vec4.hpp>
@@ -185,9 +185,9 @@ bool TerrainRhiPipelineSet::configureClusteredLighting(const RhiBindGroupLayoutH
     return true;
 }
 
-bool TerrainRhiPipelineSet::prepareGBuffer(RhiCommandList& commandList, ResourceMgr& resourceMgr,
+bool TerrainRhiPipelineSet::prepareGBuffer(RhiCommandList& commandList, GameResources& resources,
                                            const TerrainFrameData& frame, const TerrainRenderSettings& settings) {
-    if (m_rhiDevice == nullptr || !ensureGBufferPipeline(resourceMgr) || !ensureGBufferTextureViews(resourceMgr) ||
+    if (m_rhiDevice == nullptr || !ensureGBufferPipeline(resources) || !ensureGBufferTextureViews(resources) ||
         !ensureGBufferBindGroups()) {
         return false;
     }
@@ -224,9 +224,9 @@ bool TerrainRhiPipelineSet::prepareGBuffer(RhiCommandList& commandList, Resource
     return true;
 }
 
-bool TerrainRhiPipelineSet::prepareShadow(RhiCommandList& commandList, ResourceMgr& resourceMgr,
+bool TerrainRhiPipelineSet::prepareShadow(RhiCommandList& commandList, GameResources& resources,
                                           const TerrainShadowFrameData& frame) {
-    if (m_rhiDevice == nullptr || !ensureShadowPipeline(resourceMgr) || !ensureShadowTextureViews(resourceMgr) ||
+    if (m_rhiDevice == nullptr || !ensureShadowPipeline(resources) || !ensureShadowTextureViews(resources) ||
         !ensureShadowBindGroup()) {
         return false;
     }
@@ -242,7 +242,7 @@ bool TerrainRhiPipelineSet::prepareShadow(RhiCommandList& commandList, ResourceM
     return true;
 }
 
-bool TerrainRhiPipelineSet::prepareTransparent(RhiCommandList& commandList, ResourceMgr& resourceMgr,
+bool TerrainRhiPipelineSet::prepareTransparent(RhiCommandList& commandList, GameResources& resources,
                                                DeferredRenderTargets& targets, const TerrainFrameData& frame,
                                                const TerrainRenderSettings& settings, const int heldBlockLightValue,
                                                const bool volumetricFogShadersReady) {
@@ -250,7 +250,7 @@ bool TerrainRhiPipelineSet::prepareTransparent(RhiCommandList& commandList, Reso
         (m_rhiDevice->backend() == RhiBackend::Vulkan &&
          (!m_transparentClusterLayout.isValid() || !m_transparentClusterBindGroup.isValid() ||
           m_transparentClusterGrid.clusterCount == 0u)) ||
-        !ensureTransparentPipeline(resourceMgr) || !ensureTransparentTextureViews(resourceMgr, targets) ||
+        !ensureTransparentPipeline(resources) || !ensureTransparentTextureViews(resources, targets) ||
         !ensureTransparentBindGroup()) {
         return false;
     }
@@ -306,15 +306,15 @@ bool TerrainRhiPipelineSet::prepareTransparent(RhiCommandList& commandList, Reso
     return true;
 }
 
-bool TerrainRhiPipelineSet::prepareWater(RhiCommandList& commandList, ResourceMgr& resourceMgr,
+bool TerrainRhiPipelineSet::prepareWater(RhiCommandList& commandList, GameResources& resources,
                                          DeferredRenderTargets& targets, const TerrainWaterFrameData& frame) {
-    if (m_rhiDevice == nullptr || !ensureWaterPipeline(resourceMgr) || !ensureWaterTextureViews(resourceMgr, targets) ||
+    if (m_rhiDevice == nullptr || !ensureWaterPipeline(resources) || !ensureWaterTextureViews(resources, targets) ||
         !ensureWaterBindGroup()) {
         return false;
     }
 
-    const TextureAnimationInfo still = resourceMgr.getTextureAnimation("water_still");
-    const TextureAnimationInfo flow = resourceMgr.getTextureAnimation("water_flow");
+    const TextureAnimationInfo still = resources.blockTextures.textureAnimation("water_still");
+    const TextureAnimationInfo flow = resources.blockTextures.textureAnimation("water_flow");
 
     TerrainWaterParams params;
     params.view = frame.view;
@@ -345,9 +345,9 @@ bool TerrainRhiPipelineSet::prepareWater(RhiCommandList& commandList, ResourceMg
     return true;
 }
 
-bool TerrainRhiPipelineSet::prepareForward(RhiCommandList& commandList, ResourceMgr& resourceMgr,
+bool TerrainRhiPipelineSet::prepareForward(RhiCommandList& commandList, GameResources& resources,
                                            const TerrainFrameData& frame) {
-    if (m_rhiDevice == nullptr || !ensureForwardPipeline(resourceMgr) || !ensureForwardTextureViews(resourceMgr) ||
+    if (m_rhiDevice == nullptr || !ensureForwardPipeline(resources) || !ensureForwardTextureViews(resources) ||
         !ensureForwardBindGroups()) {
         return false;
     }
@@ -374,16 +374,16 @@ bool TerrainRhiPipelineSet::prepareForward(RhiCommandList& commandList, Resource
     return true;
 }
 
-bool TerrainRhiPipelineSet::prepareReflectionProbeCapture(RhiCommandList& commandList, ResourceMgr& resourceMgr,
+bool TerrainRhiPipelineSet::prepareReflectionProbeCapture(RhiCommandList& commandList, GameResources& resources,
                                                           const TerrainFrameData& frame,
                                                           const TerrainRenderSettings& settings,
                                                           const std::vector<renderer::contracts::SceneLight>& lights,
                                                           const RhiTextureViewHandle opaqueColorView,
                                                           const RhiTextureViewHandle opaqueDepthView) {
     if (m_rhiDevice == nullptr || lights.size() > renderer::contracts::kClusterMaxLightCount ||
-        !ensureProbeCapturePipeline(resourceMgr) ||
+        !ensureProbeCapturePipeline(resources) ||
         !ensureProbeCaptureLightCapacity(static_cast<uint32_t>(lights.size())) ||
-        !ensureProbeCaptureTextureViews(resourceMgr) ||
+        !ensureProbeCaptureTextureViews(resources) ||
         !ensureProbeCaptureBindGroups(opaqueColorView, opaqueDepthView)) {
         return false;
     }
@@ -443,10 +443,10 @@ bool TerrainRhiPipelineSet::prepareReflectionProbeCapture(RhiCommandList& comman
     return true;
 }
 
-bool TerrainRhiPipelineSet::ensureGBufferPipeline(ResourceMgr& resourceMgr) {
-    const bool hasNormalMaps = resourceMgr.hasBlockNormalMaps();
-    const bool hasSpecularMaps = resourceMgr.hasBlockSpecularMaps();
-    const float anisotropy = std::max(1.0f, resourceMgr.getAtlasAnisotropy());
+bool TerrainRhiPipelineSet::ensureGBufferPipeline(GameResources& resources) {
+    const bool hasNormalMaps = resources.blockTextures.hasNormalMaps();
+    const bool hasSpecularMaps = resources.blockTextures.hasSpecularMaps();
+    const float anisotropy = std::max(1.0f, resources.blockTextures.anisotropy());
     if (m_gbufferOpaquePipeline.isValid() && m_gbufferCutoutPipeline.isValid() && hasNormalMaps == m_hasNormalMaps &&
         hasSpecularMaps == m_hasSpecularMaps && anisotropy == m_samplerAnisotropy) {
         return true;
@@ -600,20 +600,20 @@ bool TerrainRhiPipelineSet::ensureGBufferPipeline(ResourceMgr& resourceMgr) {
     return true;
 }
 
-bool TerrainRhiPipelineSet::ensureGBufferTextureViews(ResourceMgr& resourceMgr) {
-    const TextureArray& albedo = resourceMgr.getTextureArray();
+bool TerrainRhiPipelineSet::ensureGBufferTextureViews(GameResources& resources) {
+    const TextureArray& albedo = resources.blockTextures.textureArray();
     if (!ensureTextureView(0u, albedo.texture, RhiTextureViewType::Texture2DArray) ||
-        !ensureTextureView(1u, resourceMgr.getGrassColormap(), RhiTextureViewType::Texture2D) ||
-        !ensureTextureView(2u, resourceMgr.getFoliageColormap(), RhiTextureViewType::Texture2D) ||
-        !ensureTextureView(3u, resourceMgr.getTexture2DHandle("shader_noise2d"), RhiTextureViewType::Texture2D) ||
-        !ensureTextureView(4u, resourceMgr.getTexture2DHandle("shader_ripple_normal"), RhiTextureViewType::Texture2D)) {
+        !ensureTextureView(1u, resources.environmentTextures.getGrassColormap(), RhiTextureViewType::Texture2D) ||
+        !ensureTextureView(2u, resources.environmentTextures.getFoliageColormap(), RhiTextureViewType::Texture2D) ||
+        !ensureTextureView(3u, resources.texture2D.getHandle("shader_noise2d"), RhiTextureViewType::Texture2D) ||
+        !ensureTextureView(4u, resources.texture2D.getHandle("shader_ripple_normal"), RhiTextureViewType::Texture2D)) {
         return false;
     }
     if (m_hasNormalMaps &&
-        !ensureTextureView(5u, resourceMgr.getBlockNormalTextureArray().texture, RhiTextureViewType::Texture2DArray)) {
+        !ensureTextureView(5u, resources.blockTextures.normalTextureArray().texture, RhiTextureViewType::Texture2DArray)) {
         return false;
     }
-    if (m_hasSpecularMaps && !ensureTextureView(6u, resourceMgr.getBlockSpecularTextureArray().texture,
+    if (m_hasSpecularMaps && !ensureTextureView(6u, resources.blockTextures.specularTextureArray().texture,
                                                 RhiTextureViewType::Texture2DArray)) {
         return false;
     }
@@ -706,8 +706,8 @@ bool TerrainRhiPipelineSet::ensureTextureView(const size_t slot, const RhiTextur
     return true;
 }
 
-bool TerrainRhiPipelineSet::ensureForwardPipeline(ResourceMgr& resourceMgr) {
-    const float anisotropy = std::max(1.0f, resourceMgr.getAtlasAnisotropy());
+bool TerrainRhiPipelineSet::ensureForwardPipeline(GameResources& resources) {
+    const float anisotropy = std::max(1.0f, resources.blockTextures.anisotropy());
     if (m_forwardOpaquePipeline.isValid() && m_forwardCutoutPipeline.isValid() &&
         m_forwardTransparentPipeline.isValid() && anisotropy == m_forwardSamplerAnisotropy) {
         return true;
@@ -847,12 +847,12 @@ bool TerrainRhiPipelineSet::ensureForwardPipeline(ResourceMgr& resourceMgr) {
     return true;
 }
 
-bool TerrainRhiPipelineSet::ensureForwardTextureViews(ResourceMgr& resourceMgr) {
-    return ensureForwardTextureView(0u, resourceMgr.getTextureArray().texture, RhiTextureViewType::Texture2DArray) &&
-           ensureForwardTextureView(1u, resourceMgr.getLightmapDay(), RhiTextureViewType::Texture2D) &&
-           ensureForwardTextureView(2u, resourceMgr.getLightmapNight(), RhiTextureViewType::Texture2D) &&
-           ensureForwardTextureView(3u, resourceMgr.getGrassColormap(), RhiTextureViewType::Texture2D) &&
-           ensureForwardTextureView(4u, resourceMgr.getFoliageColormap(), RhiTextureViewType::Texture2D);
+bool TerrainRhiPipelineSet::ensureForwardTextureViews(GameResources& resources) {
+    return ensureForwardTextureView(0u, resources.blockTextures.textureArray().texture, RhiTextureViewType::Texture2DArray) &&
+           ensureForwardTextureView(1u, resources.environmentTextures.getLightmapDay(), RhiTextureViewType::Texture2D) &&
+           ensureForwardTextureView(2u, resources.environmentTextures.getLightmapNight(), RhiTextureViewType::Texture2D) &&
+           ensureForwardTextureView(3u, resources.environmentTextures.getGrassColormap(), RhiTextureViewType::Texture2D) &&
+           ensureForwardTextureView(4u, resources.environmentTextures.getFoliageColormap(), RhiTextureViewType::Texture2D);
 }
 
 bool TerrainRhiPipelineSet::ensureForwardBindGroups() {
@@ -985,10 +985,10 @@ void TerrainRhiPipelineSet::destroyForwardResources() {
     m_forwardSamplerAnisotropy = 1.0f;
 }
 
-bool TerrainRhiPipelineSet::ensureProbeCapturePipeline(ResourceMgr& resourceMgr) {
-    const bool hasNormalMaps = resourceMgr.hasBlockNormalMaps();
-    const bool hasSpecularMaps = resourceMgr.hasBlockSpecularMaps();
-    const float anisotropy = std::max(1.0f, resourceMgr.getAtlasAnisotropy());
+bool TerrainRhiPipelineSet::ensureProbeCapturePipeline(GameResources& resources) {
+    const bool hasNormalMaps = resources.blockTextures.hasNormalMaps();
+    const bool hasSpecularMaps = resources.blockTextures.hasSpecularMaps();
+    const float anisotropy = std::max(1.0f, resources.blockTextures.anisotropy());
     if (m_probeCaptureOpaquePipeline.isValid() && m_probeCaptureCutoutPipeline.isValid() &&
         m_probeCaptureTransparentPipeline.isValid() && hasNormalMaps == m_probeCaptureHasNormalMaps &&
         hasSpecularMaps == m_probeCaptureHasSpecularMaps && anisotropy == m_probeCaptureSamplerAnisotropy) {
@@ -1163,24 +1163,24 @@ bool TerrainRhiPipelineSet::ensureProbeCapturePipeline(ResourceMgr& resourceMgr)
     return true;
 }
 
-bool TerrainRhiPipelineSet::ensureProbeCaptureTextureViews(ResourceMgr& resourceMgr) {
-    const TextureArray& albedo = resourceMgr.getTextureArray();
+bool TerrainRhiPipelineSet::ensureProbeCaptureTextureViews(GameResources& resources) {
+    const TextureArray& albedo = resources.blockTextures.textureArray();
     if (!ensureProbeCaptureTextureView(0u, albedo.texture, RhiTextureViewType::Texture2DArray) ||
-        !ensureProbeCaptureTextureView(1u, resourceMgr.getGrassColormap(), RhiTextureViewType::Texture2D) ||
-        !ensureProbeCaptureTextureView(2u, resourceMgr.getFoliageColormap(), RhiTextureViewType::Texture2D) ||
-        !ensureProbeCaptureTextureView(3u, resourceMgr.getTexture2DHandle("shader_noise2d"),
+        !ensureProbeCaptureTextureView(1u, resources.environmentTextures.getGrassColormap(), RhiTextureViewType::Texture2D) ||
+        !ensureProbeCaptureTextureView(2u, resources.environmentTextures.getFoliageColormap(), RhiTextureViewType::Texture2D) ||
+        !ensureProbeCaptureTextureView(3u, resources.texture2D.getHandle("shader_noise2d"),
                                        RhiTextureViewType::Texture2D) ||
-        !ensureProbeCaptureTextureView(4u, resourceMgr.getTexture2DHandle("shader_ripple_normal"),
+        !ensureProbeCaptureTextureView(4u, resources.texture2D.getHandle("shader_ripple_normal"),
                                        RhiTextureViewType::Texture2D)) {
         return false;
     }
     if (m_probeCaptureHasNormalMaps &&
-        !ensureProbeCaptureTextureView(5u, resourceMgr.getBlockNormalTextureArray().texture,
+        !ensureProbeCaptureTextureView(5u, resources.blockTextures.normalTextureArray().texture,
                                        RhiTextureViewType::Texture2DArray)) {
         return false;
     }
     return !m_probeCaptureHasSpecularMaps ||
-           ensureProbeCaptureTextureView(6u, resourceMgr.getBlockSpecularTextureArray().texture,
+           ensureProbeCaptureTextureView(6u, resources.blockTextures.specularTextureArray().texture,
                                          RhiTextureViewType::Texture2DArray);
 }
 
@@ -1405,8 +1405,8 @@ void TerrainRhiPipelineSet::destroyProbeCaptureResources() {
     m_probeCaptureSamplerAnisotropy = 1.0f;
 }
 
-bool TerrainRhiPipelineSet::ensureWaterPipeline(ResourceMgr& resourceMgr) {
-    const float anisotropy = std::max(1.0f, resourceMgr.getAtlasAnisotropy());
+bool TerrainRhiPipelineSet::ensureWaterPipeline(GameResources& resources) {
+    const float anisotropy = std::max(1.0f, resources.blockTextures.anisotropy());
     if (m_waterPipeline.isValid() && anisotropy == m_waterSamplerAnisotropy) {
         return true;
     }
@@ -1550,8 +1550,8 @@ bool TerrainRhiPipelineSet::ensureWaterPipeline(ResourceMgr& resourceMgr) {
     return true;
 }
 
-bool TerrainRhiPipelineSet::ensureWaterTextureViews(ResourceMgr& resourceMgr, DeferredRenderTargets& targets) {
-    return ensureWaterTextureView(0u, resourceMgr.getTextureArray().texture, RhiTextureViewType::Texture2DArray,
+bool TerrainRhiPipelineSet::ensureWaterTextureViews(GameResources& resources, DeferredRenderTargets& targets) {
+    return ensureWaterTextureView(0u, resources.blockTextures.textureArray().texture, RhiTextureViewType::Texture2DArray,
                                   RhiTextureFormat::Rgba8Unorm) &&
            ensureWaterTextureView(1u, targets.depthTextureHandle(), RhiTextureViewType::Texture2D,
                                   RhiTextureFormat::Depth32Float) &&
@@ -1559,7 +1559,7 @@ bool TerrainRhiPipelineSet::ensureWaterTextureViews(ResourceMgr& resourceMgr, De
                                   RhiTextureFormat::Rgba16Float) &&
            ensureWaterTextureView(3u, targets.sceneResolvedTextureHandle(), RhiTextureViewType::Texture2D,
                                   RhiTextureFormat::Rgba16Float) &&
-           ensureWaterTextureView(4u, resourceMgr.getTexture2DHandle("shader_noise2d"), RhiTextureViewType::Texture2D,
+           ensureWaterTextureView(4u, resources.texture2D.getHandle("shader_noise2d"), RhiTextureViewType::Texture2D,
                                   RhiTextureFormat::Rgba8Unorm) &&
            ensureWaterTextureView(5u, targets.reflectionTextureHandle(), RhiTextureViewType::Texture2D,
                                   RhiTextureFormat::Rgba16Float) &&
@@ -1567,7 +1567,7 @@ bool TerrainRhiPipelineSet::ensureWaterTextureViews(ResourceMgr& resourceMgr, De
                                   RhiTextureFormat::Rgba32Float) &&
            ensureWaterTextureView(7u, targets.halfResTextureHandle(), RhiTextureViewType::Texture2D,
                                   RhiTextureFormat::Rgba16Float) &&
-           ensureWaterTextureView(8u, resourceMgr.getTexture2DHandle("shader_ripple_normal"),
+           ensureWaterTextureView(8u, resources.texture2D.getHandle("shader_ripple_normal"),
                                   RhiTextureViewType::Texture2D, RhiTextureFormat::Rgba8Unorm);
 }
 
@@ -1699,8 +1699,8 @@ void TerrainRhiPipelineSet::destroyWaterResources() {
     m_waterSamplerAnisotropy = 1.0f;
 }
 
-bool TerrainRhiPipelineSet::ensureTransparentPipeline(ResourceMgr& resourceMgr) {
-    const float anisotropy = std::max(1.0f, resourceMgr.getAtlasAnisotropy());
+bool TerrainRhiPipelineSet::ensureTransparentPipeline(GameResources& resources) {
+    const float anisotropy = std::max(1.0f, resources.blockTextures.anisotropy());
     if (m_transparentPipeline.isValid() && anisotropy == m_transparentSamplerAnisotropy) {
         return true;
     }
@@ -1859,16 +1859,16 @@ bool TerrainRhiPipelineSet::ensureTransparentPipeline(ResourceMgr& resourceMgr) 
     return true;
 }
 
-bool TerrainRhiPipelineSet::ensureTransparentTextureViews(ResourceMgr& resourceMgr, DeferredRenderTargets& targets) {
-    return ensureTransparentTextureView(0u, resourceMgr.getTextureArray().texture, RhiTextureViewType::Texture2DArray,
+bool TerrainRhiPipelineSet::ensureTransparentTextureViews(GameResources& resources, DeferredRenderTargets& targets) {
+    return ensureTransparentTextureView(0u, resources.blockTextures.textureArray().texture, RhiTextureViewType::Texture2DArray,
                                         RhiTextureFormat::Rgba8Unorm) &&
-           ensureTransparentTextureView(1u, resourceMgr.getLightmapDay(), RhiTextureViewType::Texture2D,
+           ensureTransparentTextureView(1u, resources.environmentTextures.getLightmapDay(), RhiTextureViewType::Texture2D,
                                         RhiTextureFormat::Rgba8Unorm) &&
-           ensureTransparentTextureView(2u, resourceMgr.getLightmapNight(), RhiTextureViewType::Texture2D,
+           ensureTransparentTextureView(2u, resources.environmentTextures.getLightmapNight(), RhiTextureViewType::Texture2D,
                                         RhiTextureFormat::Rgba8Unorm) &&
-           ensureTransparentTextureView(3u, resourceMgr.getGrassColormap(), RhiTextureViewType::Texture2D,
+           ensureTransparentTextureView(3u, resources.environmentTextures.getGrassColormap(), RhiTextureViewType::Texture2D,
                                         RhiTextureFormat::Rgba8Unorm) &&
-           ensureTransparentTextureView(4u, resourceMgr.getFoliageColormap(), RhiTextureViewType::Texture2D,
+           ensureTransparentTextureView(4u, resources.environmentTextures.getFoliageColormap(), RhiTextureViewType::Texture2D,
                                         RhiTextureFormat::Rgba8Unorm) &&
            ensureTransparentTextureView(5u, targets.depthTextureHandle(), RhiTextureViewType::Texture2D,
                                         RhiTextureFormat::Depth32Float) &&
@@ -1876,7 +1876,7 @@ bool TerrainRhiPipelineSet::ensureTransparentTextureViews(ResourceMgr& resourceM
                                         RhiTextureFormat::Rgba16Float) &&
            ensureTransparentTextureView(7u, targets.sceneCompositeTextureHandle(), RhiTextureViewType::Texture2D,
                                         RhiTextureFormat::Rgba16Float) &&
-           ensureTransparentTextureView(8u, resourceMgr.getTexture2DHandle("shader_noise2d"),
+           ensureTransparentTextureView(8u, resources.texture2D.getHandle("shader_noise2d"),
                                         RhiTextureViewType::Texture2D, RhiTextureFormat::Rgba8Unorm) &&
            ensureTransparentTextureView(9u, targets.atmosphereLutTextureHandle(), RhiTextureViewType::Texture3D,
                                         RhiTextureFormat::Rgba32Float);
@@ -2011,8 +2011,8 @@ void TerrainRhiPipelineSet::destroyTransparentResources() {
     m_transparentSamplerAnisotropy = 1.0f;
 }
 
-bool TerrainRhiPipelineSet::ensureShadowPipeline(ResourceMgr& resourceMgr) {
-    const float anisotropy = std::max(1.0f, resourceMgr.getAtlasAnisotropy());
+bool TerrainRhiPipelineSet::ensureShadowPipeline(GameResources& resources) {
+    const float anisotropy = std::max(1.0f, resources.blockTextures.anisotropy());
     if (m_shadowOpaquePipeline.isValid() && m_shadowCutoutPipeline.isValid() && m_shadowTransparentPipeline.isValid() &&
         anisotropy == m_shadowSamplerAnisotropy) {
         return true;
@@ -2166,12 +2166,12 @@ bool TerrainRhiPipelineSet::ensureShadowPipeline(ResourceMgr& resourceMgr) {
     return true;
 }
 
-bool TerrainRhiPipelineSet::ensureShadowTextureViews(ResourceMgr& resourceMgr) {
-    return ensureShadowTextureView(0u, resourceMgr.getTextureArray().texture, RhiTextureViewType::Texture2DArray) &&
-           ensureShadowTextureView(1u, resourceMgr.getTexture2DHandle("shader_noise2d"),
+bool TerrainRhiPipelineSet::ensureShadowTextureViews(GameResources& resources) {
+    return ensureShadowTextureView(0u, resources.blockTextures.textureArray().texture, RhiTextureViewType::Texture2DArray) &&
+           ensureShadowTextureView(1u, resources.texture2D.getHandle("shader_noise2d"),
                                    RhiTextureViewType::Texture2D) &&
-           ensureShadowTextureView(2u, resourceMgr.getGrassColormap(), RhiTextureViewType::Texture2D) &&
-           ensureShadowTextureView(3u, resourceMgr.getFoliageColormap(), RhiTextureViewType::Texture2D);
+           ensureShadowTextureView(2u, resources.environmentTextures.getGrassColormap(), RhiTextureViewType::Texture2D) &&
+           ensureShadowTextureView(3u, resources.environmentTextures.getFoliageColormap(), RhiTextureViewType::Texture2D);
 }
 
 bool TerrainRhiPipelineSet::ensureShadowBindGroup() {

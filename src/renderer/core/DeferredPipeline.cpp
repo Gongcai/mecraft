@@ -4,7 +4,7 @@
 #include "FrameOutput.h"
 #include "IDeferredGeometryProvider.h"
 #include "../debug/RenderDebugService.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../shadow/ShadowRenderer.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../rhi/RhiCommandList.h"
@@ -392,7 +392,7 @@ bool DeferredPipeline::configureVoxelReflectionProbe(const FrameContext& ctx) {
 bool DeferredPipeline::recordReflectionProbeRadianceOpaque(RhiCommandList& commandList, const FrameContext& context,
                                                            const ReflectionProbeCaptureWork& work) {
     if (m_shared == nullptr || m_shared->terrain == nullptr || m_shared->worldRenderBuffer == nullptr ||
-        m_shared->terrainRhiPipelines == nullptr || m_resourceMgr == nullptr || context.worldView == nullptr ||
+        m_shared->terrainRhiPipelines == nullptr || m_resources == nullptr || context.worldView == nullptr ||
         !work.targetView.isValid() || !work.depthTargetView.isValid() || !work.opaqueColorView.isValid() ||
         !work.opaqueDepthView.isValid() || work.face >= renderer::contracts::kReflectionProbeCubeFaceCount) {
         return false;
@@ -449,7 +449,7 @@ bool DeferredPipeline::recordReflectionProbeRadianceOpaque(RhiCommandList& comma
     for (const DrawBatchEntry& entry : transparentBatch) {
         worldBuffer.addTransparent(entry.range);
     }
-    if (!m_shared->terrainRhiPipelines->prepareReflectionProbeCapture(commandList, *m_resourceMgr, frame,
+    if (!m_shared->terrainRhiPipelines->prepareReflectionProbeCapture(commandList, *m_resources, frame,
                                                                       terrainSettings, probeLights,
                                                                       work.opaqueColorView, work.opaqueDepthView) ||
         !worldBuffer.prepareRhiOpaqueAndCutout(commandList,
@@ -584,8 +584,8 @@ bool DeferredPipeline::recordReflectionProbeRadianceTransparent(RhiCommandList& 
     return true;
 }
 
-void DeferredPipeline::initializePasses(ResourceMgr& resourceMgr, shadow::ShadowRenderer* shadowRenderer) {
-    m_resourceMgr = &resourceMgr;
+void DeferredPipeline::initializePasses(GameResources& resources, shadow::ShadowRenderer* shadowRenderer) {
+    m_resources = &resources;
     m_shadowRenderer = shadowRenderer;
 
     m_skyCapturePass = std::make_unique<SkyCapturePass>();
@@ -620,26 +620,26 @@ void DeferredPipeline::initializePasses(ResourceMgr& resourceMgr, shadow::Shadow
     m_dofPass = std::make_unique<DepthOfFieldPass>();
     m_debugPass = std::make_unique<DebugPass>();
 
-    m_skyCapturePass->init(resourceMgr);
-    m_gbufferPass->init(resourceMgr);
-    m_shadowPass->init(resourceMgr);
-    m_waterCompositePass->init(resourceMgr);
-    m_velocityPass->init(resourceMgr);
-    m_ssaoPass->init(resourceMgr);
-    m_ssgiPass->init(resourceMgr);
-    m_localShadowPass->init(resourceMgr);
-    m_lightingPass->init(resourceMgr);
+    m_skyCapturePass->init(resources);
+    m_gbufferPass->init(resources);
+    m_shadowPass->init(resources);
+    m_waterCompositePass->init(resources);
+    m_velocityPass->init(resources);
+    m_ssaoPass->init(resources);
+    m_ssgiPass->init(resources);
+    m_localShadowPass->init(resources);
+    m_lightingPass->init(resources);
     m_lightingPass->setClusteredLightingPass(m_clusteredLightingPass.get());
     m_reflectionPass->setSkyIblPass(m_skyIblPass.get());
     m_reflectionPass->setReflectionProbeGridPass(m_reflectionProbeGridPass.get());
-    m_reflectionPass->init(resourceMgr);
-    m_cloudPass->init(resourceMgr);
-    m_sceneCompositePass->init(resourceMgr);
-    m_volumetricPass->init(resourceMgr);
-    m_taaPass->init(resourceMgr);
-    m_motionBlurPass->init(resourceMgr);
-    m_dofPass->init(resourceMgr);
-    m_debugPass->init(resourceMgr);
+    m_reflectionPass->init(resources);
+    m_cloudPass->init(resources);
+    m_sceneCompositePass->init(resources);
+    m_volumetricPass->init(resources);
+    m_taaPass->init(resources);
+    m_motionBlurPass->init(resources);
+    m_dofPass->init(resources);
+    m_debugPass->init(resources);
 
     if (shadowRenderer) {
         m_shadowPass->setShadowRenderer(shadowRenderer);
@@ -658,11 +658,11 @@ void DeferredPipeline::init(SharedRenderResources& shared) {
     m_sceneTlasPrepareCpuMs = 0.0;
     m_rtgiSceneTlasBootstrapCpuMs = 0.0;
 
-    // Extract ResourceMgr and ShadowRenderer from shared resources
+    // Extract GameResources and ShadowRenderer from shared resources
     if (shared.resources) {
-        m_resourceMgr = shared.resources;
+        m_resources = shared.resources;
         m_shadowRenderer = shared.shadowRenderer;
-        initializePasses(*m_resourceMgr, m_shadowRenderer);
+        initializePasses(*m_resources, m_shadowRenderer);
     }
 
     // Inject ShadowPass dependencies from shared resources
@@ -786,7 +786,7 @@ void DeferredPipeline::shutdown() {
     m_gbufferPass.reset();
     m_skyCapturePass.reset();
     m_skyIblPass.reset();
-    m_resourceMgr = nullptr;
+    m_resources = nullptr;
     m_shadowRenderer = nullptr;
     m_shared = nullptr;
     m_rtgiTemporalSampleIndex = 0u;
@@ -910,7 +910,7 @@ void DeferredPipeline::invalidateHistory() {
 
 FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderSettings& settings) {
     // Pre-condition checks
-    if (!m_shared || !m_resourceMgr || !m_shared->deferredTargets) {
+    if (!m_shared || !m_resources || !m_shared->deferredTargets) {
         return {};
     }
 
@@ -1018,7 +1018,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     m_lastTemporalResetReasons = ctx.temporalResetReasons;
     const bool externalGeometry = m_shared != nullptr && m_shared->deferredGeometryProvider != nullptr;
     if (m_shared == nullptr || m_shared->rhiDevice == nullptr || m_shared->commandListPool == nullptr ||
-        m_shared->deferredTargets == nullptr || m_resourceMgr == nullptr || m_skyCapturePass == nullptr ||
+        m_shared->deferredTargets == nullptr || m_resources == nullptr || m_skyCapturePass == nullptr ||
         m_skyIblPass == nullptr || m_reflectionProbeCapturePass == nullptr || m_reflectionProbeGridPass == nullptr ||
         m_lightingPass == nullptr || m_sceneCompositePass == nullptr || m_waterCompositePass == nullptr ||
         m_volumetricPass == nullptr || !ctx.sceneCaptureColorTexture.isValid() ||
@@ -1190,7 +1190,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         (dofEnabled && m_dofPass == nullptr)) {
         return false;
     }
-    const RhiTextureHandle skyNoiseTexture = m_resourceMgr->getTexture2DHandle("shader_noise2d");
+    const RhiTextureHandle skyNoiseTexture = m_resources->texture2D.getHandle("shader_noise2d");
     if (!skyNoiseTexture.isValid()) {
         return false;
     }
@@ -1560,15 +1560,15 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     RgTextureHandle rtgiLeakageViewZValidationOutput;
     RgTextureHandle nrdValidation;
     SkyIblPass::GraphResources skyIblResources;
-    const RhiTextureHandle lightmapDayTexture = m_resourceMgr->getLightmapDay();
-    const RhiTextureHandle lightmapNightTexture = m_resourceMgr->getLightmapNight();
-    const RhiTextureHandle rippleNormalTexture = m_resourceMgr->getTexture2DHandle("shader_ripple_normal");
+    const RhiTextureHandle lightmapDayTexture = m_resources->environmentTextures.getLightmapDay();
+    const RhiTextureHandle lightmapNightTexture = m_resources->environmentTextures.getLightmapNight();
+    const RhiTextureHandle rippleNormalTexture = m_resources->texture2D.getHandle("shader_ripple_normal");
 
-    const RhiTextureHandle terrainAlbedoTexture = m_resourceMgr->getTextureArray().texture;
-    const RhiTextureHandle terrainNormalTexture = m_resourceMgr->getBlockNormalTextureArray().texture;
-    const RhiTextureHandle terrainSpecularTexture = m_resourceMgr->getBlockSpecularTextureArray().texture;
-    const RhiTextureHandle grassColormapTexture = m_resourceMgr->getGrassColormap();
-    const RhiTextureHandle foliageColormapTexture = m_resourceMgr->getFoliageColormap();
+    const RhiTextureHandle terrainAlbedoTexture = m_resources->blockTextures.textureArray().texture;
+    const RhiTextureHandle terrainNormalTexture = m_resources->blockTextures.normalTextureArray().texture;
+    const RhiTextureHandle terrainSpecularTexture = m_resources->blockTextures.specularTextureArray().texture;
+    const RhiTextureHandle grassColormapTexture = m_resources->environmentTextures.getGrassColormap();
+    const RhiTextureHandle foliageColormapTexture = m_resources->environmentTextures.getFoliageColormap();
 
     // Frame-scoped scene targets are declared as graph transients: every one
     // is fully rewritten before it is read each frame, so the lifetime-aware
@@ -1878,7 +1878,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         .writeTexture(skyCapture, RhiResourceState::RenderTarget)
         .setExecute([&](RgPassContext& pass) {
             return m_skyCapturePass->execute(pass.commandList(), *ctx.dayNightSystem, *ctx.weatherSystem, rhiDevice,
-                                             targets, *m_shared->sky, *m_resourceMgr, ctx.camera.position.y,
+                                             targets, *m_shared->sky, *m_resources, ctx.camera.position.y,
                                              ctx.shaderTime, ctx.camera.position, settings.cloud.timeScale);
         });
     graphTail = skyCapturePass.handle();
@@ -3761,7 +3761,7 @@ bool DeferredPipeline::recordGenericTransparentPass(RhiCommandList& commandList,
 
     IDeferredGeometryProvider* geometryProvider = m_shared->deferredGeometryProvider;
     const bool externalTransparent = geometryProvider != nullptr && geometryProvider->hasTransparentGeometry();
-    if (!externalTransparent && (!m_shared->worldRenderBuffer || !m_shared->terrainRhiPipelines || !m_resourceMgr)) {
+    if (!externalTransparent && (!m_shared->worldRenderBuffer || !m_shared->terrainRhiPipelines || !m_resources)) {
         return false;
     }
 
@@ -3908,7 +3908,7 @@ bool DeferredPipeline::recordGenericTransparentPass(RhiCommandList& commandList,
         worldBuffer.addTransparent(entry->range);
     }
 
-    if (!m_shared->terrainRhiPipelines->prepareTransparent(commandList, *m_resourceMgr, targets, tfd, trs,
+    if (!m_shared->terrainRhiPipelines->prepareTransparent(commandList, *m_resources, targets, tfd, trs,
                                                            m_heldBlockLightValue, volFogShadersReady) ||
         !worldBuffer.prepareRhiTransparent(commandList, m_shared->terrainRhiPipelines->transparentMetadataLayout())) {
         if (ctx.debugService != nullptr) {
@@ -3960,7 +3960,7 @@ bool DeferredPipeline::recordParticlesPass(RhiCommandList& commandList, const Fr
     if (!m_currentSettings.weather.particlesEnabled) {
         return true;
     }
-    if (!m_shared || !m_shared->particleSystem || !m_resourceMgr || !m_shared->deferredTargets ||
+    if (!m_shared || !m_shared->particleSystem || !m_resources || !m_shared->deferredTargets ||
         !m_shared->rhiDevice) {
         return false;
     }

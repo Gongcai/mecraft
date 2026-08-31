@@ -4,7 +4,7 @@
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiShaderSourceLoader.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../world/DayNightSystem.h"
 #include "../../world/WeatherSystem.h"
 
@@ -24,7 +24,7 @@ using RawPushConstants = MetadataPushConstants;
 }
 } // namespace
 
-void SkyCapturePass::init(ResourceMgr& /*resourceMgr*/) {
+void SkyCapturePass::init(GameResources& /*resources*/) {
     // No shaders to load — GameplaySkyRenderer manages its own.
 }
 
@@ -34,7 +34,7 @@ void SkyCapturePass::shutdown() {
 
 bool SkyCapturePass::execute(RhiCommandList& commandList, const DayNightSystem& dayNightSystem,
                              const WeatherSystem& weatherSystem, RhiDevice& rhiDevice, DeferredRenderTargets& targets,
-                             GameplaySkyRenderer& skyRenderer, ResourceMgr& resourceMgr, const float cameraY,
+                             GameplaySkyRenderer& skyRenderer, GameResources& resources, const float cameraY,
                              const float shaderTime, const glm::vec3& cameraPos, const float cloudTimeScale) {
     if (!targets.ensureSkyCaptureTextureView(rhiDevice) || !targets.atmosphereLutTextureViewHandle().isValid() ||
         !ensureMetadataResources(rhiDevice, targets.atmosphereLutTextureViewHandle())) {
@@ -70,7 +70,7 @@ bool SkyCapturePass::execute(RhiCommandList& commandList, const DayNightSystem& 
     const float cloudThickness = 1400.0f + cloudWetness * (3000.0f - 1400.0f);
     const float cloudCoverage = std::clamp(1.0f + cloudWetness * 0.2f, 0.0f, 1.5f);
     const float cloudDensity = 0.85f + weatherWetness * 0.35f + weatherStorm * 0.55f;
-    const RhiTextureHandle noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
+    const RhiTextureHandle noiseTexture = resources.texture2D.getHandle("shader_noise2d");
     if (!noiseTexture.isValid()) {
         return false;
     }

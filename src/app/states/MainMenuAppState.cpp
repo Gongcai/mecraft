@@ -128,15 +128,15 @@ void MainMenuAppState::onEnter() {
     m_deps.contextManager.pushContext(InputContextType::UI);
     m_deps.input.captureMouse(false);
 
-    m_skyboxRenderer.init(m_deps.resourceMgr, m_deps.rhiDevice);
+    m_skyboxRenderer.init(m_deps.resources, m_deps.rhiDevice, m_deps.commandListPool);
     m_skyboxYaw = 0.0f;
-    m_transition.init(m_deps.resourceMgr);
+    m_transition.init(m_deps.resources, m_deps.rhiDevice);
     m_transitioningToGame = false;
 
     // ---- Main Menu callbacks ----
 
     m_mainMenuScreen.setLocaleManager(&m_deps.localeManager);
-    m_mainMenuScreen.init(m_deps.resourceMgr);
+    m_mainMenuScreen.init(m_deps.resources, m_deps.rhiDevice);
 
     // "Start Game" → switch to save list
     m_mainMenuScreen.onStartClicked = [this]() {
@@ -166,7 +166,7 @@ void MainMenuAppState::onEnter() {
 
     m_saveListScreen.setLocaleManager(&m_deps.localeManager);
     m_saveListScreen.setSavesRoot(m_savesRoot);
-    m_saveListScreen.init(m_deps.resourceMgr);
+    m_saveListScreen.init(m_deps.resources, m_deps.rhiDevice);
 
     // User clicked a save → load it
     m_saveListScreen.onSaveSelected = [this](const std::string& worldFolder) {
@@ -194,7 +194,7 @@ void MainMenuAppState::onEnter() {
     // ---- Create World callbacks ----
 
     m_createWorldScreen.setLocaleManager(&m_deps.localeManager);
-    m_createWorldScreen.init(m_deps.resourceMgr);
+    m_createWorldScreen.init(m_deps.resources, m_deps.rhiDevice);
 
     // "Start New Game" → create world and start
     m_createWorldScreen.onCreateWorld = [this](int seed, const std::string& displayName) {

@@ -12,7 +12,7 @@
 #include <glm/vec3.hpp>
 #include <vector>
 
-class ResourceMgr;
+struct GameResources;
 class DeferredRenderTargets;
 class RhiCommandList;
 class RhiDevice;
@@ -71,16 +71,16 @@ public:
                                                   RhiBindGroupHandle bindGroup,
                                                   const renderer::contracts::ClusterGrid& grid);
 
-    bool prepareGBuffer(RhiCommandList& commandList, ResourceMgr& resourceMgr, const TerrainFrameData& frame,
+    bool prepareGBuffer(RhiCommandList& commandList, GameResources& resources, const TerrainFrameData& frame,
                         const TerrainRenderSettings& settings);
-    bool prepareShadow(RhiCommandList& commandList, ResourceMgr& resourceMgr, const TerrainShadowFrameData& frame);
-    bool prepareTransparent(RhiCommandList& commandList, ResourceMgr& resourceMgr, DeferredRenderTargets& targets,
+    bool prepareShadow(RhiCommandList& commandList, GameResources& resources, const TerrainShadowFrameData& frame);
+    bool prepareTransparent(RhiCommandList& commandList, GameResources& resources, DeferredRenderTargets& targets,
                             const TerrainFrameData& frame, const TerrainRenderSettings& settings,
                             int heldBlockLightValue, bool volumetricFogShadersReady);
-    bool prepareWater(RhiCommandList& commandList, ResourceMgr& resourceMgr, DeferredRenderTargets& targets,
+    bool prepareWater(RhiCommandList& commandList, GameResources& resources, DeferredRenderTargets& targets,
                       const TerrainWaterFrameData& frame);
-    bool prepareForward(RhiCommandList& commandList, ResourceMgr& resourceMgr, const TerrainFrameData& frame);
-    bool prepareReflectionProbeCapture(RhiCommandList& commandList, ResourceMgr& resourceMgr,
+    bool prepareForward(RhiCommandList& commandList, GameResources& resources, const TerrainFrameData& frame);
+    bool prepareReflectionProbeCapture(RhiCommandList& commandList, GameResources& resources,
                                        const TerrainFrameData& frame, const TerrainRenderSettings& settings,
                                        const std::vector<renderer::contracts::SceneLight>& lights,
                                        RhiTextureViewHandle opaqueColorView, RhiTextureViewHandle opaqueDepthView);
@@ -136,45 +136,45 @@ private:
     static constexpr size_t kForwardTextureSlotCount = 5u;
     static constexpr size_t kProbeCaptureTextureSlotCount = 7u;
 
-    bool ensureGBufferPipeline(ResourceMgr& resourceMgr);
-    bool ensureGBufferTextureViews(ResourceMgr& resourceMgr);
+    bool ensureGBufferPipeline(GameResources& resources);
+    bool ensureGBufferTextureViews(GameResources& resources);
     bool ensureGBufferBindGroups();
     bool ensureTextureView(size_t slot, RhiTextureHandle texture, RhiTextureViewType viewType);
     void destroyGBufferBindGroups();
     void destroyGBufferTextureViews();
     void destroyGBufferResources();
-    bool ensureShadowPipeline(ResourceMgr& resourceMgr);
-    bool ensureShadowTextureViews(ResourceMgr& resourceMgr);
+    bool ensureShadowPipeline(GameResources& resources);
+    bool ensureShadowTextureViews(GameResources& resources);
     bool ensureShadowBindGroup();
     bool ensureShadowTextureView(size_t slot, RhiTextureHandle texture, RhiTextureViewType viewType);
     void destroyShadowBindGroup();
     void destroyShadowTextureViews();
     void destroyShadowResources();
-    bool ensureTransparentPipeline(ResourceMgr& resourceMgr);
-    bool ensureTransparentTextureViews(ResourceMgr& resourceMgr, DeferredRenderTargets& targets);
+    bool ensureTransparentPipeline(GameResources& resources);
+    bool ensureTransparentTextureViews(GameResources& resources, DeferredRenderTargets& targets);
     bool ensureTransparentBindGroup();
     bool ensureTransparentTextureView(size_t slot, RhiTextureHandle texture, RhiTextureViewType viewType,
                                       RhiTextureFormat format);
     void destroyTransparentBindGroup();
     void destroyTransparentTextureViews();
     void destroyTransparentResources();
-    bool ensureWaterPipeline(ResourceMgr& resourceMgr);
-    bool ensureWaterTextureViews(ResourceMgr& resourceMgr, DeferredRenderTargets& targets);
+    bool ensureWaterPipeline(GameResources& resources);
+    bool ensureWaterTextureViews(GameResources& resources, DeferredRenderTargets& targets);
     bool ensureWaterBindGroup();
     bool ensureWaterTextureView(size_t slot, RhiTextureHandle texture, RhiTextureViewType viewType,
                                 RhiTextureFormat format);
     void destroyWaterBindGroup();
     void destroyWaterTextureViews();
     void destroyWaterResources();
-    bool ensureForwardPipeline(ResourceMgr& resourceMgr);
-    bool ensureForwardTextureViews(ResourceMgr& resourceMgr);
+    bool ensureForwardPipeline(GameResources& resources);
+    bool ensureForwardTextureViews(GameResources& resources);
     bool ensureForwardBindGroups();
     bool ensureForwardTextureView(size_t slot, RhiTextureHandle texture, RhiTextureViewType viewType);
     void destroyForwardBindGroups();
     void destroyForwardTextureViews();
     void destroyForwardResources();
-    bool ensureProbeCapturePipeline(ResourceMgr& resourceMgr);
-    bool ensureProbeCaptureTextureViews(ResourceMgr& resourceMgr);
+    bool ensureProbeCapturePipeline(GameResources& resources);
+    bool ensureProbeCaptureTextureViews(GameResources& resources);
     bool ensureProbeCaptureBindGroups(RhiTextureViewHandle opaqueColorView, RhiTextureViewHandle opaqueDepthView);
     bool ensureProbeCaptureLightCapacity(uint32_t lightCount);
     bool ensureProbeCaptureTextureView(size_t slot, RhiTextureHandle texture, RhiTextureViewType viewType);

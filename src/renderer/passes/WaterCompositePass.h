@@ -12,7 +12,7 @@
 #include "renderer/mesh/TerrainRenderCache.h"
 
 class DeferredRenderTargets;
-class ResourceMgr;
+struct GameResources;
 class WorldRenderBuffer;
 class RhiCommandList;
 
@@ -20,7 +20,7 @@ class RhiCommandList;
 /// Handles depth softening, volumetric fog, sky capture reflections, and composite targets.
 class WaterCompositePass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr);
+    void init(GameResources& resources);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "WaterComposite"; }
 
@@ -34,7 +34,7 @@ public:
                     const std::vector<DrawBatchEntry>& transparentBatch, const TransparentPassPlan& transparentPlan);
 
 private:
-    ResourceMgr* m_resourceMgr = nullptr;
+    GameResources* m_resources = nullptr;
 };
 
 #endif // MECRAFT_WATER_COMPOSITE_PASS_H

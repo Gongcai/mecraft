@@ -20,7 +20,7 @@ public:
     UIToast();
     ~UIToast() override;
 
-    void init(ResourceMgr& resourceMgr) override;
+    void init(GameResources& resources, RhiDevice& rhiDevice) override;
     void shutdown() override;
 
     // Show a toast notification. Duration is in seconds.

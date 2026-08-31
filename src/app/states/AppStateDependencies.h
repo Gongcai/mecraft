@@ -7,7 +7,7 @@
 #include "engine/input/InputManager.h"
 #include "../../player/ActionMap.h"
 #include "engine/input/InputContextManager.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../audio/AudioEngine.h"
 #include "../../audio/BgmSystem.h"
 #include "../../ui/core/UIRenderer.h"
@@ -27,7 +27,7 @@ struct AppStateDependencies {
     InputManager& input;
     ActionMap& actionMap;
     InputContextManager& contextManager;
-    ResourceMgr& resourceMgr;
+    GameResources& resources;
     AudioEngine& audioEngine;
     BgmSystem& bgmSystem;
     UIRenderer& uiRenderer;

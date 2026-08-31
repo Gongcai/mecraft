@@ -6,10 +6,10 @@
 #include <vector>
 
 #include "../../crafting/CraftingSystem.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 
-void CraftingGridControl::init(ResourceMgr& resourceMgr) {
-    m_itemGrid.init(resourceMgr);
+void CraftingGridControl::init(GameResources& resources, RhiDevice& rhiDevice) {
+    m_itemGrid.init(resources, rhiDevice);
 }
 
 void CraftingGridControl::shutdown() {

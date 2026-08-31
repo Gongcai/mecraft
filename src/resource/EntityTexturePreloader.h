@@ -3,11 +3,11 @@
 
 #include <string>
 
-class ResourceMgr;
+struct GameResources;
 
 namespace resource {
 
-[[nodiscard]] bool preloadEntityTexturesFromConfig(ResourceMgr& resourceMgr, const std::string& entitiesConfigPath);
+[[nodiscard]] bool preloadEntityTexturesFromConfig(GameResources& resources, const std::string& entitiesConfigPath);
 
 } // namespace resource
 

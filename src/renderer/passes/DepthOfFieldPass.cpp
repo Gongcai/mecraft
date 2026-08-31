@@ -6,7 +6,7 @@
 #include "../rhi/RhiResources.h"
 #include "../rhi/RhiShaderSourceLoader.h"
 #include "../targets/DeferredRenderTargets.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 
 #include <algorithm>
 #include <optional>
@@ -31,8 +31,8 @@ struct DofPushConstants {
 }
 } // namespace
 
-void DepthOfFieldPass::init(ResourceMgr& resourceMgr) {
-    m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
+void DepthOfFieldPass::init(GameResources& resources) {
+    m_noiseTexture = resources.texture2D.getHandle("shader_noise2d");
 }
 
 void DepthOfFieldPass::shutdown() {

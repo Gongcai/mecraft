@@ -3,7 +3,7 @@
 #include "Tween.h"
 #include "renderer/rhi/RhiHandles.h"
 
-class ResourceMgr;
+struct GameResources;
 class RhiCommandList;
 class RhiDevice;
 
@@ -12,7 +12,7 @@ public:
     ScreenTransition() = default;
     ~ScreenTransition();
 
-    void init(ResourceMgr& resourceMgr);
+    void init(GameResources& resources, RhiDevice& rhiDevice);
     void shutdown();
 
     void startFadeOut(float duration);

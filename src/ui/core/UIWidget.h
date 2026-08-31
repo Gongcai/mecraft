@@ -16,9 +16,9 @@ public:
     virtual ~UIWidget() = default;
 
     // Lifecycle
-    virtual void init(ResourceMgr& resourceMgr) {
+    virtual void init(GameResources& resources, RhiDevice& rhiDevice) {
         for (auto& child : m_children) {
-            child->init(resourceMgr);
+            child->init(resources, rhiDevice);
         }
     }
     virtual void shutdown() {

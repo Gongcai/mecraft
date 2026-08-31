@@ -6,7 +6,7 @@
 
 #include <glm/vec4.hpp>
 
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../renderer/rhi/RhiCommandList.h"
 #include "../../renderer/rhi/RhiDevice.h"
 #include "../../renderer/rhi/RhiShaderSourceLoader.h"
@@ -49,8 +49,8 @@ UICheckbox::~UICheckbox() {
     shutdown();
 }
 
-void UICheckbox::init(ResourceMgr& resourceMgr) {
-    m_rhiDevice = &resourceMgr.rhiDevice();
+void UICheckbox::init(GameResources& resources, RhiDevice& rhiDevice) {
+    m_rhiDevice = &rhiDevice;
     const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
     const auto shapeSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
     const auto colorSource = renderer::rhi::loadShaderSource("assets/shaders/ui_color_rhi.frag");
@@ -105,7 +105,7 @@ void UICheckbox::init(ResourceMgr& resourceMgr) {
         !m_pipelineLayout.isValid() || !m_shapePipeline.isValid() || !m_colorPipeline.isValid() ||
         !m_vertexBuffer.isValid())
         std::abort();
-    m_label.init(resourceMgr);
+    m_label.init(resources, rhiDevice);
     m_label.anchor = Anchor::BottomLeft;
     m_checkScaleTween.setImmediate(m_checked ? 1.0f : 0.0f);
 }

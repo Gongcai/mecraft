@@ -41,7 +41,7 @@ struct alignas(16) SceneCompositeParams {
 static_assert(sizeof(SceneCompositeParams) == 192u);
 } // namespace
 
-void SceneCompositePass::init(ResourceMgr&) {}
+void SceneCompositePass::init(GameResources&) {}
 
 void SceneCompositePass::shutdown() {
     destroyRhiResources();

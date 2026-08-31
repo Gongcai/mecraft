@@ -6,7 +6,7 @@
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../rhi/RhiShaderSourceLoader.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -40,8 +40,8 @@ struct alignas(16) SsgiBaseParams {
 static_assert(sizeof(SsgiBaseParams) == 192u);
 } // namespace
 
-void SsgiPass::init(ResourceMgr& resourceMgr) {
-    m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
+void SsgiPass::init(GameResources& resources) {
+    m_noiseTexture = resources.texture2D.getHandle("shader_noise2d");
 }
 
 void SsgiPass::shutdown() {

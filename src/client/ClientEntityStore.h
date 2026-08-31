@@ -8,7 +8,7 @@
 #include <unordered_set>
 #include <entt/entt.hpp>
 
-class ResourceMgr;
+struct GameResources;
 namespace ecs {
 class GameplayRegistry;
 }
@@ -25,8 +25,8 @@ public:
     ~ClientEntityStore();
 
     /// Initialize with the ECS registry and resource manager.
-    void init(entt::registry& registry, ResourceMgr* resourceMgr);
-    void init(ecs::GameplayRegistry& registry, ResourceMgr* resourceMgr);
+    void init(entt::registry& registry, GameResources* resources);
+    void init(ecs::GameplayRegistry& registry, GameResources* resources);
 
     /// Handle an EntitySpawn message from the server.
     void handleSpawn(const net::EntitySpawnMessage& msg);
@@ -57,7 +57,7 @@ private:
 
     entt::registry* m_registry = nullptr;
     ecs::GameplayRegistry* m_gameplayRegistry = nullptr;
-    ResourceMgr* m_resourceMgr = nullptr;
+    GameResources* m_resources = nullptr;
 
     /// Mapping from network ID to local entity handle.
     std::unordered_map<net::EntityNetId, entt::entity> m_netIdToEntity;

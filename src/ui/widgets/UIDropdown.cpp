@@ -64,10 +64,10 @@ UIDropdown::~UIDropdown() {
     shutdown();
 }
 
-void UIDropdown::init(ResourceMgr& resourceMgr) {
+void UIDropdown::init(GameResources& resources, RhiDevice& rhiDevice) {
     m_expandTween.setImmediate(0.0f);
     m_hoverColorTween.setImmediate({0.30f, 0.30f, 0.30f, 1.0f});
-    UIWidget::init(resourceMgr);
+    UIWidget::init(resources, rhiDevice);
 }
 
 void UIDropdown::shutdown() {

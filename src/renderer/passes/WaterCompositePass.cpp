@@ -7,16 +7,16 @@
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 
 #include <algorithm>
 
-void WaterCompositePass::init(ResourceMgr& resourceMgr) {
-    m_resourceMgr = &resourceMgr;
+void WaterCompositePass::init(GameResources& resources) {
+    m_resources = &resources;
 }
 
 void WaterCompositePass::shutdown() {
-    m_resourceMgr = nullptr;
+    m_resources = nullptr;
 }
 
 bool WaterCompositePass::recordGraphPass(const FrameContext& ctx, const RenderSettings& settings,
@@ -30,7 +30,7 @@ bool WaterCompositePass::recordGraphPass(const FrameContext& ctx, const RenderSe
     if (!waterEffectsEnabled || !transparentPlan.hasWater()) {
         return true;
     }
-    if (m_resourceMgr == nullptr || ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+    if (m_resources == nullptr || ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         ctx.shared->terrainRhiPipelines == nullptr) {
         return false;
     }
@@ -137,7 +137,7 @@ bool WaterCompositePass::recordGraphPass(const FrameContext& ctx, const RenderSe
     const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
                                               ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Water)
                                               : GpuTimerSegmentToken{};
-    if (!ctx.shared->terrainRhiPipelines->prepareWater(commandList, *m_resourceMgr, targets, waterFrame) ||
+    if (!ctx.shared->terrainRhiPipelines->prepareWater(commandList, *m_resources, targets, waterFrame) ||
         !worldRenderBuffer.prepareRhiWater(commandList, ctx.shared->terrainRhiPipelines->waterMetadataLayout())) {
         if (ctx.debugService != nullptr) {
             ctx.debugService->cancelGpuTimer(gpuTimer);

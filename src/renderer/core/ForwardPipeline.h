@@ -9,7 +9,7 @@
 
 #include <vector>
 
-class ResourceMgr;
+struct GameResources;
 class RhiCommandList;
 class TerrainRenderer;
 class TerrainRenderCache;
@@ -55,7 +55,7 @@ private:
     TerrainRenderCache* m_terrainCache = nullptr;
     WorldRenderBuffer* m_worldRenderBuffer = nullptr;
     GameplaySkyRenderer* m_skyRenderer = nullptr;
-    ResourceMgr* m_resourceMgr = nullptr;
+    GameResources* m_resources = nullptr;
     SharedRenderResources* m_shared = nullptr;
 
     // Transparent batch state (populated by renderTerrain, consumed by renderTransparent)

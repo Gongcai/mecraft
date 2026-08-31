@@ -45,7 +45,7 @@
 #include <utility>
 #include <vector>
 
-class ResourceMgr;
+struct GameResources;
 class World;
 class Camera;
 class Window;
@@ -108,7 +108,7 @@ public:
     [[nodiscard]] RenderGraphFrameStats renderGraphFrameStats() const;
 
 private:
-    void initializePasses(ResourceMgr& resourceMgr, shadow::ShadowRenderer* shadowRenderer);
+    void initializePasses(GameResources& resources, shadow::ShadowRenderer* shadowRenderer);
     /// Ensures that FrameOutput RTGI signals have non-aliased storage until the next frame.
     /// @param rhiDevice Device that owns the persistent validation textures.
     /// @param width Render width in texels.
@@ -154,7 +154,7 @@ private:
     std::unique_ptr<DebugPass> m_debugPass;
 
     // Shared resources (non-owning, set during init)
-    ResourceMgr* m_resourceMgr = nullptr;
+    GameResources* m_resources = nullptr;
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
     SharedRenderResources* m_shared = nullptr;
 

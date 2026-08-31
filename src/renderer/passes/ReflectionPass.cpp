@@ -7,7 +7,7 @@
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../rhi/RhiShaderSourceLoader.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 
 #include <glm/glm.hpp>
 #include <algorithm>
@@ -52,7 +52,7 @@ struct alignas(16) ReflectionBaseParams {
 static_assert(sizeof(ReflectionBaseParams) == 176u);
 } // namespace
 
-void ReflectionPass::init(ResourceMgr&) {}
+void ReflectionPass::init(GameResources&) {}
 
 void ReflectionPass::shutdown() {
     destroyBaseRhiResources();

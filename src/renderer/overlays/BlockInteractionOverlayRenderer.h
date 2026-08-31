@@ -6,7 +6,6 @@
 #include <glm/glm.hpp>
 #include "../rhi/RhiHandles.h"
 
-class ResourceMgr;
 class RhiDevice;
 class RhiCommandList;
 class IWorldView;
@@ -29,7 +28,7 @@ struct BlockBreakRenderData {
 /// Extracted from Renderer to reduce its responsibilities.
 class BlockInteractionOverlayRenderer {
 public:
-    void init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
+    void init(RhiDevice& rhiDevice);
     void shutdown();
 
     /// Render both block outline and break overlay.

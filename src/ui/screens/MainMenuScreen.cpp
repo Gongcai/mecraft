@@ -5,10 +5,10 @@
 #include "../widgets/UIDropdown.h"
 #include "../widgets/UITextInput.h"
 #include "../../Paths.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../locale/LocaleManager.h"
 
-void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
+void MainMenuScreen::buildUI(GameResources& resources, RhiDevice& rhiDevice) {
     m_title = nullptr;
     m_startButton = nullptr;
     m_modelSceneButton = nullptr;
@@ -22,7 +22,7 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
 
     // Title image
     auto title = std::make_unique<UIImage>();
-    title->loadTexture(resourceMgr, "title", TITLE_TEXTURE_PATH);
+    title->loadTexture(resources, "title", TITLE_TEXTURE_PATH);
     title->setScale(2.0f);
     title->anchor = Anchor::Center;
     title->anchorOffsetY = 80.0f;

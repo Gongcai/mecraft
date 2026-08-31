@@ -5,7 +5,7 @@
 #include "../core/FrameContext.h"
 
 class DeferredRenderTargets;
-class ResourceMgr;
+struct GameResources;
 class BlockEntityRenderer;
 class StaticMeshRenderer;
 class HumanoidRenderer;
@@ -25,7 +25,7 @@ class GameplayRegistry;
 /// Terrain GBuffer is handled separately by the terrain rendering pipeline.
 class GBufferPass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr);
+    void init(GameResources& resources);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "GBuffer"; }
 

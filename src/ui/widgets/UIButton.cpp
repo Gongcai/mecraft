@@ -7,8 +7,8 @@ UIButton::UIButton() {
     focusable = true;
 }
 
-void UIButton::init(ResourceMgr& resourceMgr) {
-    m_background.init(resourceMgr);
+void UIButton::init(GameResources& resources, RhiDevice& rhiDevice) {
+    m_background.init(resources, rhiDevice);
     m_background.setUseLocalColors(true);
     m_background.setBackgroundColor(m_normalColor);
     m_background.setBorderWidth(2.0f);

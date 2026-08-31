@@ -34,7 +34,7 @@ public:
     void updateAnimations(float dt) override;
 
 protected:
-    void buildUI(ResourceMgr& resourceMgr) override;
+    void buildUI(GameResources& resources, RhiDevice& rhiDevice) override;
     void onSceneEnter() override;
     void onSceneExit() override;
 
@@ -45,35 +45,36 @@ private:
     };
 
     // Tab builders
-    void buildGeneralTab(UIWidget* contentPanel, ResourceMgr& resourceMgr);
-    void buildShadowsTab(UIWidget* contentPanel, ResourceMgr& resourceMgr);
-    void buildLightingTab(UIWidget* contentPanel, ResourceMgr& resourceMgr);
-    void buildPostProcessTab(UIWidget* contentPanel, ResourceMgr& resourceMgr);
-    void buildVolumetricTab(UIWidget* contentPanel, ResourceMgr& resourceMgr);
-    void buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resourceMgr);
-    SettingsTabLayout setupScrollableTab(UIWidget* contentPanel, ResourceMgr& resourceMgr, float tabWidth,
+    void buildGeneralTab(UIWidget* contentPanel, GameResources& resources);
+    void buildShadowsTab(UIWidget* contentPanel, GameResources& resources);
+    void buildLightingTab(UIWidget* contentPanel, GameResources& resources);
+    void buildPostProcessTab(UIWidget* contentPanel, GameResources& resources);
+    void buildVolumetricTab(UIWidget* contentPanel, GameResources& resources);
+    void buildUpscaleTab(UIWidget* contentPanel, GameResources& resources);
+    SettingsTabLayout setupScrollableTab(UIWidget* contentPanel, GameResources& resources, float tabWidth,
                                          float tabHeight);
 
     // Helper to create a labeled slider row
-    void addSliderRow(UIWidget* parent, ResourceMgr& resourceMgr, const std::string& label, float minVal, float maxVal,
+    void addSliderRow(UIWidget* parent, GameResources& resources, const std::string& label, float minVal, float maxVal,
                       float currentVal, float step, std::function<void(float)> onValueChanged, bool interactive = true);
 
     // Helper to create a labeled dropdown row
-    void addDropdownRow(UIWidget* parent, ResourceMgr& resourceMgr, const std::string& label,
+    void addDropdownRow(UIWidget* parent, GameResources& resources, const std::string& label,
                         const std::vector<std::string>& options, int currentIndex,
                         std::function<void(int, const std::string&)> onSelectionChanged, bool interactive = true);
 
     // Helper to create a toggle
-    void addToggle(UIWidget* parent, ResourceMgr& resourceMgr, const std::string& label, bool checked,
+    void addToggle(UIWidget* parent, GameResources& resources, const std::string& label, bool checked,
                    std::function<void(bool)> onChanged, bool interactive = true);
 
     // Helper to create a section header
-    void addSectionHeader(UIWidget* parent, ResourceMgr& resourceMgr, const std::string& text);
+    void addSectionHeader(UIWidget* parent, GameResources& resources, const std::string& text);
 
     RenderScene* m_renderScene = nullptr;
     World* m_world = nullptr;
     Window* m_window = nullptr;
     PresentationController* m_presentationController = nullptr;
+    RhiDevice* m_rhiDevice = nullptr;
     std::function<void(int)> m_renderDistanceSetter;
 
     UIPanel* m_overlay = nullptr;

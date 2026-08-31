@@ -10,13 +10,13 @@
 #include "../../item/Item.h"
 class Window;
 class Inventory;
-class ResourceMgr;
+struct GameResources;
 class TextRenderer;
 class LocaleManager;
 
 class HotbarControl : public UIWidget {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(GameResources& resources, RhiDevice& rhiDevice) override;
     void shutdown() override;
 
     void setInventorySource(const Inventory* inventory);
@@ -47,7 +47,7 @@ private:
                         float timeSeconds) const;
     void checkSlotChange(const Inventory& inventory, const LocaleManager* localeManager = nullptr) const;
 
-    ResourceMgr* m_resourceMgr = nullptr;
+    GameResources* m_resources = nullptr;
     const Inventory* m_inventory = nullptr;
 
     std::array<float, 4> m_bgColor{1.0f, 1.0f, 1.0f, 1.0f};

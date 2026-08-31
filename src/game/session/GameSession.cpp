@@ -1,6 +1,6 @@
 #include "GameSession.h"
 #include "../../Diagnostics.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../world/World.h"
 #include "../../physics/PhysicsSystem.h"
 #include "../../ecs/GameplayScene.h"
@@ -189,8 +189,8 @@ glm::vec3 findSafeTerrainPlacement(const World& world, const PhysicsBody& body, 
 GameSession::GameSession() = default;
 GameSession::~GameSession() = default;
 
-void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr, ThreadPool* threadPool) {
-    (void)resourceMgr; // Resource-dependent init deferred to Game::initRenderers()
+void GameSession::init(const GameSessionConfig& config, GameResources& resources, ThreadPool* threadPool) {
+    (void)resources; // Resource-dependent init deferred to Game::initRenderers()
 
     m_isMultiplayer = config.isMultiplayer();
 
@@ -452,7 +452,7 @@ void GameSession::initECS(const GameSessionDependencies& deps) {
     svc.gameClient = m_client.get();
     svc.audioEngine = &deps.audioEngine;
     svc.inputContextManager = &deps.contextManager;
-    svc.resourceMgr = &deps.resourceMgr;
+    svc.resources = &deps.resources;
     svc.dropSystem = m_dropSystem.get();
     svc.particleSystem = m_particleSystem.get();
     svc.uiRenderer = &deps.uiRenderer;
@@ -469,7 +469,7 @@ void GameSession::initECS(const GameSessionDependencies& deps) {
     if (m_server) {
         m_server->setEcsRegistry(&reg);
     }
-    m_client->initEntityStore(reg, &deps.resourceMgr);
+    m_client->initEntityStore(reg, &deps.resources);
     m_client->setChatMessageCallback([&uiRenderer = deps.uiRenderer](const net::ServerChatMessage& message) {
         uiRenderer.appendOutputLine("<" + message.senderName + "> " + message.message,
                                     ConsoleDisplayBox::MessageType::Normal);

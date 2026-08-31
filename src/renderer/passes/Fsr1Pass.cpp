@@ -26,7 +26,7 @@ bool Fsr1Pass::isSupported(const RhiDevice& rhiDevice) {
     return rhiDevice.backend() == RhiBackend::OpenGL;
 }
 
-void Fsr1Pass::init(ResourceMgr&, RhiCommandListPool& commandListPool) {
+void Fsr1Pass::init(RhiCommandListPool& commandListPool) {
     m_commandListPool = &commandListPool;
 }
 

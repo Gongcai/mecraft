@@ -3,7 +3,7 @@
 
 #include <vector>
 
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 
 struct ItemModelVertex {
     float x;

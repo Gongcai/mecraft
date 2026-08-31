@@ -11,7 +11,7 @@ class GameClient;
 }
 class AudioEngine;
 class InputContextManager;
-class ResourceMgr;
+struct GameResources;
 class DropSystem;
 class ParticleSystem;
 class UIRenderer;
@@ -72,7 +72,7 @@ struct GameplayServices {
     OptionalService<client::GameClient> gameClient;
     OptionalService<AudioEngine> audioEngine;
     OptionalService<InputContextManager> inputContextManager;
-    OptionalService<ResourceMgr> resourceMgr;
+    OptionalService<GameResources> resources;
     OptionalService<DropSystem> dropSystem;
     OptionalService<ParticleSystem> particleSystem;
     OptionalService<UIRenderer> uiRenderer;

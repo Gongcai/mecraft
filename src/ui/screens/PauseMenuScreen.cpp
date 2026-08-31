@@ -8,8 +8,8 @@
 
 #include <algorithm>
 
-void PauseMenuScreen::buildUI(ResourceMgr& resourceMgr) {
-    (void)resourceMgr;
+void PauseMenuScreen::buildUI(GameResources& resources, RhiDevice& rhiDevice) {
+    (void)resources;
 
     // Dark overlay covering the whole screen
     auto overlay = std::make_unique<UIPanel>();

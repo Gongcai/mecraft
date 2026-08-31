@@ -8,7 +8,7 @@
 #include "../ecs/util/ParticleEventBuffer.h"
 #include "../ecs/util/ProjectileDefinitions.h"
 #include "../item/Item.h"
-#include "../resource/ResourceMgr.h"
+#include "../resource/GameResources.h"
 #include <algorithm>
 #include <string>
 
@@ -250,19 +250,19 @@ void snapReplicaToSnapshot(entt::registry& registry, const entt::entity entity, 
 ClientEntityStore::ClientEntityStore() = default;
 ClientEntityStore::~ClientEntityStore() = default;
 
-void ClientEntityStore::init(entt::registry& registry, ResourceMgr* resourceMgr) {
+void ClientEntityStore::init(entt::registry& registry, GameResources* resources) {
     m_registry = &registry;
     m_gameplayRegistry = nullptr;
-    m_resourceMgr = resourceMgr;
+    m_resources = resources;
     m_latchedHurtNetIds.clear();
     m_locallyAuthoritativeNetIds.clear();
     flushPendingMessages();
 }
 
-void ClientEntityStore::init(ecs::GameplayRegistry& registry, ResourceMgr* resourceMgr) {
+void ClientEntityStore::init(ecs::GameplayRegistry& registry, GameResources* resources) {
     m_registry = &registry.registry();
     m_gameplayRegistry = &registry;
-    m_resourceMgr = resourceMgr;
+    m_resources = resources;
     m_latchedHurtNetIds.clear();
     m_locallyAuthoritativeNetIds.clear();
     flushPendingMessages();

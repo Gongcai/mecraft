@@ -11,7 +11,7 @@
 #include "../../locale/LocaleManager.h"
 #include "../../player/Inventory.h"
 #include "../../renderer/rhi/RhiCommandList.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../ItemIconPolicy.h"
 #include "../core/UIRenderer.h"
 
@@ -37,13 +37,13 @@ static_assert(sizeof(ImageTexturePushConstants) == 64u);
 }
 } // namespace
 
-void DataDrivenContainerPanelControl::init(ResourceMgr& resourceMgr) {
-    UIWidget::init(resourceMgr);
-    m_resourceMgr = &resourceMgr;
+void DataDrivenContainerPanelControl::init(GameResources& resources, RhiDevice& rhiDevice) {
+    UIWidget::init(resources, rhiDevice);
+    m_resources = &resources;
 
-    m_containerGrid.init(resourceMgr);
-    m_playerGrid.init(resourceMgr);
-    m_tooltip.init(resourceMgr);
+    m_containerGrid.init(resources, rhiDevice);
+    m_playerGrid.init(resources, rhiDevice);
+    m_tooltip.init(resources, rhiDevice);
 }
 
 void DataDrivenContainerPanelControl::shutdown() {
@@ -56,7 +56,7 @@ void DataDrivenContainerPanelControl::shutdown() {
     m_machine = nullptr;
     m_playerInventory = nullptr;
     m_definition = nullptr;
-    m_resourceMgr = nullptr;
+    m_resources = nullptr;
     UIWidget::shutdown();
 }
 
@@ -278,7 +278,7 @@ void DataDrivenContainerPanelControl::appendSlotsForGroup(const ui::ContainerSlo
 }
 
 void DataDrivenContainerPanelControl::renderBackground(const UIRenderContext& context) const {
-    if (m_resourceMgr == nullptr) {
+    if (m_resources == nullptr) {
         return;
     }
     if (context.screenWidth <= 0 || context.screenHeight <= 0) {
@@ -296,16 +296,16 @@ void DataDrivenContainerPanelControl::renderBackground(const UIRenderContext& co
     const float v0 = 1.0f - def.height / def.textureHeight;
     const float v1 = 1.0f;
 
-    drawTextureQuad(context, m_resourceMgr->getGuiTextureHandle(def.backgroundTexture), x0, y0, x1, y1, u0, v0, u1, v1,
+    drawTextureQuad(context, m_resources->texture2D.getGuiHandle(def.backgroundTexture), x0, y0, x1, y1, u0, v0, u1, v1,
                     1.0f);
 }
 
 void DataDrivenContainerPanelControl::renderProgressBars(const UIRenderContext& context) const {
-    if (m_definition == nullptr || m_resourceMgr == nullptr || m_definition->progressBars.empty()) {
+    if (m_definition == nullptr || m_resources == nullptr || m_definition->progressBars.empty()) {
         return;
     }
     const ui::ContainerUiDef& def = requireDefinition();
-    const RhiTextureHandle backgroundTexture = m_resourceMgr->getGuiTextureHandle(def.backgroundTexture);
+    const RhiTextureHandle backgroundTexture = m_resources->texture2D.getGuiHandle(def.backgroundTexture);
     const ResolvedPanelRect panelRect = resolvePanelRect(context.screenWidth, context.screenHeight);
     const float scale = panelRect.scale;
 
@@ -376,20 +376,20 @@ void DataDrivenContainerPanelControl::drawTextureQuad(const UIRenderContext& con
 }
 
 void DataDrivenContainerPanelControl::renderDraggedItem(const UIRenderContext& context) const {
-    if (!context.hasDraggedItem || context.draggedItemId <= 0 || m_resourceMgr == nullptr) {
+    if (!context.hasDraggedItem || context.draggedItemId <= 0 || m_resources == nullptr) {
         return;
     }
     if (context.screenWidth <= 0 || context.screenHeight <= 0) {
         return;
     }
 
-    const TextureAtlas& itemIconAtlas = m_resourceMgr->getItemIconAtlas();
-    const TextureAtlas& itemTextureAtlas = m_resourceMgr->getItemTextureAtlas();
+    const TextureAtlas& itemIconAtlas = m_resources->uiTextures.blockIconAtlas();
+    const TextureAtlas& itemTextureAtlas = m_resources->uiTextures.itemTextureAtlas();
     const auto draggedItem = static_cast<ItemID>(context.draggedItemId);
     const ItemDef& itemDef = ItemRegistry::get(draggedItem);
 
     const bool useBakedBlockIcon = ui::shouldUseBakedBlockIcon(itemDef);
-    const int itemTileIndex = useBakedBlockIcon ? -1 : m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
+    const int itemTileIndex = useBakedBlockIcon ? -1 : m_resources->uiTextures.itemTextureIndex(itemDef.iconTextureName);
     const TextureAtlas& selectedAtlas = useBakedBlockIcon ? itemIconAtlas : itemTextureAtlas;
     const int selectedTile = useBakedBlockIcon ? static_cast<int>(itemDef.renderBlock) : itemTileIndex;
     if (!selectedAtlas.texture.isValid() || selectedAtlas.tilesPerRow <= 0 || selectedTile < 0) {

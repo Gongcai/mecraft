@@ -2,12 +2,12 @@
 
 #include "../core/UIWidget.h"
 
-class ResourceMgr;
+struct GameResources;
 struct TextureAtlas;
 
 class HudControl : public UIWidget {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(GameResources& resources, RhiDevice& rhiDevice) override;
     void shutdown() override;
 
 protected:
@@ -17,7 +17,7 @@ private:
     void drawIconRow(const UIRenderContext& context, const TextureAtlas& atlas, float startX, float startY, int current,
                      int max, int fullIndex, int halfIndex, float iconSize) const;
 
-    ResourceMgr* m_resourceMgr = nullptr;
+    GameResources* m_resources = nullptr;
 
     // Cached atlas icon indices (resolved once in init).
     int m_heartFull = -1;

@@ -64,12 +64,12 @@ bool Game::updateLoading(const float deltaTime) {
 
     switch (m_loadPhase) {
     case LoadPhase::Session:
-        m_session.init(m_config, m_deps.resourceMgr, &m_deps.threadPool);
+        m_session.init(m_config, m_deps.resources, &m_deps.threadPool);
         m_session.initWorld(m_config.seed);
         m_loadPhase = LoadPhase::RenderRuntime;
         break;
     case LoadPhase::RenderRuntime:
-        if (!m_renderRuntime->init(m_deps.resourceMgr, m_session, m_deps.uiRenderer, m_deps.threadPool, m_deps.window,
+        if (!m_renderRuntime->init(m_deps.resources, m_session, m_deps.uiRenderer, m_deps.threadPool, m_deps.window,
                                    m_deps.rhiDevice, m_deps.commandListPool, m_config.renderSettingsSource,
                                    m_config.fixedRenderSettings)) {
             MECRAFT_LOG_STREAM(std::cerr << "[Game] Render runtime initialization failed\n");

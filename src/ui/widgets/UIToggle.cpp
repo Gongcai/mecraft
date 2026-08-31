@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../renderer/rhi/RhiCommandList.h"
 #include "../../renderer/rhi/RhiDevice.h"
 #include "../../renderer/rhi/RhiShaderSourceLoader.h"
@@ -21,8 +21,8 @@ UIToggle::~UIToggle() {
     shutdown();
 }
 
-void UIToggle::init(ResourceMgr& resourceMgr) {
-    m_rhiDevice = &resourceMgr.rhiDevice();
+void UIToggle::init(GameResources& resources, RhiDevice& rhiDevice) {
+    m_rhiDevice = &rhiDevice;
     const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
     const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
     if (!vertexSource || !fragmentSource)
@@ -69,8 +69,8 @@ void UIToggle::init(ResourceMgr& resourceMgr) {
     initMesh();
     m_knobTween.start(m_checked ? 1.0f : 0.0f, m_checked ? 1.0f : 0.0f, 0.15f, EasingType::EaseOut);
     m_label.anchor = Anchor::BottomLeft;
-    m_label.init(resourceMgr);
-    UIWidget::init(resourceMgr);
+    m_label.init(resources, rhiDevice);
+    UIWidget::init(resources, rhiDevice);
 }
 
 void UIToggle::shutdown() {

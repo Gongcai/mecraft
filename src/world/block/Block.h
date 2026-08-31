@@ -20,7 +20,7 @@
 #include "../../engine/registry/NamespacedId.h"
 #include "../../engine/registry/IdRegistry.h"
 
-class ResourceMgr;
+class BlockTextureLibrary;
 
 // BlockID identifies block definitions; concrete placed variants use BlockStateId.
 using BlockID = RuntimeId;
@@ -359,7 +359,7 @@ struct BlockDef {
 
 class BlockRegistry {
 public:
-    static void init(ResourceMgr* resourceMgr = nullptr);
+    static void init(const BlockTextureLibrary* blockTextures = nullptr);
     static void ensureInitialized();
     static const BlockDef& get(BlockID id);
     static const BlockDef& getFast(BlockID id);

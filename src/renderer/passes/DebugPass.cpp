@@ -7,7 +7,7 @@
 #include "../rhi/RhiShaderSourceLoader.h"
 #include "../shadow/ShadowRenderer.h"
 #include "../targets/DeferredRenderTargets.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -93,8 +93,8 @@ struct alignas(16) DebugParams {
 static_assert(sizeof(DebugParams) == 832u);
 } // namespace
 
-void DebugPass::init(ResourceMgr& resourceMgr) {
-    m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
+void DebugPass::init(GameResources& resources) {
+    m_noiseTexture = resources.texture2D.getHandle("shader_noise2d");
 }
 
 void DebugPass::shutdown() {

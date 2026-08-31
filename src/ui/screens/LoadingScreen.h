@@ -14,7 +14,7 @@ public:
     void setDetailText(const std::string& text);
 
 protected:
-    void buildUI(ResourceMgr& resourceMgr) override;
+    void buildUI(GameResources& resources, RhiDevice& rhiDevice) override;
 
 private:
     UIText* m_title = nullptr;

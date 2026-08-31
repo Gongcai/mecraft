@@ -1,7 +1,7 @@
 #include "AppTextureManifest.h"
 
 #include "Paths.h"
-#include "ResourceMgr.h"
+#include "GameResources.h"
 #include "../Diagnostics.h"
 #include "renderer/rhi/RhiResources.h"
 
@@ -36,7 +36,7 @@ bool readBool(const nlohmann::json& object, const char* key, bool defaultValue, 
     return true;
 }
 
-bool loadTextureEntry(ResourceMgr& resourceMgr, const nlohmann::json& entry) {
+bool loadTextureEntry(GameResources& resources, const nlohmann::json& entry) {
     if (!entry.is_object()) {
         MECRAFT_LOG_FPRINTF(stderr, "[AppTextureManifest] texture entry must be an object\n");
         return false;
@@ -66,7 +66,7 @@ bool loadTextureEntry(ResourceMgr& resourceMgr, const nlohmann::json& entry) {
             MECRAFT_LOG_FPRINTF(stderr, "[AppTextureManifest] texture %s has non-boolean flip\n", name.c_str());
             return false;
         }
-        if (!resourceMgr.loadGuiTexture(name, fullPath, flip).isValid()) {
+        if (!resources.texture2D.loadGui(name, fullPath, flip).isValid()) {
             MECRAFT_LOG_FPRINTF(stderr, "[AppTextureManifest] failed to load gui texture %s: %s\n", name.c_str(),
                                 fullPath.c_str());
             return false;
@@ -104,7 +104,7 @@ bool loadTextureEntry(ResourceMgr& resourceMgr, const nlohmann::json& entry) {
                 return false;
             }
         }
-        if (!resourceMgr.loadTexture2D(name, fullPath, srgb, flip, queueSharing).isValid()) {
+        if (!resources.texture2D.load(name, fullPath, srgb, flip, queueSharing).isValid()) {
             MECRAFT_LOG_FPRINTF(stderr, "[AppTextureManifest] failed to load 2d texture %s: %s\n", name.c_str(),
                                 fullPath.c_str());
             return false;
@@ -116,7 +116,7 @@ bool loadTextureEntry(ResourceMgr& resourceMgr, const nlohmann::json& entry) {
     return false;
 }
 
-bool loadCubemapEntry(ResourceMgr& resourceMgr, const nlohmann::json& entry) {
+bool loadCubemapEntry(GameResources& resources, const nlohmann::json& entry) {
     if (!entry.is_object()) {
         MECRAFT_LOG_FPRINTF(stderr, "[AppTextureManifest] cubemap entry must be an object\n");
         return false;
@@ -143,7 +143,7 @@ bool loadCubemapEntry(ResourceMgr& resourceMgr, const nlohmann::json& entry) {
         facePaths[i] = makeAssetPath(facePaths[i]);
     }
 
-    const RhiTextureHandle handle = resourceMgr.loadCubemap(name, facePaths[0], facePaths[1], facePaths[2],
+    const RhiTextureHandle handle = resources.cubemaps.load(name, facePaths[0], facePaths[1], facePaths[2],
                                                             facePaths[3], facePaths[4], facePaths[5]);
     if (!handle.isValid()) {
         MECRAFT_LOG_FPRINTF(stderr, "[AppTextureManifest] failed to load cubemap %s\n", name.c_str());
@@ -154,7 +154,7 @@ bool loadCubemapEntry(ResourceMgr& resourceMgr, const nlohmann::json& entry) {
 
 } // namespace
 
-bool loadAppTextureManifest(ResourceMgr& resourceMgr, const std::string& manifestPath) {
+bool loadAppTextureManifest(GameResources& resources, const std::string& manifestPath) {
     std::ifstream file(manifestPath);
     if (!file.is_open()) {
         MECRAFT_LOG_FPRINTF(stderr, "[AppTextureManifest] failed to open manifest: %s\n", manifestPath.c_str());
@@ -174,7 +174,7 @@ bool loadAppTextureManifest(ResourceMgr& resourceMgr, const std::string& manifes
             return false;
         }
         for (const nlohmann::json& entry : *texturesIt) {
-            if (!loadTextureEntry(resourceMgr, entry)) {
+            if (!loadTextureEntry(resources, entry)) {
                 return false;
             }
         }
@@ -187,7 +187,7 @@ bool loadAppTextureManifest(ResourceMgr& resourceMgr, const std::string& manifes
             return false;
         }
         for (const nlohmann::json& entry : *cubemapsIt) {
-            if (!loadCubemapEntry(resourceMgr, entry)) {
+            if (!loadCubemapEntry(resources, entry)) {
                 return false;
             }
         }

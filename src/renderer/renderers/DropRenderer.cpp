@@ -13,7 +13,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../world/DropSystem.h"
 #include "../../world/IWorldView.h"
 #include "../../world/chunk/Chunk.h"
@@ -34,9 +34,9 @@ bool prefersBlockMeshForItem(const BlockID renderBlock) {
 }
 } // namespace
 
-void DropRenderer::init(ResourceMgr& resourceMgr) {
-    m_resourceMgr = &resourceMgr;
-    m_rhiDevice = &resourceMgr.rhiDevice();
+void DropRenderer::init(GameResources& resources, RhiDevice& rhiDevice) {
+    m_resources = &resources;
+    m_rhiDevice = &rhiDevice;
     createItemGBufferRhiResources();
 }
 
@@ -54,7 +54,7 @@ void DropRenderer::shutdown() {
     m_previousModelMatrices.clear();
     m_currentModelMatrices.clear();
     m_dropObjectIds.clear();
-    m_resourceMgr = nullptr;
+    m_resources = nullptr;
     m_rhiDevice = nullptr;
 }
 
@@ -69,7 +69,7 @@ bool DropRenderer::prepareFrame(const IWorldView& worldView, const DropSystem& d
 
     for (const DropEntity& drop : drops) {
         const ItemDef& itemDef = ItemRegistry::get(drop.itemId);
-        const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
+        const int itemTileIndex = m_resources->uiTextures.itemTextureIndex(itemDef.iconTextureName);
         const BlockID renderBlock = ItemRegistry::toRenderBlock(drop.itemId);
         const bool useItemMesh = !prefersBlockMeshForItem(renderBlock) && itemTileIndex >= 0;
 
@@ -214,18 +214,18 @@ DropRenderer::Mesh* DropRenderer::getOrCreateItemMesh(const ItemID itemId) {
 
 DropRenderer::Mesh DropRenderer::buildItemMesh(const ItemID itemId) const {
     Mesh mesh;
-    if (m_resourceMgr == nullptr || itemId == 0) {
+    if (m_resources == nullptr || itemId == 0) {
         return mesh;
     }
 
     const ItemDef& itemDef = ItemRegistry::get(itemId);
-    const int tileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
+    const int tileIndex = m_resources->uiTextures.itemTextureIndex(itemDef.iconTextureName);
     if (tileIndex < 0) {
         return mesh;
     }
 
     std::vector<ItemModelVertex> vertices;
-    if (!buildExtrudedItemMesh(m_resourceMgr->getItemTextureAtlas(), m_resourceMgr->getItemTexturePixels(), tileIndex,
+    if (!buildExtrudedItemMesh(m_resources->uiTextures.itemTextureAtlas(), m_resources->uiTextures.itemTexturePixels(), tileIndex,
                                vertices)) {
         return mesh;
     }
@@ -238,7 +238,7 @@ DropRenderer::Mesh DropRenderer::buildItemMesh(const ItemID itemId) const {
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     bufferDesc.initialState = RhiResourceState::VertexBuffer;
     bufferDesc.memoryCategory = RhiMemoryCategory::Geometry;
-    RhiDevice& rhiDevice = m_resourceMgr->rhiDevice();
+    RhiDevice& rhiDevice = *m_rhiDevice;
     mesh.rhiVertexBuffer =
         rhiDevice.createBuffer(bufferDesc, vertices.data(), vertices.size() * sizeof(ItemModelVertex));
     mesh.rhiDevice = &rhiDevice;
@@ -267,11 +267,11 @@ DropRenderer::Mesh* DropRenderer::getOrCreateBlockMesh(const BlockID blockId) {
 
 DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
     Mesh mesh;
-    if (m_resourceMgr == nullptr || blockId == 0) {
+    if (m_resources == nullptr || blockId == 0) {
         return mesh;
     }
 
-    renderer::BlockCubeMesh shared = renderer::buildBlockCubeMesh(blockId, *m_resourceMgr);
+    renderer::BlockCubeMesh shared = renderer::buildBlockCubeMesh(blockId, *m_resources, *m_rhiDevice);
     mesh.rhiVertexBuffer = shared.rhiVertexBuffer;
     mesh.rhiDevice = shared.rhiDevice;
     mesh.vertexCount = shared.vertexCount;
@@ -369,7 +369,7 @@ void DropRenderer::createItemGBufferRhiResources() {
     m_blockForwardFragmentShader =
         createShader("Drop.BlockForward.Fragment", RhiShaderStage::Fragment, *blockForwardFragmentSource);
     RhiTextureViewDesc textureViewDesc;
-    textureViewDesc.texture = m_resourceMgr->getItemTextureAtlas().texture;
+    textureViewDesc.texture = m_resources->uiTextures.itemTextureAtlas().texture;
     textureViewDesc.viewType = RhiTextureViewType::Texture2D;
     m_itemAtlasView = m_rhiDevice->createTextureView(textureViewDesc);
     RhiSamplerDesc samplerDesc;
@@ -379,8 +379,8 @@ void DropRenderer::createItemGBufferRhiResources() {
     samplerDesc.addressU = RhiAddressMode::Repeat;
     samplerDesc.addressV = RhiAddressMode::Repeat;
     m_blockSampler = m_rhiDevice->createSampler(samplerDesc);
-    const RhiTextureHandle blockTextures[] = {m_resourceMgr->getTextureArray().texture,
-                                              m_resourceMgr->getGrassColormap(), m_resourceMgr->getFoliageColormap()};
+    const RhiTextureHandle blockTextures[] = {m_resources->blockTextures.textureArray().texture,
+                                              m_resources->environmentTextures.getGrassColormap(), m_resources->environmentTextures.getFoliageColormap()};
     RhiTextureViewHandle* blockViews[] = {&m_blockTextureArrayView, &m_grassColormapView, &m_foliageColormapView};
     for (uint32_t index = 0u; index < 3u; ++index) {
         RhiTextureViewDesc viewDesc;

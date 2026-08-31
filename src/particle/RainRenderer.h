@@ -6,7 +6,7 @@
 #include <glm/glm.hpp>
 #include "renderer/rhi/RhiHandles.h"
 
-class ResourceMgr;
+struct GameResources;
 class RhiCommandList;
 class RhiDevice;
 
@@ -16,7 +16,7 @@ class RhiDevice;
 // Supports both rain and snow with separate drop pools and physics.
 class RainRenderer {
 public:
-    [[nodiscard]] bool init(ResourceMgr& resourceMgr);
+    [[nodiscard]] bool init(GameResources& resources, RhiDevice& rhiDevice);
     void shutdown();
     void prepareFrame(const glm::vec3& cameraPos, const glm::mat4& view, float rainStrength, float snowStrength,
                       float dt);

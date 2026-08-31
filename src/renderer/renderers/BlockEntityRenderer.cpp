@@ -14,7 +14,7 @@
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiShaderSourceLoader.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../world/IWorldView.h"
 #include "../../world/block/Block.h"
 #include "../../world/block/BlockStateRegistry.h"
@@ -136,9 +136,9 @@ float chestYawRadians(const BlockStateId stateId) {
 
 } // namespace
 
-bool BlockEntityRenderer::init(ResourceMgr& resourceMgr) {
-    m_resourceMgr = &resourceMgr;
-    m_rhiDevice = &resourceMgr.rhiDevice();
+bool BlockEntityRenderer::init(GameResources& resources, RhiDevice& rhiDevice) {
+    m_resources = &resources;
+    m_rhiDevice = &rhiDevice;
     if (!m_rhiInstanceBuffer.init(*m_rhiDevice, 256u * sizeof(InstancedDrawData), rhiFlag(RhiBufferUsage::Vertex),
                                   RhiMemoryCategory::SceneData, "BlockEntity.InstanceBuffer")) {
         return false;
@@ -155,7 +155,7 @@ bool BlockEntityRenderer::init(ResourceMgr& resourceMgr) {
     const BlockID chestBlock = BlockRegistry::requireIdByName("minecraft:chest");
 
     ModelDefinition chest = makeChestDefinition();
-    const RhiTextureHandle chestTexture = resourceMgr.getGuiTextureHandle(chest.textureKey);
+    const RhiTextureHandle chestTexture = resources.texture2D.getGuiHandle(chest.textureKey);
     if (!chestTexture.isValid()) {
         failBlockEntityRenderer("Chest block entity texture is not loaded");
     }
@@ -219,7 +219,7 @@ void BlockEntityRenderer::shutdown() {
     m_hasSyncedRevisions = false;
     m_instanceCacheSyncedThisFrame = false;
     m_instanceLightsSyncedThisFrame = false;
-    m_resourceMgr = nullptr;
+    m_resources = nullptr;
     m_rhiDevice = nullptr;
 }
 

@@ -1,19 +1,19 @@
 #include "ItemGridControl.h"
 
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 
-void ItemGridControl::init(ResourceMgr& resourceMgr) {
-    m_resourceMgr = &resourceMgr;
+void ItemGridControl::init(GameResources& resources, RhiDevice& rhiDevice) {
+    m_resources = &resources;
 }
 
 void ItemGridControl::shutdown() {
-    m_resourceMgr = nullptr;
+    m_resources = nullptr;
     m_hoveredIndex = -1;
     m_lastActivatedIndex = -1;
 }
 
 void ItemGridControl::renderSelf(const UIRenderContext& context) const {
-    if (!visible || !m_resourceMgr || m_slots.empty()) {
+    if (!visible || !m_resources || m_slots.empty()) {
         return;
     }
     if (context.screenWidth <= 0 || context.screenHeight <= 0) {
@@ -21,7 +21,7 @@ void ItemGridControl::renderSelf(const UIRenderContext& context) const {
     }
 
     Pickable::render(m_slots.data(), static_cast<int>(m_slots.size()), m_hoveredIndex, m_renderParams, context,
-                     *m_resourceMgr, m_resourceMgr->getItemIconAtlas(), m_resourceMgr->getItemTextureAtlas());
+                     *m_resources, m_resources->uiTextures.blockIconAtlas(), m_resources->uiTextures.itemTextureAtlas());
 }
 
 UIEventResult ItemGridControl::onInput(const UIInputEvent& event, const UIRenderContext& /*ctx*/) {

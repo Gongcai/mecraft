@@ -17,7 +17,7 @@
 #include "renderer/mesh/TerrainRenderCache.h"
 
 class DeferredRenderTargets;
-class ResourceMgr;
+struct GameResources;
 class RhiDevice;
 class IWorldView;
 class World;
@@ -43,7 +43,7 @@ class ShadowRenderer;
 /// Handles opaque terrain, cutout, entity, drop, and transparent shadow casting.
 class ShadowPass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr);
+    void init(GameResources& resources);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "Shadow"; }
 
@@ -153,7 +153,7 @@ private:
     FallingBlockRenderer* m_fallingBlockRenderer = nullptr;
     DropSystem* m_dropSystem = nullptr;
     ecs::GameplayRegistry* m_gameplayRegistry = nullptr;
-    ResourceMgr* m_resourceMgr = nullptr;
+    GameResources* m_resources = nullptr;
 
     std::array<std::vector<GpuMeshRange>, 4> m_cascadeOpaqueRanges;
     std::array<std::vector<GpuMeshRange>, 4> m_cascadeCutoutRanges;

@@ -14,7 +14,7 @@
 
 class Camera;
 class IWorldView;
-class ResourceMgr;
+struct GameResources;
 class RhiCommandList;
 class RhiDevice;
 class Window;
@@ -31,7 +31,7 @@ class GameplayRegistry;
 /// Reuses DropEntityIdComponent as the per-object velocity key.
 class FallingBlockRenderer {
 public:
-    [[nodiscard]] bool init(ResourceMgr& resourceMgr);
+    [[nodiscard]] bool init(GameResources& resources, RhiDevice& rhiDevice);
     void shutdown();
     [[nodiscard]] bool prepareFrame(const IWorldView& worldView, const ecs::GameplayRegistry& registry);
 
@@ -62,7 +62,7 @@ private:
     [[nodiscard]] bool createGBufferRhiResources();
     void destroyGBufferRhiResources();
 
-    ResourceMgr* m_resourceMgr = nullptr;
+    GameResources* m_resources = nullptr;
     RhiDevice* m_rhiDevice = nullptr;
     std::unordered_map<BlockStateId, renderer::BlockCubeMesh> m_meshes;
     // Per-object velocity: previous-frame model matrix per entity (by drop ID).

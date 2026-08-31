@@ -11,7 +11,7 @@
 #include <cstdint>
 
 class DeferredRenderTargets;
-class ResourceMgr;
+struct GameResources;
 class RhiDevice;
 
 /// SSAO render pass: half-res raw, bilateral filter, depth-aware upsample, temporal reprojection.
@@ -21,7 +21,7 @@ public:
     SsaoPass() = default;
     ~SsaoPass() override = default;
 
-    void init(ResourceMgr& resourceMgr);
+    void init(GameResources& resources);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "SSAO"; }
 

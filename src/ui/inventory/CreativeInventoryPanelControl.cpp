@@ -12,7 +12,7 @@
 #include "../../player/Inventory.h"
 #include "../../renderer/renderers/HumanoidRenderer.h"
 #include "../../renderer/rhi/RhiCommandList.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../ItemIconPolicy.h"
 #include "../core/UIRenderer.h"
 
@@ -62,14 +62,14 @@ CreativeInventoryPanelControl::CreativeInventoryPanelControl() {
     visible = false;
 }
 
-void CreativeInventoryPanelControl::init(ResourceMgr& resourceMgr) {
-    UIWidget::init(resourceMgr);
-    m_resourceMgr = &resourceMgr;
+void CreativeInventoryPanelControl::init(GameResources& resources, RhiDevice& rhiDevice) {
+    UIWidget::init(resources, rhiDevice);
+    m_resources = &resources;
 
-    m_inventoryGrid.init(resourceMgr);
-    m_creativeGrid.init(resourceMgr);
-    m_hotbarGrid.init(resourceMgr);
-    m_tooltip.init(resourceMgr);
+    m_inventoryGrid.init(resources, rhiDevice);
+    m_creativeGrid.init(resources, rhiDevice);
+    m_hotbarGrid.init(resources, rhiDevice);
+    m_tooltip.init(resources, rhiDevice);
 }
 
 void CreativeInventoryPanelControl::shutdown() {
@@ -79,7 +79,7 @@ void CreativeInventoryPanelControl::shutdown() {
     m_inventoryGrid.shutdown();
     m_creativeItems.clear();
     m_inventory = nullptr;
-    m_resourceMgr = nullptr;
+    m_resources = nullptr;
     m_lastActivatedSlot = -1;
     m_lastActivatedCreativeItem = 0;
     UIWidget::shutdown();
@@ -436,11 +436,11 @@ void CreativeInventoryPanelControl::clampScrollRow() {
 }
 
 void CreativeInventoryPanelControl::renderBackground(const UIRenderContext& context) const {
-    if (!m_resourceMgr) {
+    if (!m_resources) {
         return;
     }
 
-    const RhiTextureHandle texture = m_resourceMgr->getGuiTextureHandle(
+    const RhiTextureHandle texture = m_resources->texture2D.getGuiHandle(
         m_tab == CreativeInventoryTab::AllItems ? "creative_tab_items" : "creative_tab_inventory");
     if (!texture.isValid()) {
         return;
@@ -473,14 +473,14 @@ void CreativeInventoryPanelControl::renderPlayerPreview(const UIRenderContext& c
 
 void CreativeInventoryPanelControl::renderTabs(const UIRenderContext& context,
                                                const ResolvedPanelRect& panelRect) const {
-    if (!m_resourceMgr) {
+    if (!m_resources) {
         return;
     }
 
     for (int i = 1; i <= kTabCount; ++i) {
         const bool top = true;
         const bool selected = (m_tab == CreativeInventoryTab::AllItems && i == 1);
-        const RhiTextureHandle texture = m_resourceMgr->getGuiTextureHandle(tabTextureName(top, selected, i));
+        const RhiTextureHandle texture = m_resources->texture2D.getGuiHandle(tabTextureName(top, selected, i));
         if (!texture.isValid()) {
             continue;
         }
@@ -492,7 +492,7 @@ void CreativeInventoryPanelControl::renderTabs(const UIRenderContext& context,
     for (int i = 1; i <= kTabCount; ++i) {
         const bool top = false;
         const bool selected = (m_tab == CreativeInventoryTab::PlayerInventory && i == kTabCount);
-        const RhiTextureHandle texture = m_resourceMgr->getGuiTextureHandle(tabTextureName(top, selected, i));
+        const RhiTextureHandle texture = m_resources->texture2D.getGuiHandle(tabTextureName(top, selected, i));
         if (!texture.isValid()) {
             continue;
         }
@@ -504,13 +504,13 @@ void CreativeInventoryPanelControl::renderTabs(const UIRenderContext& context,
 
 void CreativeInventoryPanelControl::renderScroller(const UIRenderContext& context,
                                                    const ResolvedPanelRect& panelRect) const {
-    if (!m_resourceMgr) {
+    if (!m_resources) {
         return;
     }
 
     const bool enabled = scrollerEnabled();
     const RhiTextureHandle texture =
-        m_resourceMgr->getGuiTextureHandle(enabled ? "creative_scroller" : "creative_scroller_disabled");
+        m_resources->texture2D.getGuiHandle(enabled ? "creative_scroller" : "creative_scroller_disabled");
     if (!texture.isValid()) {
         return;
     }
@@ -525,19 +525,19 @@ void CreativeInventoryPanelControl::renderScroller(const UIRenderContext& contex
 }
 
 void CreativeInventoryPanelControl::renderDraggedItem(const UIRenderContext& context) const {
-    if (!context.hasDraggedItem || context.draggedItemId <= 0 || !m_resourceMgr) {
+    if (!context.hasDraggedItem || context.draggedItemId <= 0 || !m_resources) {
         return;
     }
 
-    const TextureAtlas& itemIconAtlas = m_resourceMgr->getItemIconAtlas();
-    const TextureAtlas& itemTextureAtlas = m_resourceMgr->getItemTextureAtlas();
+    const TextureAtlas& itemIconAtlas = m_resources->uiTextures.blockIconAtlas();
+    const TextureAtlas& itemTextureAtlas = m_resources->uiTextures.itemTextureAtlas();
 
     const auto draggedItem = static_cast<ItemID>(context.draggedItemId);
     const ItemDef& itemDef = ItemRegistry::get(draggedItem);
     const bool useBakedBlockIcon = ui::shouldUseBakedBlockIcon(itemDef);
     const TextureAtlas& atlas = useBakedBlockIcon ? itemIconAtlas : itemTextureAtlas;
     const int tileIndex = useBakedBlockIcon ? static_cast<int>(itemDef.renderBlock)
-                                            : m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
+                                            : m_resources->uiTextures.itemTextureIndex(itemDef.iconTextureName);
     if (!atlas.texture.isValid() || atlas.tilesPerRow <= 0 || tileIndex < 0) {
         return;
     }

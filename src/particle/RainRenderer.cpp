@@ -6,7 +6,7 @@
 #include <random>
 #include <glm/gtc/random.hpp>
 
-#include "../resource/ResourceMgr.h"
+#include "../resource/GameResources.h"
 #include "../renderer/rhi/RhiCommandList.h"
 #include "../renderer/rhi/RhiDevice.h"
 #include "../renderer/rhi/RhiShaderSourceLoader.h"
@@ -27,10 +27,10 @@ struct RainPushConstants {
 }
 } // namespace
 
-bool RainRenderer::init(ResourceMgr& resourceMgr) {
-    m_rhiDevice = &resourceMgr.rhiDevice();
-    m_rainTex = resourceMgr.getTexture2DHandle("rain");
-    m_snowTex = resourceMgr.getTexture2DHandle("snow");
+bool RainRenderer::init(GameResources& resources, RhiDevice& rhiDevice) {
+    m_rhiDevice = &rhiDevice;
+    m_rainTex = resources.texture2D.getHandle("rain");
+    m_snowTex = resources.texture2D.getHandle("snow");
     if (!m_rainTex.isValid() || !m_snowTex.isValid()) {
         shutdown();
         return false;

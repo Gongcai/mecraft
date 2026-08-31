@@ -1,13 +1,13 @@
 #ifndef MECRAFT_GAME_RESOURCE_BOOTSTRAPPER_H
 #define MECRAFT_GAME_RESOURCE_BOOTSTRAPPER_H
 
-class ResourceMgr;
+struct GameResources;
 class RhiDevice;
 class RhiCommandListPool;
 
 namespace app {
 
-[[nodiscard]] bool bootstrapGameResources(ResourceMgr& resourceMgr, RhiDevice& rhiDevice,
+[[nodiscard]] bool bootstrapGameResources(GameResources& resources, RhiDevice& rhiDevice,
                                           RhiCommandListPool& commandListPool);
 
 } // namespace app

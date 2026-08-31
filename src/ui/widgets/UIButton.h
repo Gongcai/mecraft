@@ -14,7 +14,7 @@ class UIButton : public UIWidget {
 public:
     UIButton();
 
-    void init(ResourceMgr& resourceMgr) override;
+    void init(GameResources& resources, RhiDevice& rhiDevice) override;
     void shutdown() override;
 
     // Configuration

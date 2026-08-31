@@ -20,14 +20,14 @@ void GameClient::connect(std::unique_ptr<net::ITransportEndpoint> transport) {
     sendHello();
 }
 
-void GameClient::initEntityStore(entt::registry& registry, ResourceMgr* resourceMgr) {
+void GameClient::initEntityStore(entt::registry& registry, GameResources* resources) {
     m_ecsRegistry = &registry;
-    m_entityStore.init(registry, resourceMgr);
+    m_entityStore.init(registry, resources);
 }
 
-void GameClient::initEntityStore(ecs::GameplayRegistry& registry, ResourceMgr* resourceMgr) {
+void GameClient::initEntityStore(ecs::GameplayRegistry& registry, GameResources* resources) {
     m_ecsRegistry = &registry.registry();
-    m_entityStore.init(registry, resourceMgr);
+    m_entityStore.init(registry, resources);
 }
 
 void GameClient::sendHello() {

@@ -24,7 +24,7 @@
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiCommandListPool.h"
 #include "renderer/rhi/RhiDevice.h"
-#include "resource/ResourceMgr.h"
+#include "resource/GameResources.h"
 #include "ui/imgui/ImGuiRhiRenderer.h"
 
 namespace {
@@ -130,12 +130,14 @@ ModelSceneRuntime::~ModelSceneRuntime() {
 
 ModelSceneRuntime::ModelSceneRuntime() = default;
 
-bool ModelSceneRuntime::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice, RhiCommandListPool& commandListPool,
+bool ModelSceneRuntime::init(GameResources& resources, RhiDevice& rhiDevice, RhiCommandListPool& commandListPool,
                              ImGuiRhiRenderer& imguiRenderer) {
     shutdown();
-    m_resourceMgr = &resourceMgr;
+    m_resources = &resources;
+    m_rhiDevice = &rhiDevice;
+    m_commandListPool = &commandListPool;
     m_deferredRenderer = std::make_unique<ModelSceneDeferredRenderer>();
-    if (!m_deferredRenderer->init(resourceMgr, rhiDevice, commandListPool, imguiRenderer, *this)) {
+    if (!m_deferredRenderer->init(resources, rhiDevice, commandListPool, imguiRenderer, *this)) {
         const std::string error = m_deferredRenderer->lastError();
         shutdown();
         m_lastError = error;
@@ -717,7 +719,7 @@ std::string ModelSceneRuntime::makeUniqueInstanceName(const std::string& baseNam
 }
 
 entt::entity ModelSceneRuntime::importModel(const std::string& path) {
-    if (m_resourceMgr == nullptr || path.empty()) {
+    if (m_resources == nullptr || path.empty()) {
         setError("model import requires a non-empty asset path");
         return entt::null;
     }
@@ -739,7 +741,7 @@ entt::entity ModelSceneRuntime::importModel(const std::string& path) {
     });
     scene::SceneAssetId assetId = scene::kInvalidSceneAssetId;
     if (existing == m_assets.end()) {
-        if (!loadMeshAsset(*m_resourceMgr, name, normalizedPath, assetId)) {
+        if (!loadMeshAsset(name, normalizedPath, assetId)) {
             return entt::null;
         }
     } else {
@@ -991,7 +993,9 @@ void ModelSceneRuntime::shutdown() {
         m_deferredRenderer.reset();
     }
     clearScene();
-    m_resourceMgr = nullptr;
+    m_resources = nullptr;
+    m_rhiDevice = nullptr;
+    m_commandListPool = nullptr;
 }
 
 void ModelSceneRuntime::clearScene() {
@@ -1290,7 +1294,7 @@ bool ModelSceneRuntime::generateReflectionProbeGrid(const float spacingMeters, c
 }
 
 bool ModelSceneRuntime::loadDocument(const scene::ModelSceneDocument& document) {
-    if (m_resourceMgr == nullptr || !m_deferredRenderer) {
+    if (m_resources == nullptr || !m_deferredRenderer) {
         setError("scene document loading requires an initialized model scene");
         return false;
     }
@@ -1332,7 +1336,7 @@ bool ModelSceneRuntime::loadDocument(const scene::ModelSceneDocument& document) 
     loadedAssetIndices.reserve(document.assets.size());
     for (const scene::SceneAssetDocument& entry : document.assets) {
         MeshAsset asset;
-        if (!createMeshAsset(*m_resourceMgr, entry.id, entry.name, entry.path, asset)) {
+        if (!createMeshAsset(entry.id, entry.name, entry.path, asset)) {
             for (MeshAsset& loaded : loadedAssets) {
                 loaded.renderer->shutdown();
             }
@@ -1445,7 +1449,7 @@ bool ModelSceneRuntime::loadDocument(const scene::ModelSceneDocument& document) 
     return true;
 }
 
-bool ModelSceneRuntime::loadMeshAsset(ResourceMgr& resourceMgr, const std::string& name, const std::string& path,
+bool ModelSceneRuntime::loadMeshAsset(const std::string& name, const std::string& path,
                                       scene::SceneAssetId& assetId) {
     if (m_nextAssetId == std::numeric_limits<scene::SceneAssetId>::max()) {
         setError("model scene asset ID space is exhausted");
@@ -1453,7 +1457,7 @@ bool ModelSceneRuntime::loadMeshAsset(ResourceMgr& resourceMgr, const std::strin
     }
     MeshAsset asset;
     assetId = m_nextAssetId;
-    if (!createMeshAsset(resourceMgr, assetId, name, path, asset)) {
+    if (!createMeshAsset(assetId, name, path, asset)) {
         return false;
     }
     ++m_nextAssetId;
@@ -1463,10 +1467,10 @@ bool ModelSceneRuntime::loadMeshAsset(ResourceMgr& resourceMgr, const std::strin
     return true;
 }
 
-bool ModelSceneRuntime::createMeshAsset(ResourceMgr& resourceMgr, const scene::SceneAssetId assetId,
-                                        const std::string& name, const std::string& path, MeshAsset& asset) {
+bool ModelSceneRuntime::createMeshAsset(const scene::SceneAssetId assetId, const std::string& name,
+                                        const std::string& path, MeshAsset& asset) {
     auto renderer = std::make_unique<StaticMeshRenderer>();
-    if (!renderer->init(resourceMgr, path, m_deferredRenderer->globalBindlessSet())) {
+    if (!renderer->init(*m_rhiDevice, *m_commandListPool, path, m_deferredRenderer->globalBindlessSet())) {
         setError(renderer->lastError());
         return false;
     }

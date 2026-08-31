@@ -14,7 +14,7 @@
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/RhiResources.h"
-#include "resource/ResourceMgr.h"
+#include "resource/GameResources.h"
 #include "world/DropSystem.h"
 #include "world/IWorldView.h"
 #include "ecs/GameplayRegistry.h"
@@ -85,8 +85,8 @@ namespace {
 
 } // namespace
 
-void LocalShadowPass::init(ResourceMgr& resourceMgr) {
-    m_resourceMgr = &resourceMgr;
+void LocalShadowPass::init(GameResources& resources) {
+    m_resources = &resources;
 }
 
 void LocalShadowPass::setSceneLights(std::vector<renderer::contracts::SceneLight> lights) {
@@ -95,7 +95,7 @@ void LocalShadowPass::setSceneLights(std::vector<renderer::contracts::SceneLight
 
 bool LocalShadowPass::prepareGraphFrame(const FrameContext& ctx, const IWorldView* worldView) {
     using namespace renderer::contracts;
-    if (m_graphFramePrepared || m_resourceMgr == nullptr || ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+    if (m_graphFramePrepared || m_resources == nullptr || ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         ctx.shared->rhiDevice->backend() != RhiBackend::Vulkan) {
         m_lastError = "local shadow frame prerequisites are incomplete";
         return false;
@@ -623,7 +623,7 @@ bool LocalShadowPass::prepareWorldGeometry(RhiCommandList& commandList, const Pr
     frame.animationTime = ctx.animationTime;
     frame.shaderTime = ctx.shaderTime;
     frame.passMode = 0;
-    return ctx.shared->terrainRhiPipelines->prepareShadow(commandList, *m_resourceMgr, frame) &&
+    return ctx.shared->terrainRhiPipelines->prepareShadow(commandList, *m_resources, frame) &&
            m_worldRenderBuffer->prepareRhiOpaqueAndCutout(commandList,
                                                           ctx.shared->terrainRhiPipelines->shadowMetadataLayout());
 }
@@ -894,7 +894,7 @@ void LocalShadowPass::shutdown() {
     m_allocations.clear();
     m_frameContext = nullptr;
     m_worldView = nullptr;
-    m_resourceMgr = nullptr;
+    m_resources = nullptr;
     m_rhiDevice = nullptr;
     m_graphFramePrepared = false;
     m_frameStats = {};

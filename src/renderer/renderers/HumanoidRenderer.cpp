@@ -18,7 +18,7 @@
 
 #include "engine/camera/Camera.h"
 #include "engine/platform/Window.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../ecs/GameplayRegistry.h"
 #include "../../ecs/entity/EntitySkinLayout.h"
 #include "../../world/IWorldView.h"
@@ -252,7 +252,7 @@ const HumanoidRenderer::TextureResource* HumanoidRenderer::requireTextureResourc
         return nullptr;
     }
     resource.materialId = *materialId;
-    resource.texture = m_resourceMgr->getGuiTextureHandle(textureKey);
+    resource.texture = m_resources->texture2D.getGuiHandle(textureKey);
     if (!resource.texture.isValid()) {
         std::abort();
     }
@@ -300,8 +300,8 @@ const HumanoidRenderer::TextureResource* HumanoidRenderer::requireTextureResourc
     return &m_textureResources.emplace(textureKey, resource).first->second;
 }
 
-bool HumanoidRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
-    m_resourceMgr = &resourceMgr;
+bool HumanoidRenderer::init(GameResources& resources, RhiDevice& rhiDevice) {
+    m_resources = &resources;
     m_rhiDevice = &rhiDevice;
     createGBufferRhiResources();
     if (requireTextureResource("steve") == nullptr) {
@@ -349,7 +349,7 @@ void HumanoidRenderer::shutdown() {
     }
     m_entityModelPartMeshes.clear();
     m_rhiDevice = nullptr;
-    m_resourceMgr = nullptr;
+    m_resources = nullptr;
 }
 
 bool HumanoidRenderer::prepareFrame(const IWorldView& worldView, ecs::GameplayRegistry& gameplayRegistry,

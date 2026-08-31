@@ -7,12 +7,12 @@
 #include "renderer/rhi/RhiHandles.h"
 #include "../core/UIWidget.h"
 
-class ResourceMgr;
+struct GameResources;
 class RhiDevice;
 
 class CrosshairControl : public UIWidget {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(GameResources& resources, RhiDevice& rhiDevice) override;
     void shutdown() override;
 
     void setSize(float size);

@@ -14,11 +14,11 @@ public:
     UIImage() = default;
     ~UIImage() override { UIImage::shutdown(); }
 
-    void init(ResourceMgr& resourceMgr) override;
+    void init(GameResources& resources, RhiDevice& rhiDevice) override;
     void shutdown() override;
 
     // Load a named GUI texture by path, automatically sets widget size to image dimensions
-    void loadTexture(ResourceMgr& resourceMgr, const std::string& name, const std::string& path);
+    void loadTexture(GameResources& resources, const std::string& name, const std::string& path);
 
     // Set texture from an atlas tile index
     void setAtlasTile(const TextureAtlas& atlas, int tileIndex);

@@ -20,7 +20,7 @@ public:
     void updateAnimations(float dt) override;
 
 protected:
-    void buildUI(ResourceMgr& resourceMgr) override;
+    void buildUI(GameResources& resources, RhiDevice& rhiDevice) override;
     void onSceneEnter() override;
     void onSceneExit() override;
 

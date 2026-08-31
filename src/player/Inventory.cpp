@@ -97,7 +97,7 @@ void Inventory::setSlotItem(const int slot, const ItemID item, const uint16_t co
     stack.itemId = item;
     stack.count = count;
     // Avoid touching ItemRegistry here: Inventory can be constructed before BlockRegistry
-    // is fully initialized with ResourceMgr, and early ItemRegistry access would lock blocks
+    // is fully initialized with GameResources, and early ItemRegistry access would lock blocks
     // into fallback texture index 0 for the whole run.
     // NOTE: durability is intentionally left as 0 here for the same reason.
     // Callers that need proper durability (e.g. addItem) set it explicitly.

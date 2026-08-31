@@ -3,7 +3,7 @@
 #include <algorithm>
 
 #include "../font/TextRenderer.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../renderer/rhi/RhiCommandList.h"
 #include "../../renderer/rhi/RhiDevice.h"
 #include "../../renderer/rhi/RhiShaderSourceLoader.h"
@@ -35,8 +35,8 @@ UIToast::~UIToast() {
     shutdown();
 }
 
-void UIToast::init(ResourceMgr& resourceMgr) {
-    m_rhiDevice = &resourceMgr.rhiDevice();
+void UIToast::init(GameResources& resources, RhiDevice& rhiDevice) {
+    m_rhiDevice = &rhiDevice;
     const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
     const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
     if (!vertexSource || !fragmentSource)
@@ -90,7 +90,7 @@ void UIToast::init(ResourceMgr& resourceMgr) {
         !m_pipeline.isValid() || !m_vertexBuffer.isValid())
         std::abort();
 
-    UIWidget::init(resourceMgr);
+    UIWidget::init(resources, rhiDevice);
 }
 
 void UIToast::shutdown() {

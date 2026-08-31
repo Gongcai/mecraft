@@ -19,7 +19,7 @@ public:
     UIModal();
     ~UIModal() override;
 
-    void init(ResourceMgr& resourceMgr) override;
+    void init(GameResources& resources, RhiDevice& rhiDevice) override;
     void shutdown() override;
 
     void setTitle(const std::string& title);

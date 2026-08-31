@@ -8,14 +8,14 @@
 #include "../widgets/ConsoleDisplayBox.h"
 #include "../core/UIWidget.h"
 
-class ResourceMgr;
+struct GameResources;
 class RhiDevice;
 class TextRenderer;
 struct UITheme;
 
 class ConsoleOverlay : public UIWidget {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(GameResources& resources, RhiDevice& rhiDevice) override;
     void shutdown() override;
 
     void appendLine(const std::string& message, double createdAtSec,

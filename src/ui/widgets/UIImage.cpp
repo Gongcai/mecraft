@@ -6,7 +6,7 @@
 #include <glm/vec4.hpp>
 
 #include "../../renderer/rhi/RhiCommandList.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../core/UIRenderer.h"
 
 namespace {
@@ -40,17 +40,17 @@ static_assert(sizeof(ImageSolidPushConstants) == 48u);
 
 } // namespace
 
-void UIImage::init(ResourceMgr& resourceMgr) {
-    UIWidget::init(resourceMgr);
+void UIImage::init(GameResources& resources, RhiDevice& rhiDevice) {
+    UIWidget::init(resources, rhiDevice);
 }
 
 void UIImage::shutdown() {
     UIWidget::shutdown();
 }
 
-void UIImage::loadTexture(ResourceMgr& resourceMgr, const std::string& name, const std::string& path) {
+void UIImage::loadTexture(GameResources& resources, const std::string& name, const std::string& path) {
     int imgW = 0, imgH = 0;
-    const RhiTextureHandle texture = resourceMgr.loadGuiTexture(name, path, imgW, imgH);
+    const RhiTextureHandle texture = resources.texture2D.loadGui(name, path, imgW, imgH);
     setTexture(texture, 0.0f, 0.0f, 1.0f, 1.0f);
     if (imgW > 0 && imgH > 0) {
         width = static_cast<float>(imgW);

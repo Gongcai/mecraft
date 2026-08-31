@@ -54,7 +54,7 @@ class InventoryPanelControl : public UIWidget {
 public:
     InventoryPanelControl() { visible = false; }
 
-    void init(ResourceMgr& resourceMgr) override;
+    void init(GameResources& resources, RhiDevice& rhiDevice) override;
     void shutdown() override;
 
     UIEventResult onInput(const UIInputEvent& event, const UIRenderContext& ctx) override;
@@ -100,7 +100,7 @@ private:
     CraftingGridControl m_craftingGrid;
     bool m_useExternalSlots = false;
 
-    ResourceMgr* m_resourceMgr = nullptr;
+    GameResources* m_resources = nullptr;
     int m_cachedScreenWidth = 1920;
     int m_cachedScreenHeight = 1080;
 

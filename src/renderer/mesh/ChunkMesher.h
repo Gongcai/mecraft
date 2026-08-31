@@ -8,7 +8,7 @@
 
 #include <glm/vec3.hpp>
 
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../world/chunk/Chunk.h"
 #include "../../world/redstone/WireContainerParts.h"
 

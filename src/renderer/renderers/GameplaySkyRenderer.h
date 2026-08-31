@@ -11,7 +11,6 @@
 
 class Camera;
 class DayNightSystem;
-class ResourceMgr;
 class RhiDevice;
 class RhiCommandList;
 
@@ -77,7 +76,7 @@ public:
         glm::vec3 cameraPosition = glm::vec3(0.0f);
     };
 
-    void init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
+    void init(RhiDevice& rhiDevice);
     void shutdown();
     void render(const Camera& camera, float aspect, const DayNightSystem& dayNight, RhiCommandList& commandList);
     void renderCloudySkyCapture(const SkyColors& colors, RhiCommandList& commandList, RhiTextureViewHandle targetView,
@@ -129,7 +128,7 @@ private:
     [[nodiscard]] glm::mat4 buildSkyView(const Camera& camera) const;
     [[nodiscard]] glm::vec3 directionFromAngle(float angleRadians) const;
 
-    ResourceMgr* m_resourceMgr = nullptr;
+    
     RhiDevice* m_rhiDevice = nullptr;
     RhiBufferHandle m_skyVertexBuffer;
     RhiBufferHandle m_haloVertexBuffer;

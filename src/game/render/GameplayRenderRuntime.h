@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <memory>
 
-class ResourceMgr;
+struct GameResources;
 class GameSession;
 class UIRenderer;
 class RenderResourceHub;
@@ -39,7 +39,7 @@ public:
     GameplayRenderRuntime& operator=(const GameplayRenderRuntime&) = delete;
 
     /// Initialize all renderers and connect to session systems.
-    [[nodiscard]] bool init(ResourceMgr& resourceMgr, GameSession& session, UIRenderer& uiRenderer,
+    [[nodiscard]] bool init(GameResources& resources, GameSession& session, UIRenderer& uiRenderer,
                             ThreadPool& threadPool, Window& window, RhiDevice& rhiDevice,
                             RhiCommandListPool& commandListPool, GameRenderSettingsSource settingsSource,
                             const RenderSettings& fixedSettings);

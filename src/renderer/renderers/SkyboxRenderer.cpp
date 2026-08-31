@@ -11,7 +11,7 @@
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../rhi/RhiShaderSourceLoader.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 
 namespace {
 constexpr float kCubeVertices[] = {
@@ -188,13 +188,13 @@ void beginSkyboxBlurOutput(RhiCommandList& commandList, const char* debugName, c
 }
 } // namespace
 
-void SkyboxRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
+void SkyboxRenderer::init(GameResources& resources, RhiDevice& rhiDevice, RhiCommandListPool& commandListPool) {
     if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
         shutdown();
     }
     m_rhiDevice = &rhiDevice;
-    m_commandListPool = &resourceMgr.commandListPool();
-    m_cubemapTexture = resourceMgr.getCubemap("menu_skybox");
+    m_commandListPool = &commandListPool;
+    m_cubemapTexture = resources.cubemaps.get("menu_skybox");
     if (!m_cubemapTexture.isValid())
         std::abort();
     RhiTextureViewDesc cubemapViewDesc;

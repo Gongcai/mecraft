@@ -12,7 +12,7 @@
 #include "../renderers/HumanoidRenderer.h"
 #include "../renderers/DropRenderer.h"
 #include "../renderers/FallingBlockRenderer.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../resource/GameResources.h"
 #include "../../ecs/GameplayRegistry.h"
 #include "../../world/IWorldView.h"
 
@@ -92,8 +92,8 @@ void endObjectGBufferRendering(RhiCommandList& commandList) {
 }
 } // namespace
 
-void GBufferPass::init(ResourceMgr& resourceMgr) {
-    (void)resourceMgr;
+void GBufferPass::init(GameResources& resources) {
+    (void)resources;
 }
 
 void GBufferPass::shutdown() {}

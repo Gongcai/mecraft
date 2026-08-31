@@ -7,7 +7,7 @@
 #include "renderer/rhi/RhiHandles.h"
 #include "../world/block/Block.h"
 
-class ResourceMgr;
+struct GameResources;
 class RhiCommandList;
 class RhiDevice;
 struct TextureArray;
@@ -20,7 +20,7 @@ class ParticleSystem {
 public:
     void bindRegistry(ecs::GameplayRegistry& registry);
 
-    [[nodiscard]] bool init(ResourceMgr& resourceMgr);
+    [[nodiscard]] bool init(GameResources& resources, RhiDevice& rhiDevice);
     void shutdown();
 
     void emit(const glm::ivec3& blockPos, BlockID blockType);
