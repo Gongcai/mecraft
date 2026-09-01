@@ -200,6 +200,7 @@ private:
     double m_graphCpuSubmitMs = 0.0;
     double m_graphCpuShadowPrepMs = 0.0;
     double m_graphCpuTerrainPrepMs = 0.0;
+    double m_graphCpuFeaturePrepMs = 0.0;
     double m_sceneTlasPrepareCpuMs = 0.0;
     double m_rtgiSceneTlasBootstrapCpuMs = 0.0;
     uint64_t m_accelerationStructureFrameSequence = 0u;

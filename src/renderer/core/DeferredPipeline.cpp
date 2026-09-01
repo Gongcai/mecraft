@@ -1291,6 +1291,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         return false;
     };
 
+    const auto featurePrepStart = std::chrono::steady_clock::now();
     if (clusteredLightingActive) {
         if (m_localShadowPass == nullptr || m_clusteredLightingPass == nullptr) {
             return failGraphSetup(__LINE__);
@@ -1326,6 +1327,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             return failGraphSetup(__LINE__);
         }
     }
+    m_graphCpuFeaturePrepMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - featurePrepStart).count();
 
 #if defined(MECRAFT_ENABLE_NRD)
     if (!nrdEnabled && m_nrdBridge->initialized()) {
@@ -3243,6 +3246,7 @@ RenderGraphFrameStats DeferredPipeline::renderGraphFrameStats() const {
     stats.cpuSubmitMs = m_graphCpuSubmitMs;
     stats.cpuShadowPrepMs = m_graphCpuShadowPrepMs;
     stats.cpuTerrainPrepMs = m_graphCpuTerrainPrepMs;
+    stats.cpuFeaturePrepMs = m_graphCpuFeaturePrepMs;
     stats.submitCount = m_graphSubmitCount;
     stats.workerRecordedBatches = m_graphWorkerRecordedBatchCount;
     stats.passCount = static_cast<uint32_t>(m_renderGraph.compiledPasses().size());

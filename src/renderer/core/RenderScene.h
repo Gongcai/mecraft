@@ -398,6 +398,11 @@ private:
     float m_scenePreExposure = 1.0f;
     TemporalResetReasons m_pendingTemporalResetReasons = temporalResetReasonBit(TemporalResetReason::FirstFrame);
     double m_contextCpuMs = 0.0;
+    double m_frameBeginCpuMs = 0.0;
+    double m_voxelLightsCpuMs = 0.0;
+    double m_overlayCpuMs = 0.0;
+    double m_temporalUpscaleCpuMs = 0.0;
+    double m_postProcessCpuMs = 0.0;
     bool m_eyeInWater = false;
     bool m_renderLocalPlayerModel = false;
     renderer::lighting::VoxelLightRegistry m_voxelLightRegistry;

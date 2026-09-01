@@ -532,6 +532,18 @@ struct RenderGraphFrameStats {
     double cpuContextMs = 0.0;
     /// Terrain collection and indirect upload inside the Record window.
     double cpuTerrainPrepMs = 0.0;
+    /// Frame-begin graph, TLAS publication and streaming kick-off in RenderScene.
+    double cpuFrameBeginMs = 0.0;
+    /// Voxel light snapshot construction in RenderScene (deferred path only).
+    double cpuVoxelLightsMs = 0.0;
+    /// Local shadow and clustered lighting preparation before graph build.
+    double cpuFeaturePrepMs = 0.0;
+    /// Overlay graph: held item, block interaction and precipitation.
+    double cpuOverlayMs = 0.0;
+    /// Temporal upscale pass target setup and execution.
+    double cpuTemporalUpscaleMs = 0.0;
+    /// Post-process composite to the backbuffer.
+    double cpuPostProcessMs = 0.0;
     /// Sum of measured pass durations.
     double gpuTotalMs = 0.0;
     /// Last pass end minus first pass begin on the GPU clock.

@@ -1123,6 +1123,10 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub& render, Re
                         graphStats.cpuCompileMs, graphStats.cpuRecordMs, graphStats.cpuSubmitMs);
             ImGui::Text("CPU ShadowPrep: %.3f ms  Context: %.3f ms  TerrainPrep: %.3f ms", graphStats.cpuShadowPrepMs,
                         graphStats.cpuContextMs, graphStats.cpuTerrainPrepMs);
+            ImGui::Text("CPU Pre-graph: FrameBegin: %.3f ms  VoxelLights: %.3f ms  FeaturePrep: %.3f ms",
+                        graphStats.cpuFrameBeginMs, graphStats.cpuVoxelLightsMs, graphStats.cpuFeaturePrepMs);
+            ImGui::Text("CPU Post-graph: Overlay: %.3f ms  TemporalUpscale: %.3f ms  PostProcess: %.3f ms",
+                        graphStats.cpuOverlayMs, graphStats.cpuTemporalUpscaleMs, graphStats.cpuPostProcessMs);
             ImGui::Text("Passes: %u  Batches: %u  Submits: %u  MT batches: %u", graphStats.passCount,
                         graphStats.batchCount, graphStats.submitCount, graphStats.workerRecordedBatches);
             if (m_displayHiZCullStats.valid) {

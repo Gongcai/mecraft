@@ -290,6 +290,7 @@ bool RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera,
     if (m_shared.commandListPool == nullptr || m_shared.rhiDevice == nullptr) {
         std::abort();
     }
+    const auto frameBeginStart = std::chrono::steady_clock::now();
     if (!executeFrameBeginGraph()) {
         MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Frame-begin graph execution failed\n");
         return false;
@@ -304,6 +305,8 @@ bool RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera,
     if (m_blockEntityRenderer != nullptr) {
         m_blockEntityRenderer->beginFrame();
     }
+    m_frameBeginCpuMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - frameBeginStart).count();
 
     // Build frame context
     const auto contextBuildStart = std::chrono::steady_clock::now();
@@ -607,6 +610,7 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     float cameraRainVisibility = 1.0f;
 
     const bool voxelLightSnapshotRequired = getPipelineMode() == PipelineMode::Deferred;
+    const auto voxelLightsStart = std::chrono::steady_clock::now();
     if (voxelLightSnapshotRequired) {
         std::vector<renderer::contracts::SceneLight> lights;
         if (!m_voxelLightRegistry.buildSceneLights(request.worldView, request.camera.getPosition(), lights)) {
@@ -619,17 +623,24 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
             return false;
         }
     }
+    m_voxelLightsCpuMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - voxelLightsStart).count();
 
     if (!renderFrame(request.worldView, request.camera, request.window, frameRenderSize, displaySize, frameAspectRatio,
                      request.dayNightSystem, request.weatherSystem, request.frameClock)) {
         return false;
     }
-    if (!executeSceneOverlayGraph(request, frameRenderSize, lightDebugActive, cameraRainVisibility)) {
+    const auto overlayStart = std::chrono::steady_clock::now();
+    const bool overlaySucceeded = executeSceneOverlayGraph(request, frameRenderSize, lightDebugActive, cameraRainVisibility);
+    m_overlayCpuMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - overlayStart).count();
+    if (!overlaySucceeded) {
         MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Scene overlay graph execution failed\n");
         m_terrainStreamingService.endFrame();
         return false;
     }
 
+    const auto temporalUpscaleStart = std::chrono::steady_clock::now();
     if (!m_temporalUpscalePass.prepareOutputTarget(m_settings.upscale, m_currentContext.temporalExtents.renderExtent,
                                                    m_currentContext.temporalExtents.outputExtent)) {
         MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Failed to prepare temporal HDR output target\n");
@@ -662,7 +673,10 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         m_terrainStreamingService.endFrame();
         return false;
     }
+    m_temporalUpscaleCpuMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - temporalUpscaleStart).count();
 
+    const auto postProcessStart = std::chrono::steady_clock::now();
     if (skipPostProcess) {
         if (!m_postProcessPass.blitSceneCaptureToBackbuffer(*m_shared.rhiDevice, m_currentContext.swapchainColorView,
                                                             m_debugService, true)) {
@@ -715,6 +729,8 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
             }
         }
     }
+    m_postProcessCpuMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - postProcessStart).count();
 
     m_terrainStreamingService.endFrame();
     return true;
@@ -1057,6 +1073,11 @@ RenderGraphFrameStats RenderScene::renderGraphFrameStats() const {
     }
     RenderGraphFrameStats stats = m_deferredPipeline->renderGraphFrameStats();
     stats.cpuContextMs = m_contextCpuMs;
+    stats.cpuFrameBeginMs = m_frameBeginCpuMs;
+    stats.cpuVoxelLightsMs = m_voxelLightsCpuMs;
+    stats.cpuOverlayMs = m_overlayCpuMs;
+    stats.cpuTemporalUpscaleMs = m_temporalUpscaleCpuMs;
+    stats.cpuPostProcessMs = m_postProcessCpuMs;
     stats.completeGpuFrame = m_debugService.getGpuFrameSpanStats();
     return stats;
 }
