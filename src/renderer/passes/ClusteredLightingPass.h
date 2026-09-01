@@ -230,6 +230,10 @@ private:
     uint32_t m_pendingStatsReadbackIndex = 0u;
     bool m_statsReadbackSlotAvailable = true;
     bool m_statsReadbackPending = false;
+    // Last graph submission that may still read or write the single-buffered
+    // persistent build buffers. The next prepare call blocks on it because
+    // the buffers are shared across in-flight frames.
+    RhiSubmissionToken m_lastBuildToken;
     ClusteredLightingFrameStats m_frameStats;
 };
 

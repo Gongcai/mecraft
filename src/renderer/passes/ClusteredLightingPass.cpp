@@ -197,6 +197,14 @@ bool ClusteredLightingPass::prepareGraphFrame(RhiDevice& rhiDevice, const FrameC
     }
     m_rhiDevice = &rhiDevice;
     m_prepared = false;
+    // The persistent build buffers are single-buffered across in-flight
+    // frames. Wait for the previous build submission before this frame
+    // uploads, zeroes, or resizes them; otherwise the next frame's copy
+    // commands can overlap the previous frame's count/fill dispatches.
+    if (m_lastBuildToken.isValid() && !rhiDevice.waitForSubmission(m_lastBuildToken)) {
+        return false;
+    }
+    m_lastBuildToken = {};
     if (!consumeReadback(rhiDevice) || !validateLights() || !buildCoverage(ctx, renderWidth, renderHeight) ||
         !buildScanPlan() || !ensurePipelines(rhiDevice) || !ensureBuffers(rhiDevice) ||
         !ensureBuildBindGroups(rhiDevice) || !ensureConsumerBindGroup(rhiDevice)) {
@@ -250,7 +258,11 @@ bool ClusteredLightingPass::consumeReadback(RhiDevice& rhiDevice) {
         m_gpuBuildFailed = true;
         MECRAFT_LOG_STREAM(std::cerr << "[ClusteredLightingPass] GPU build invariant failed: error="
                                      << m_frameStats.buildError << " totalIndices=" << m_frameStats.totalIndexCount
-                                     << " capacity=" << m_frameStats.indexCapacity << '\n');
+                                     << " capacity=" << m_frameStats.indexCapacity
+                                     << " clusters=" << m_frameStats.clusterCount
+                                     << " lights=" << m_frameStats.lightCount
+                                     << " maxLightsPerCluster=" << m_frameStats.maxLightsPerCluster
+                                     << " nonEmptyClusters=" << m_frameStats.nonEmptyClusterCount << '\n');
         return false;
     }
     return true;
@@ -949,6 +961,9 @@ void ClusteredLightingPass::finishGraphExecution(const bool succeeded, const Rhi
     if (!succeeded) {
         m_emptyBuildReady = false;
     }
+    if (succeeded && completionToken.isValid()) {
+        m_lastBuildToken = completionToken;
+    }
     const bool emptyBuildScheduled = m_emptyBuildScheduled;
     m_emptyBuildScheduled = false;
     if (!m_statsReadbackPending) {
@@ -1086,4 +1101,5 @@ void ClusteredLightingPass::shutdown() {
     m_scanScratchWordCount = 0u;
     m_frameStats = {};
     m_localShadowResources = {};
+    m_lastBuildToken = {};
 }
