@@ -584,6 +584,48 @@ int main() {
         return fail("soul sand surface speed factor should reduce steady horizontal velocity");
     }
 
+    // Case 13: friction braking should slow a diagonal slider without bending its heading.
+    const int brakeLaneY = surfaceY + 28;
+    for (int x = -2; x <= 30; ++x) {
+        for (int y = surfaceY + 1; y <= brakeLaneY + 3; ++y) {
+            for (int z = 3; z <= 5; ++z) {
+                world.setBlock(x, y, z, RUNTIME_ID_NULL);
+            }
+        }
+    }
+    for (int x = 0; x <= 28; ++x) {
+        world.setBlock(x, brakeLaneY, 4, BlockRegistry::requireIdByName("minecraft:stone"));
+    }
+
+    PhysicsBody diagonalSlider;
+    diagonalSlider.position =
+        glm::vec3(0.5f, static_cast<float>(brakeLaneY) + 1.0f + diagonalSlider.halfExtents.y, 4.5f);
+    diagonalSlider.isGrounded = true;
+
+    MoveIntent diagonalRun{};
+    diagonalRun.move = glm::vec2(0.6f, 0.8f);
+    for (int i = 0; i < 120; ++i) {
+        phys.updateBody(diagonalSlider, diagonalRun, kDt);
+    }
+
+    const float headingAtRelease = std::atan2(diagonalSlider.velocity.z, diagonalSlider.velocity.x);
+    bool headingBent = false;
+    for (int i = 0; i < 240; ++i) {
+        phys.updateBody(diagonalSlider, idleIntent, kDt);
+        if (std::hypot(diagonalSlider.velocity.x, diagonalSlider.velocity.z) < 0.05f) {
+            break;
+        }
+        const float heading = std::atan2(diagonalSlider.velocity.z, diagonalSlider.velocity.x);
+        if (std::abs(heading - headingAtRelease) > 0.01f) {
+            headingBent = true;
+            break;
+        }
+    }
+
+    if (headingBent) {
+        return fail("friction braking should decelerate without changing the travel direction");
+    }
+
     std::cout << "[physics_mvp_test] PASS\n";
     return EXIT_SUCCESS;
 }

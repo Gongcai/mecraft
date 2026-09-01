@@ -409,9 +409,22 @@ void applyHorizontalControl(PhysicsBody& body, const MoveIntent& intent, const P
     } else if (wasGrounded && !body.isInWater) {
         braking = tuning.groundFriction * surface.friction;
     }
-    const float maxDelta = braking * dt;
-    body.velocity.x = moveTowards(body.velocity.x, targetX, maxDelta);
-    body.velocity.z = moveTowards(body.velocity.z, targetZ, maxDelta);
+    if (braking <= 0.0f) {
+        return;
+    }
+
+    // Brake along the current travel direction so friction slows the body
+    // without bending its heading toward either axis.
+    const float travelSpeed = std::hypot(body.velocity.x, body.velocity.z);
+    if (travelSpeed <= kContactEpsilon) {
+        body.velocity.x = 0.0f;
+        body.velocity.z = 0.0f;
+        return;
+    }
+    const float remainingSpeed = std::max(0.0f, travelSpeed - braking * dt);
+    const float scale = remainingSpeed / travelSpeed;
+    body.velocity.x *= scale;
+    body.velocity.z *= scale;
 }
 
 void applyVerticalForces(PhysicsBody& body, const MoveIntent& intent, const PhysicsTuning& tuning,
