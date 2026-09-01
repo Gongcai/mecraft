@@ -397,6 +397,7 @@ bool RenderScene::executeSceneOverlayGraph(const RenderGameplayFrameRequest& req
         request.firstPersonHeldItemRenderer->setEnvironmentLight(heldLight.x, heldLight.y);
         request.firstPersonHeldItemRenderer->setSceneHdrScale(
             computeHeldItemSceneHdrScale(m_currentContext, m_settings, getPipelineMode()));
+        request.firstPersonHeldItemRenderer->setScenePreExposure(m_currentContext.preExposure);
         request.firstPersonHeldItemRenderer->prepareFrameResources(*request.firstPersonInventory);
         request.firstPersonHeldItemRenderer->prepareFrame(
             frameRenderSize.x, frameRenderSize.y, *request.firstPersonInventory, *request.firstPersonHeldItemMotion,

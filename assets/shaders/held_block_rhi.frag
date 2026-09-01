@@ -13,13 +13,20 @@ layout(push_constant) uniform RhiPushConstants {
     mat4 uModel;
     vec4 uLighting;
 };
+
+// Textures store sRGB-encoded texels; the HDR scene color buffer is linear.
+vec3 srgbToLinear(vec3 color) {
+    return pow(max(color, vec3(0.0)), vec3(2.2));
+}
+
 void main() {
     vec4 texel = texture(uTextureArray, vec3(vUv, float(vLayer)));
     if (texel.a < 0.1) {
         discard;
     }
-    if (vTintKind == 1u) texel.rgb *= texture(uGrassColormap, vTintUv).rgb;
-    if (vTintKind == 2u) texel.rgb *= texture(uFoliageColormap, vTintUv).rgb;
+    texel.rgb = srgbToLinear(texel.rgb);
+    if (vTintKind == 1u) texel.rgb *= srgbToLinear(texture(uGrassColormap, vTintUv).rgb);
+    if (vTintKind == 2u) texel.rgb *= srgbToLinear(texture(uFoliageColormap, vTintUv).rgb);
     float skyLight = uLighting.x * clamp(uLighting.z, 0.0, 1.0);
     float light = mix(0.08, 1.0, max(skyLight, uLighting.y));
     float ao = mix(0.72, 1.0, clamp(vAo / 3.0, 0.0, 1.0));

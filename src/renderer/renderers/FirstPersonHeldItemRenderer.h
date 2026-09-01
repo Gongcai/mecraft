@@ -101,6 +101,7 @@ public:
     void setContinuousSwing(bool active);
     void setEnvironmentLight(float sunlight, float blockLight);
     void setSceneHdrScale(float scale);
+    void setScenePreExposure(float preExposure);
     void prepareFrameResources(const Inventory& inventory);
     void prepareFrame(int width, int height, const Inventory& inventory, const FirstPersonHeldItemMotion& motion,
                       float timeSeconds);
@@ -157,6 +158,10 @@ private:
     };
     static_assert(sizeof(CascadeUniform) == 96u);
     static_assert(sizeof(ShadowUniforms) == 480u);
+
+    /// Combined multiplier written into the lighting push constant: maps the
+    /// shader's unit-brightness output into the pre-exposed scene color space.
+    [[nodiscard]] float sceneRadianceScale() const { return m_sceneHdrScale * m_scenePreExposure; }
 
     struct Mesh {
         RhiBufferHandle rhiVertexBuffer;
@@ -236,6 +241,7 @@ private:
     float m_environmentSunlight = 1.0f;
     float m_environmentBlockLight = 0.0f;
     float m_sceneHdrScale = 1.0f;
+    float m_scenePreExposure = 1.0f;
     bool m_initialized = false;
 
     enum class PreparedDrawKind : uint8_t { None, Arm, Item, Block };

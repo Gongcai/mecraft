@@ -322,6 +322,14 @@ void FirstPersonHeldItemRenderer::setSceneHdrScale(const float scale) {
     m_sceneHdrScale = std::clamp(scale, 1.0f, 8.0f);
 }
 
+void FirstPersonHeldItemRenderer::setScenePreExposure(const float preExposure) {
+    if (!std::isfinite(preExposure) || preExposure <= 0.0f) {
+        m_scenePreExposure = 1.0f;
+        return;
+    }
+    m_scenePreExposure = std::clamp(preExposure, 1.0f / 64.0f, 64.0f);
+}
+
 void FirstPersonHeldItemRenderer::prepareFrameResources(const Inventory& inventory) {
     if (!m_initialized || m_resources == nullptr) {
         return;
@@ -959,7 +967,7 @@ void FirstPersonHeldItemRenderer::renderPrepared(RhiCommandList& commandList) {
         const PushConstants constants{
             m_preparedFrame.viewProj,
             m_preparedFrame.model,
-            {m_environmentSunlight, m_environmentBlockLight, m_shadowData.skyIntensity, m_sceneHdrScale}};
+            {m_environmentSunlight, m_environmentBlockLight, m_shadowData.skyIntensity, sceneRadianceScale()}};
         commandList.setViewport({0.0f, 0.0f, static_cast<float>(m_preparedFrame.width),
                                  static_cast<float>(m_preparedFrame.height), 0.0f, 0.08f});
         commandList.setScissor(
@@ -986,7 +994,7 @@ void FirstPersonHeldItemRenderer::renderPrepared(RhiCommandList& commandList) {
         const PushConstants constants{
             m_preparedFrame.viewProj,
             m_preparedFrame.model,
-            {m_environmentSunlight, m_environmentBlockLight, m_shadowData.skyIntensity, m_sceneHdrScale}};
+            {m_environmentSunlight, m_environmentBlockLight, m_shadowData.skyIntensity, sceneRadianceScale()}};
         commandList.setViewport({0.0f, 0.0f, static_cast<float>(m_preparedFrame.width),
                                  static_cast<float>(m_preparedFrame.height), 0.0f, 0.08f});
         commandList.setScissor(
@@ -1013,7 +1021,7 @@ void FirstPersonHeldItemRenderer::renderPrepared(RhiCommandList& commandList) {
     const PushConstants constants{
         m_preparedFrame.viewProj,
         m_preparedFrame.model,
-        {m_environmentSunlight, m_environmentBlockLight, m_shadowData.skyIntensity, m_sceneHdrScale}};
+        {m_environmentSunlight, m_environmentBlockLight, m_shadowData.skyIntensity, sceneRadianceScale()}};
     commandList.setViewport({0.0f, 0.0f, static_cast<float>(m_preparedFrame.width),
                              static_cast<float>(m_preparedFrame.height), 0.0f, 0.08f});
     commandList.setScissor(
