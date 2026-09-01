@@ -911,6 +911,7 @@ void DeferredPipeline::invalidateHistory() {
 FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderSettings& settings) {
     // Pre-condition checks
     if (!m_shared || !m_resources || !m_shared->deferredTargets) {
+        MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] render frame aborted: shared resources are missing\n");
         return {};
     }
 
@@ -930,12 +931,15 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // Ensure deferred targets are sized correctly
     if (!targets.ensureSize(windowWidth, windowHeight, m_currentSettings.shadow.resolution)) {
+        MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] deferred target resize failed for " << windowWidth << 'x'
+                                     << windowHeight << '\n');
         return {};
     }
 
     // After resize/rebuild, invalidate temporal history
     if (targets.consumeRebuiltFlag()) {
         if (!clearRebuiltHistoryTargets(rhiDevice, *m_shared->commandListPool, targets)) {
+            MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] failed to clear rebuilt history targets\n");
             return {};
         }
         m_hasPreviousFrameData = false;
@@ -954,6 +958,7 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // Deferred geometry, shadows, SSAO, and lighting execute through one graph.
     if (!executeFrameGraph(ctx, m_currentSettings)) {
+        MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] frame graph execution failed\n");
         return {};
     }
 
@@ -1025,13 +1030,16 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         !ctx.sceneCaptureDepthTexture.isValid() || !ctx.sceneCaptureColorView.isValid() ||
         !ctx.sceneCaptureDepthView.isValid() || m_shared->sky == nullptr || ctx.dayNightSystem == nullptr ||
         ctx.weatherSystem == nullptr) {
+        MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] frame graph preconditions are not satisfied\n");
         return false;
     }
     if (!externalGeometry && (ctx.worldView == nullptr || m_shared->worldRenderBuffer == nullptr ||
                               m_shared->terrainRhiPipelines == nullptr)) {
+        MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] terrain rendering resources are missing\n");
         return false;
     }
     if (!externalGeometry && !configureVoxelReflectionProbe(ctx)) {
+        MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] voxel reflection probe configuration failed\n");
         return false;
     }
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
@@ -1225,7 +1233,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     bool reflectionProbeCaptureGraphPrepared = false;
     bool reflectionProbeGridGraphPrepared = false;
     std::vector<RhiTextureViewHandle> graphOwnedTextureViews;
-    const auto failGraphSetup = [&]() {
+    const auto failGraphSetup = [&](const int sourceLine = 0) {
+        MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] frame graph setup failed (DeferredPipeline.cpp:"
+                                     << sourceLine << ")\n");
 #if defined(MECRAFT_ENABLE_NRD)
         if (m_nrdBridge != nullptr && m_nrdBridge->framePending()) {
             RgExecuteResult failedExecution;
@@ -1283,12 +1293,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
 
     if (clusteredLightingActive) {
         if (m_localShadowPass == nullptr || m_clusteredLightingPass == nullptr) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
         m_localShadowPass->setSceneLights(m_sceneLights);
         if (!m_localShadowPass->prepareGraphFrame(ctx, ctx.worldView)) {
             MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] " << m_localShadowPass->lastError() << '\n');
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
         localShadowGraphPrepared = true;
         const LocalShadowPass::ConsumerResources localShadowResources = m_localShadowPass->consumerResources();
@@ -1299,7 +1309,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                  localShadowResources.sampler}) ||
             !m_clusteredLightingPass->prepareGraphFrame(rhiDevice, ctx, ctx.temporalExtents.renderExtent.width,
                                                         ctx.temporalExtents.renderExtent.height)) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
         clusteredLightingGraphPrepared = true;
 
@@ -1313,7 +1323,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
              !m_shared->terrainRhiPipelines->configureClusteredLighting(
                  clusteredResources.bindGroupLayout, clusteredResources.bindGroup, clusteredResources.grid)) ||
             (externalGeometry && !m_shared->deferredGeometryProvider->configureClusteredLighting(clusteredResources))) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
     }
 
@@ -1328,7 +1338,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         if (extent.width > std::numeric_limits<uint16_t>::max() ||
             extent.height > std::numeric_limits<uint16_t>::max()) {
             MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] NRD render extent exceeds the SDK contract\n");
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
         const renderer::nrd::NrdDiffuseMethod method = nrdBridgeMethod(settings.nrd.method);
         const bool rebuildBridge = !m_nrdBridge->initialized() || m_nrdBridge->method() != std::optional(method) ||
@@ -1347,7 +1357,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                 MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] NRD bridge initialization failed: "
                                              << (stableError.has_value() ? *stableError : std::string_view("Invalid"))
                                              << '\n');
-                return failGraphSetup();
+                return failGraphSetup(__LINE__);
             }
             m_nrdClearHistory = true;
         }
@@ -1435,7 +1445,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                        RhiResourceState::ShaderRead, perObjectVelocity) ||
         !importTexture(targets.velocityTextureHandle(), targets.velocityTextureViewHandle(),
                        RhiResourceState::ShaderRead, velocity)) {
-        return failGraphSetup();
+        return failGraphSetup(__LINE__);
     }
 
     ClusteredLightingPass::GraphResources clusteredLightingResources;
@@ -1445,18 +1455,18 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     if (clusteredLightingActive) {
         if (!m_localShadowPass->importGraphResources(m_renderGraph, localShadowResources) ||
             !m_clusteredLightingPass->importGraphResources(m_renderGraph, clusteredLightingResources)) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
     }
     if (!m_reflectionProbeCapturePass->importGraphResources(m_renderGraph, reflectionProbeCaptureResources)) {
-        return failGraphSetup();
+        return failGraphSetup(__LINE__);
     }
     const RgTextureHandle capturedCubeArray = m_reflectionProbeCapturePass->activeProbes().empty()
                                                   ? RgTextureHandle{}
                                                   : reflectionProbeCaptureResources.prefiltered;
     if (!m_reflectionProbeGridPass->importGraphResources(m_renderGraph, reflectionProbeGridResources,
                                                          capturedCubeArray)) {
-        return failGraphSetup();
+        return failGraphSetup(__LINE__);
     }
 
     ShadowPass::GraphResources shadowResources;
@@ -1468,7 +1478,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                        RhiResourceState::ShaderRead, shadowResources.color0) ||
         !importTexture(targets.csmShadowColor1TextureHandle(), targets.csmShadowColor1ArrayTextureViewHandle(),
                        RhiResourceState::ShaderRead, shadowResources.color1)) {
-        return failGraphSetup();
+        return failGraphSetup(__LINE__);
     }
 
     SsaoPass::GraphResources ssaoResources;
@@ -1490,7 +1500,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                            ssaoResources.historyCurrent) ||
             !importTexture(targets.ssaoHistoryTexturePrevHandle(), targets.ssaoHistoryTexturePrevViewHandle(),
                            RhiResourceState::ShaderRead, ssaoResources.historyPrevious)))))) {
-        return failGraphSetup();
+        return failGraphSetup(__LINE__);
     }
 
     RgTextureHandle reflection;
@@ -1606,13 +1616,13 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     if (!sceneLighting.isValid() || !sceneComposite.isValid() || !transparentComposite.isValid() ||
         !transparentCompositeDepth.isValid() || !reflection.isValid() || !cloud.isValid() ||
         (externalTransparent && !transmissionSource.isValid())) {
-        return failGraphSetup();
+        return failGraphSetup(__LINE__);
     }
 
     if (rtgiEnabled) {
         if (!ensureRtgiValidationOutputTextures(rhiDevice, ctx.temporalExtents.renderExtent.width,
                                                 ctx.temporalExtents.renderExtent.height)) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
         RhiTextureDesc rawValidationOutputDesc;
         RhiTextureDesc denoisedValidationOutputDesc;
@@ -1622,7 +1632,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             !rhiDevice.getTextureDesc(m_nrdDiffuseValidationTexture, denoisedValidationOutputDesc) ||
             !rhiDevice.getTextureDesc(m_rtgiLeakageNormalValidationTexture, leakageNormalValidationOutputDesc) ||
             !rhiDevice.getTextureDesc(m_rtgiLeakageViewZValidationTexture, leakageViewZValidationOutputDesc)) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
         const RhiResourceState validationOutputInitialState =
             m_rtgiValidationOutputInitialized ? RhiResourceState::ShaderRead : RhiResourceState::Undefined;
@@ -1644,14 +1654,14 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
              RhiQueueType::Graphics, RhiQueueType::Graphics});
         if (!rtgiRawValidationOutput.isValid() || !nrdDiffuseValidationOutput.isValid() ||
             !rtgiLeakageNormalValidationOutput.isValid() || !rtgiLeakageViewZValidationOutput.isValid()) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
         if (!importTexture(terrainAlbedoTexture, {}, RhiResourceState::ShaderRead, terrainAlbedo) ||
             !importTexture(terrainNormalTexture, {}, RhiResourceState::ShaderRead, terrainNormal) ||
             !importTexture(terrainSpecularTexture, {}, RhiResourceState::ShaderRead, terrainSpecular) ||
             !importTexture(grassColormapTexture, {}, RhiResourceState::ShaderRead, grassColormap) ||
             !importTexture(foliageColormapTexture, {}, RhiResourceState::ShaderRead, foliageColormap)) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
         const auto createRtgiTexture = [&](const char* name, const RhiTextureFormat format,
                                            const RhiTextureUsageFlags usage, RgTextureHandle& handle) {
@@ -1680,7 +1690,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             !createRtgiTexture("RTGI.EmissiveDirectRadiance", RhiTextureFormat::Rgba16Float, sampledStorage,
                                rtgiEmissiveDirect) ||
             !createRtgiTexture("RTGI.Validation", RhiTextureFormat::Rg32Uint, sampledStorage, rtgiValidation)) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
         if (nrdEnabled &&
             (!createRtgiTexture("RTGI.RelaxDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float, sampledStorage,
@@ -1694,7 +1704,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
              !createRtgiTexture("NRD.OutputDiffuseRadianceHitDistance", RhiTextureFormat::Rgba16Float, nrdOutputUsage,
                                 nrdOutputDiffuse) ||
              !createRtgiTexture("NRD.Validation", RhiTextureFormat::Rgba8Unorm, nrdValidationUsage, nrdValidation))) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
     }
 
@@ -1767,26 +1777,26 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         !importTexture(lightmapDayTexture, {}, RhiResourceState::ShaderRead, lightmapDay) ||
         !importTexture(lightmapNightTexture, {}, RhiResourceState::ShaderRead, lightmapNight) ||
         !importTexture(rippleNormalTexture, {}, RhiResourceState::ShaderRead, rippleNormal)) {
-        return failGraphSetup();
+        return failGraphSetup(__LINE__);
     }
     if (!importTexture(targets.historyDepthTextureHandle(), {}, RhiResourceState::DepthRead, historyDepthCurrent) ||
         !importTexture(targets.historyDepthTexturePrevHandle(), targets.historyDepthTexturePrevViewHandle(),
                        RhiResourceState::DepthRead, historyDepthPrevious)) {
-        return failGraphSetup();
+        return failGraphSetup(__LINE__);
     }
     if (!importTexture(targets.nrdReprojectionCoverageTextureHandle(),
                        targets.nrdReprojectionCoverageTextureViewHandle(), RhiResourceState::ShaderRead,
                        nrdReprojectionCoverage)) {
-        return failGraphSetup();
+        return failGraphSetup(__LINE__);
     }
     if (!m_skyIblPass->importGraphResources(m_renderGraph, skyIblResources)) {
-        return failGraphSetup();
+        return failGraphSetup(__LINE__);
     }
     if (!importTexture(targets.taaHistoryDepthTextureHandle(), {}, RhiResourceState::DepthRead,
                        taaHistoryDepthCurrent) ||
         !importTexture(targets.taaHistoryDepthTexturePrevHandle(), targets.taaHistoryDepthTexturePrevViewHandle(),
                        RhiResourceState::DepthRead, taaHistoryDepthPrevious)) {
-        return failGraphSetup();
+        return failGraphSetup(__LINE__);
     }
     if (ssgiTemporalEnabled &&
         (!importTexture(targets.ssgiHistoryTextureHandle(), {}, RhiResourceState::ShaderRead, ssgiHistoryCurrent) ||
@@ -1797,30 +1807,30 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
          !importTexture(targets.ssgiMomentsHistoryTexturePrevHandle(),
                         targets.ssgiMomentsHistoryTexturePrevViewHandle(), RhiResourceState::ShaderRead,
                         ssgiMomentsHistoryPrevious))) {
-        return failGraphSetup();
+        return failGraphSetup(__LINE__);
     }
     if (!importTexture(targets.historyVolumetricTextureHandle(), targets.historyVolumetricTextureViewHandle(),
                        RhiResourceState::ShaderRead, historyVolumetricCurrent) ||
         !importTexture(targets.historyVolumetricTexturePrevHandle(), targets.historyVolumetricTexturePrevViewHandle(),
                        RhiResourceState::ShaderRead, historyVolumetricPrevious)) {
-        return failGraphSetup();
+        return failGraphSetup(__LINE__);
     }
     if ((reflectionFilterEnabled || reflectionTemporalEnabled) &&
         !importTexture(targets.reflectionTemporalScratchTextureHandle(),
                        targets.reflectionTemporalScratchTextureViewHandle(), RhiResourceState::ShaderRead,
                        reflectionScratch)) {
-        return failGraphSetup();
+        return failGraphSetup(__LINE__);
     }
     if (!importTexture(targets.historyReflectionTextureHandle(), {}, RhiResourceState::ShaderRead,
                        historyReflectionCurrent) ||
         !importTexture(targets.historyReflectionTexturePrevHandle(), targets.historyReflectionTexturePrevViewHandle(),
                        RhiResourceState::ShaderRead, historyReflectionPrevious)) {
-        return failGraphSetup();
+        return failGraphSetup(__LINE__);
     }
     if (!importTexture(targets.historyCloudTextureHandle(), {}, RhiResourceState::ShaderRead, historyCloudCurrent) ||
         !importTexture(targets.historyCloudTexturePrevHandle(), targets.historyCloudTexturePrevViewHandle(),
                        RhiResourceState::ShaderRead, historyCloudPrevious)) {
-        return failGraphSetup();
+        return failGraphSetup(__LINE__);
     }
     ssaoResources.noise = skyNoise;
 
@@ -1885,7 +1895,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
 
     graphTail = m_skyIblPass->addGraphPasses(m_renderGraph, skyCapture, skyIblResources, graphTail);
     if (!graphTail.isValid()) {
-        return failGraphSetup();
+        return failGraphSetup(__LINE__);
     }
     skyIblGraphPrepared = true;
     if (m_shared->sceneTlasCache != nullptr && m_shared->sceneTlasCache->supported()) {
@@ -1910,7 +1920,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         hiZResources.hiZ = hiZ;
         const RgPassHandle hiZHandle = m_hiZPass->addGraphPasses(m_renderGraph, ctx, targets, hiZResources, graphTail);
         if (!hiZHandle.isValid()) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
         graphTail = hiZHandle;
     }
@@ -1924,7 +1934,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         const RgPassHandle cullHandle =
             m_hiZPass->addCullPass(m_renderGraph, ctx, settings, targets, *m_shared->worldRenderBuffer, hiZ, graphTail);
         if (!cullHandle.isValid()) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
         graphTail = cullHandle;
     }
@@ -2015,7 +2025,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         const RgPassHandle ssaoHandle = m_ssaoPass->addGraphPasses(m_renderGraph, ctx, settings.ssao, targets,
                                                                    ssaoResources, postGBufferDependency, true);
         if (!ssaoHandle.isValid()) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
         ssaoGraphAdded = true;
     }
@@ -2023,14 +2033,14 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     if (shadowEnabled) {
         graphTail = m_shadowPass->addGraphPasses(m_renderGraph, shadowResources, graphTail);
         if (!graphTail.isValid()) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
     }
 
     if (clusteredLightingActive) {
         graphTail = m_localShadowPass->addGraphPasses(m_renderGraph, localShadowResources, graphTail);
         if (!graphTail.isValid()) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
     }
 
@@ -2048,7 +2058,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         const RgPassHandle cloudHandle = m_cloudPass->addGraphPass(m_renderGraph, ctx, settings, targets,
                                                                    cloudResources, postGBufferDependency, true);
         if (!cloudHandle.isValid()) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
         cloudGraphPrepared = true;
         cloudGraphAdded = true;
@@ -2057,26 +2067,26 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     if (ssaoEnabled && !ssaoGraphAdded) {
         graphTail = m_ssaoPass->addGraphPasses(m_renderGraph, ctx, settings.ssao, targets, ssaoResources, graphTail);
         if (!graphTail.isValid()) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
     }
 
     if (clusteredLightingActive) {
         graphTail = m_clusteredLightingPass->addGraphPasses(m_renderGraph, clusteredLightingResources, graphTail);
         if (!graphTail.isValid()) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
     }
 
     graphTail =
         m_reflectionProbeCapturePass->addGraphPasses(m_renderGraph, reflectionProbeCaptureResources, ctx, graphTail);
     if (!graphTail.isValid()) {
-        return failGraphSetup();
+        return failGraphSetup(__LINE__);
     }
     reflectionProbeCaptureGraphPrepared = true;
     graphTail = m_reflectionProbeGridPass->addGraphPasses(m_renderGraph, reflectionProbeGridResources, graphTail);
     if (!graphTail.isValid()) {
-        return failGraphSetup();
+        return failGraphSetup(__LINE__);
     }
     reflectionProbeGridGraphPrepared = true;
 
@@ -2136,7 +2146,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         graphTail =
             m_rtgiTracePass->addGraphPass(m_renderGraph, ctx, traceSettings, rtgiResources, rtgiLighting, graphTail);
         if (!graphTail.isValid()) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
         rtgiTraceGraphPrepared = true;
         rtgiDiffuseTexture = rtgiRawDiffuse;
@@ -2163,7 +2173,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             packResources.validation = rtgiValidation;
             graphTail = m_rtgiSignalPackPass->addGraphPass(m_renderGraph, ctx, packSettings, packResources, graphTail);
             if (!graphTail.isValid()) {
-                return failGraphSetup();
+                return failGraphSetup(__LINE__);
             }
 
             NrdGuidePrepPass::Settings guideSettings;
@@ -2184,7 +2194,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             guideSettings.useVoxelGeometricNormal = m_shared->terrain != nullptr;
             graphTail = m_nrdGuidePrepPass->addGraphPass(m_renderGraph, ctx, guideSettings, guideResources, graphTail);
             if (!graphTail.isValid()) {
-                return failGraphSetup();
+                return failGraphSetup(__LINE__);
             }
 
             RtgiEmissiveTemporalPass::Settings emissiveTemporalSettings;
@@ -2201,7 +2211,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                 m_rtgiEmissiveTemporalPass->addGraphPass(m_renderGraph, ctx, emissiveTemporalSettings,
                                                          emissiveTemporalResources, graphTail);
             if (!emissiveTemporalOutput.isValid()) {
-                return failGraphSetup();
+                return failGraphSetup(__LINE__);
             }
             graphTail = emissiveTemporalOutput.pass;
             rtgiEmissiveTexture = emissiveTemporalOutput.filteredEmissiveDirectRadiance;
@@ -2235,7 +2245,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                 !externalResources.bind(::nrd::ResourceType::IN_DIFF_RADIANCE_HITDIST, nrdInputSignal) ||
                 !externalResources.bind(::nrd::ResourceType::OUT_DIFF_RADIANCE_HITDIST, nrdOutputDiffuse) ||
                 !externalResources.bind(::nrd::ResourceType::OUT_VALIDATION, nrdValidation)) {
-                return failGraphSetup();
+                return failGraphSetup(__LINE__);
             }
 
             ::nrd::CommonSettings commonSettings{};
@@ -2314,7 +2324,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                 MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] NRD dispatch setup failed: "
                                              << (stableError.has_value() ? *stableError : std::string_view("Invalid"))
                                              << '\n');
-                return failGraphSetup();
+                return failGraphSetup(__LINE__);
             }
             graphTail = nrdDispatch.lastPass;
             RtgiValidationComposePass::Settings composeSettings;
@@ -2328,7 +2338,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             graphTail = m_rtgiValidationComposePass->addGraphPass(m_renderGraph, ctx, composeSettings,
                                                                   composeResources, graphTail);
             if (!graphTail.isValid()) {
-                return failGraphSetup();
+                return failGraphSetup(__LINE__);
             }
             rtgiDiffuseTexture = nrdOutputDiffuse;
             rtgiDiffuseEncoding = settings.nrd.method == NrdDiffuseMethod::Reblur
@@ -2425,7 +2435,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         ssgiResources.momentsHistoryCurrent = ssgiMomentsHistoryCurrent;
         graphTail = m_ssgiPass->addGraphPasses(m_renderGraph, ctx, settings, targets, ssgiResources, graphTail);
         if (!graphTail.isValid()) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
     }
 
@@ -2454,7 +2464,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         graphTail =
             m_reflectionPass->addGraphPasses(m_renderGraph, ctx, settings, targets, reflectionResources, graphTail);
         if (!graphTail.isValid()) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
 
         if (!cloudGraphAdded) {
@@ -2466,7 +2476,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             cloudResources.cloud = cloud;
             graphTail = m_cloudPass->addGraphPass(m_renderGraph, ctx, settings, targets, cloudResources, graphTail);
             if (!graphTail.isValid()) {
-                return failGraphSetup();
+                return failGraphSetup(__LINE__);
             }
             cloudGraphPrepared = true;
         }
@@ -2490,7 +2500,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         graphTail = m_sceneCompositePass->addGraphPasses(m_renderGraph, ctx, settings, targets, sceneCompositeResources,
                                                          graphTail);
         if (!graphTail.isValid()) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
 
         RenderGraphPassBuilder sceneCompositeCopies = m_renderGraph.addPass(
@@ -2543,7 +2553,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             graphTail = m_volumetricPass->addGraphPreparationPasses(m_renderGraph, ctx, settings, targets,
                                                                     hasPreviousFrame, volumetricResources, graphTail);
             if (!graphTail.isValid()) {
-                return failGraphSetup();
+                return failGraphSetup(__LINE__);
             }
             volumetricGraphPrepared = m_volumetricPass->graphFramePrepared();
 
@@ -2732,7 +2742,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             graphTail = m_volumetricPass->addGraphCompositePass(m_renderGraph, ctx, settings, targets, hasPreviousFrame,
                                                                 volumetricResources, graphTail);
             if (!graphTail.isValid()) {
-                return failGraphSetup();
+                return failGraphSetup(__LINE__);
             }
         }
     }
@@ -2752,7 +2762,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             taaResources.materialAux = materialAux;
             graphTail = m_taaPass->addGraphPasses(m_renderGraph, ctx, settings, targets, taaResources, graphTail);
             if (!graphTail.isValid()) {
-                return failGraphSetup();
+                return failGraphSetup(__LINE__);
             }
         }
 
@@ -2765,7 +2775,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             graphTail =
                 m_motionBlurPass->addGraphPasses(m_renderGraph, ctx, settings, targets, motionResources, graphTail);
             if (!graphTail.isValid()) {
-                return failGraphSetup();
+                return failGraphSetup(__LINE__);
             }
         }
 
@@ -2776,7 +2786,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             dofResources.depth = depth;
             graphTail = m_dofPass->addGraphPasses(m_renderGraph, ctx, settings, targets, dofResources, graphTail);
             if (!graphTail.isValid()) {
-                return failGraphSetup();
+                return failGraphSetup(__LINE__);
             }
         }
     }
@@ -2958,7 +2968,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         debugResources.output = sceneCaptureColor;
         graphTail = m_debugPass->addGraphPass(m_renderGraph, ctx, settings, targets, debugResources, graphTail);
         if (!graphTail.isValid()) {
-            return failGraphSetup();
+            return failGraphSetup(__LINE__);
         }
     } else {
         RenderGraphPassBuilder sceneOutput =
@@ -3109,7 +3119,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     const auto graphCompileEnd = std::chrono::steady_clock::now();
     if (!compiled.succeeded()) {
         MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] Render Graph compile failed: " << compiled.message << '\n');
-        return failGraphSetup();
+        return failGraphSetup(__LINE__);
     }
     const GpuTimerCheckpoint timerCheckpoint =
         ctx.debugService != nullptr ? ctx.debugService->gpuTimerCheckpoint() : GpuTimerCheckpoint{};

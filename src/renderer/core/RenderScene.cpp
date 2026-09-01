@@ -282,6 +282,8 @@ bool RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera,
                               const float frameAspectRatio, const DayNightSystem& dayNightSystem,
                               const WeatherSystem& weatherSystem, const std::optional<RenderFrameClock>& frameClock) {
     if (!prepareFrameResources(frameRenderSize)) {
+        MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Failed to prepare frame resources for "
+                                     << frameRenderSize.x << 'x' << frameRenderSize.y << '\n');
         return false;
     }
 
@@ -289,11 +291,13 @@ bool RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera,
         std::abort();
     }
     if (!executeFrameBeginGraph()) {
+        MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Frame-begin graph execution failed\n");
         return false;
     }
     m_terrainStreamingService.beginFrame();
     m_sceneTlasCache.beginFrame();
     if (!publishActiveSceneTlas()) {
+        MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Failed to publish the active scene TLAS\n");
         m_terrainStreamingService.endFrame();
         return false;
     }
@@ -321,12 +325,14 @@ bool RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera,
 
     // R7: New pipeline is the only path (legacy fallback removed)
     if (!newPipelineReady || !m_newPipelineActive) {
+        MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Render pipeline is not ready: " << getPipelineStatus() << '\n');
         m_terrainStreamingService.endFrame();
         return false;
     }
 
     m_lastFrameOutput = m_activePipeline->renderFrame(m_currentContext, m_settings);
     if (!m_lastFrameOutput.sceneColor.isValid() || !m_lastFrameOutput.sceneDepth.isValid()) {
+        MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Active pipeline produced an invalid frame output\n");
         m_terrainStreamingService.endFrame();
         return false;
     }
@@ -618,6 +624,7 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         return false;
     }
     if (!executeSceneOverlayGraph(request, frameRenderSize, lightDebugActive, cameraRainVisibility)) {
+        MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Scene overlay graph execution failed\n");
         m_terrainStreamingService.endFrame();
         return false;
     }
@@ -658,6 +665,7 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     if (skipPostProcess) {
         if (!m_postProcessPass.blitSceneCaptureToBackbuffer(*m_shared.rhiDevice, m_currentContext.swapchainColorView,
                                                             m_debugService, true)) {
+            MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Forward blit to backbuffer failed\n");
             m_terrainStreamingService.endFrame();
             return false;
         }
@@ -670,6 +678,7 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         if (lightDebugActive) {
             if (!m_postProcessPass.blitSceneCaptureToBackbuffer(
                     *m_shared.rhiDevice, m_currentContext.swapchainColorView, m_debugService, true)) {
+                MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Light-debug blit to backbuffer failed\n");
                 m_terrainStreamingService.endFrame();
                 return false;
             }
@@ -679,6 +688,7 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                 const RhiTextureHandle postTexture = m_postProcessPass.compositeToTexture(
                     *m_shared.rhiDevice, request.frameTime, m_lastFrameOutput.gbufferDepth, m_debugService, false);
                 if (!postTexture.isValid()) {
+                    MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Post-process texture composite failed\n");
                     m_terrainStreamingService.endFrame();
                     return false;
                 }
@@ -688,6 +698,7 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                                         m_postProcessPass.compositeTextureViewHandle(), inputWidth, inputHeight,
                                         displaySize.x, displaySize.y, m_settings.upscale.fsr1Sharpness, m_debugService,
                                         true)) {
+                    MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] FSR1 upscale to backbuffer failed\n");
                     m_terrainStreamingService.endFrame();
                     return false;
                 }
@@ -696,6 +707,7 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                                                              m_currentContext.swapchainColorFormat, displaySize.x,
                                                              displaySize.y, request.frameTime,
                                                              m_lastFrameOutput.gbufferDepth, m_debugService, true)) {
+                    MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Post-process composite to backbuffer failed\n");
                     m_terrainStreamingService.endFrame();
                     return false;
                 }
