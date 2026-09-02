@@ -28,6 +28,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cstring>
 #include <deque>
 #include <iostream>
@@ -4132,6 +4133,7 @@ bool VkRhiDevice::resizeSwapchain(const uint32_t width, const uint32_t height) {
 }
 
 RhiFrameAcquireResult VkRhiDevice::acquireFrame() {
+    const auto acquireStart = std::chrono::steady_clock::now();
     RhiFrameAcquireResult result{};
     if (!m_initialized || std::this_thread::get_id() != m_deviceThread || m_data->frameAcquired) {
         result.status = RhiFrameStatus::Error;
@@ -4144,8 +4146,12 @@ RhiFrameAcquireResult VkRhiDevice::acquireFrame() {
         result.status = RhiFrameStatus::Minimized;
         return result;
     }
+    double swapchainRecreateMs = 0.0;
     if (m_data->surfaceLost || m_data->swapchainDirty) {
+        const auto recreateStart = std::chrono::steady_clock::now();
         const bool recreated = m_data->surfaceLost ? recreateSurfaceAndSwapchain(*m_data) : recreateSwapchain(*m_data);
+        swapchainRecreateMs =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - recreateStart).count();
         if (!recreated) {
             result.status = m_data->surfaceLost ? RhiFrameStatus::SurfaceLost : RhiFrameStatus::Error;
             return result;
@@ -4153,8 +4159,13 @@ RhiFrameAcquireResult VkRhiDevice::acquireFrame() {
         refreshSwapchainCapabilities();
     }
     auto& frame = m_data->frames[m_data->frameSlot];
+    const bool fenceWasPending = frame.fencePending;
+    double fenceWaitMs = 0.0;
     if (frame.fencePending) {
+        const auto fenceWaitStart = std::chrono::steady_clock::now();
         const VkResult waitResult = vkWaitForFences(m_data->device, 1u, &frame.fence, VK_TRUE, UINT64_MAX);
+        fenceWaitMs =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - fenceWaitStart).count();
         if (waitResult == VK_ERROR_DEVICE_LOST) {
             logVkError("vkWaitForFences(acquire)", waitResult);
             result.status = RhiFrameStatus::DeviceLost;
@@ -4168,8 +4179,11 @@ RhiFrameAcquireResult VkRhiDevice::acquireFrame() {
         vkResetFences(m_data->device, 1u, &frame.fence);
         frame.fencePending = false;
     }
+    const auto nativeAcquireStart = std::chrono::steady_clock::now();
     const VkResult acquireResult =
         acquireMainSwapchainImage(*m_data, UINT64_MAX, frame.imageAvailable, VK_NULL_HANDLE, m_data->acquiredImage);
+    const double nativeAcquireMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - nativeAcquireStart).count();
     if (acquireResult == VK_ERROR_OUT_OF_DATE_KHR) {
         m_data->swapchainDirty = true;
         result.status = RhiFrameStatus::OutOfDate;
@@ -4208,6 +4222,15 @@ RhiFrameAcquireResult VkRhiDevice::acquireFrame() {
     result.colorTexture = m_data->swapchainTextures[m_data->acquiredImage];
     result.colorView = m_data->swapchainViews[m_data->acquiredImage];
     result.depthStencilView = m_data->depthViews[m_data->acquiredImage];
+    const double totalMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - acquireStart).count();
+    if (totalMs >= 1.0) {
+        MECRAFT_LOG_STREAM(std::cerr << "[Vulkan] Slow presentation acquire: " << totalMs << " ms"
+                                     << " (slot=" << m_data->frameSlot << ", fencePending="
+                                     << (fenceWasPending ? 1 : 0) << ", fenceWait=" << fenceWaitMs
+                                     << " ms, vkAcquire=" << nativeAcquireMs << " ms, swapchainRecreate="
+                                     << swapchainRecreateMs << " ms)\n");
+    }
     return result;
 }
 

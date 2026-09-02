@@ -4,11 +4,13 @@
 #include "renderer/rhi/RhiCommandListPool.h"
 #include "renderer/rhi/RhiDevice.h"
 #include "thread/ThreadPool.h"
+#include "Diagnostics.h"
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <iostream>
 #include <limits>
 #include <type_traits>
 #include <utility>
@@ -1566,6 +1568,7 @@ RgExecuteResult RenderGraph::execute(RhiDevice& device, RhiCommandListPool& comm
         resolvedBuffers[index] = allocation->buffer;
         transientBufferIndices[index] = static_cast<uint32_t>(allocation - m_transientBuffers.data());
     }
+    const auto resourceResolveEnd = std::chrono::steady_clock::now();
 
     // Expose the resolved transient handles for the pre-record hook and pass
     // callbacks; cleared on every exit path from this function.
@@ -1850,6 +1853,7 @@ RgExecuteResult RenderGraph::execute(RhiDevice& device, RhiCommandListPool& comm
             plan.passes.push_back(std::move(passPlan));
         }
     }
+    const auto barrierPlanEnd = std::chrono::steady_clock::now();
 
     // Phase 2: record batch command lists. The body below is shared by the
     // serial path and the worker tasks; it only reads state resolved above.
@@ -1972,6 +1976,7 @@ RgExecuteResult RenderGraph::execute(RhiDevice& device, RhiCommandListPool& comm
     if (workerFailed.load(std::memory_order_acquire)) {
         return {workerError, std::move(workerErrorMessage), {}};
     }
+    const auto recordEnd = std::chrono::steady_clock::now();
 
     std::vector<TransitionBatch> epilogueBatches;
     const auto epilogueBatchForQueue = [&](const RhiQueueType queue) {
@@ -2025,6 +2030,19 @@ RgExecuteResult RenderGraph::execute(RhiDevice& device, RhiCommandListPool& comm
     const auto submitStart = std::chrono::steady_clock::now();
     RgExecuteResult result;
     result.recordMilliseconds = std::chrono::duration<double, std::milli>(submitStart - executeStart).count();
+    if (result.recordMilliseconds >= 1.0) {
+        const auto toMs = [](const auto begin, const auto end) {
+            return std::chrono::duration<double, std::milli>(end - begin).count();
+        };
+        MECRAFT_LOG_STREAM(std::cerr << "[RenderGraph] Slow record: " << result.recordMilliseconds << " ms"
+                                     << " (resolve=" << toMs(executeStart, resourceResolveEnd)
+                                     << " ms, barrierPlan=" << toMs(resourceResolveEnd, barrierPlanEnd)
+                                     << " ms, record+workers=" << toMs(barrierPlanEnd, recordEnd)
+                                     << " ms, epilogue=" << toMs(recordEnd, submitStart)
+                                     << " ms, passes=" << m_compiledPasses.size()
+                                     << ", batches=" << m_submissionBatches.size()
+                                     << ", workerBatches=" << workerBatchCount << ")\n");
+    }
     result.workerRecordedBatchCount = workerBatchCount;
     result.submissions.reserve(prologueBatches.size() + m_submissionBatches.size() + epilogueBatches.size());
     for (TransitionBatch& prologue : prologueBatches) {
