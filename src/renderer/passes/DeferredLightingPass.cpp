@@ -113,7 +113,10 @@ void DeferredLightingPass::shutdown() {
 bool DeferredLightingPass::execute(RhiCommandList& commandList, const FrameContext& ctx, const RenderSettings& settings,
                                    DeferredRenderTargets& targets, const RhiTextureViewHandle rtgiDiffuseView,
                                    const RhiTextureViewHandle rtgiEmissiveDirectView,
-                                   const RtgiDiffuseEncoding rtgiEncoding, const float rtgiRadianceScale) {
+                                   const RtgiDiffuseEncoding rtgiEncoding, const float rtgiRadianceScale,
+                                   const RhiBindGroupHandle clusteredLightingBindGroup,
+                                   const uint32_t clusteredActiveLightCount,
+                                   const renderer::contracts::ClusterGrid& clusteredGrid) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || m_shadowRenderer == nullptr) {
         return false;
     }
@@ -132,7 +135,7 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList, const FrameConte
     }
     if (clusteredLightingActive &&
         (m_clusteredLightingPass == nullptr || !m_clusteredLightingPass->consumerBindGroupLayout().isValid() ||
-         !m_clusteredLightingPass->consumerBindGroup().isValid())) {
+         !clusteredLightingBindGroup.isValid())) {
         return false;
     }
     const bool useTemporalSsao =
@@ -235,16 +238,14 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList, const FrameConte
     params.flags3 = glm::ivec4(ctx.eyeInWater ? 1 : 0, m_heldBlockLightValue, 0, ctx.fog.enabled ? 1 : 0);
     params.flags4 = glm::ivec4(0, settings.debug.deferredLightDebugMode, settings.debug.derivativeStrictMode ? 1 : 0,
                                settings.weather.rainLinesEnabled ? 1 : 0);
-    params.flags5 =
-        glm::ivec4(settings.weather.surfaceRipplesEnabled ? 1 : 0, shadow::ShadowRenderer::CASCADE_COUNT,
-                   clusteredLightingActive ? static_cast<int>(m_clusteredLightingPass->activeLightCount()) : 0, 0);
+    params.flags5 = glm::ivec4(settings.weather.surfaceRipplesEnabled ? 1 : 0, shadow::ShadowRenderer::CASCADE_COUNT,
+                               clusteredLightingActive ? static_cast<int>(clusteredActiveLightCount) : 0, 0);
     if (clusteredLightingActive) {
-        const renderer::contracts::ClusterGrid& clusterGrid = m_clusteredLightingPass->grid();
-        params.clusterGrid = {clusterGrid.tileCountX, clusterGrid.tileCountY, clusterGrid.depthSliceCount,
+        params.clusterGrid = {clusteredGrid.tileCountX, clusteredGrid.tileCountY, clusteredGrid.depthSliceCount,
                               renderer::contracts::kClusterTileWidth};
-        params.clusterDepth = {clusterGrid.nearPlane, clusterGrid.farPlane, clusterGrid.depthLogScale,
-                               clusterGrid.depthLogBias};
-        params.clusterRenderExtent = {clusterGrid.renderWidth, clusterGrid.renderHeight, 0u, 0u};
+        params.clusterDepth = {clusteredGrid.nearPlane, clusteredGrid.farPlane, clusteredGrid.depthLogScale,
+                               clusteredGrid.depthLogBias};
+        params.clusterRenderExtent = {clusteredGrid.renderWidth, clusteredGrid.renderHeight, 0u, 0u};
     }
 
     const bool clearForDebug = settings.debug.deferredLightDebugMode > 0;
@@ -274,7 +275,7 @@ bool DeferredLightingPass::execute(RhiCommandList& commandList, const FrameConte
     commandList.setGraphicsPipeline(m_pipeline);
     commandList.setBindGroup(0u, m_bindGroup);
     if (clusteredLightingActive) {
-        commandList.setBindGroup(1u, m_clusteredLightingPass->consumerBindGroup());
+        commandList.setBindGroup(1u, clusteredLightingBindGroup);
     }
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();

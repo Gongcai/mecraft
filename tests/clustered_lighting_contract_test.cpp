@@ -177,7 +177,7 @@ bool testReadbackCompletionContract() {
                        "statistics readback must query its exact GPU submission") &&
            requireTrue(pass.find("m_statsReadbackSlotAvailable = false") != std::string::npos,
                        "pending readback slots must remain unavailable for overwrite") &&
-           requireTrue(pass.find("m_statsReadbackWorldSnapshots[ringIndex] = captureWorldLightGridStats()") !=
+           requireTrue(pass.find("m_statsReadbackWorldSnapshots[ringIndex] = captureWorldLightGridStats(frame)") !=
                                std::string::npos &&
                            pass.find("applyWorldLightGridStats(m_statsReadbackWorldSnapshots[ringIndex])") !=
                                std::string::npos,
@@ -199,7 +199,7 @@ bool testEmptyLightingSteadyStateContract() {
         return false;
     }
 
-    const size_t emptySkip = pass.find("m_lights.empty() && m_emptyBuildReady");
+    const size_t emptySkip = pass.find("frame->lights.empty() && m_emptyBuildReady");
     const size_t dependencyReturn =
         emptySkip == std::string::npos ? std::string::npos : pass.find("return dependency;", emptySkip);
     const size_t uploadPass = pass.find("ClusteredLighting.Upload");
@@ -209,13 +209,36 @@ bool testEmptyLightingSteadyStateContract() {
                            uploadPass != std::string::npos && dependencyReturn < uploadPass,
                        "a validated empty build must bypass the complete cluster graph chain") &&
            requireTrue(pass.find("m_emptyBuildReady = completionValid") != std::string::npos &&
-                           pass.find("publishEmptyFrameStats()") != std::string::npos,
+                           pass.find("publishEmptyFrameStats(*frame)") != std::string::npos,
                        "empty-build reuse must begin only after successful graph submission") &&
-           requireTrue(lightingPass.find("m_clusteredLightingPass->activeLightCount()") != std::string::npos &&
+           requireTrue(lightingPass.find("clusteredActiveLightCount") != std::string::npos &&
                            deferred.find("#define uClusterActiveLightCount pFlags5.z") != std::string::npos &&
                            activeLightBranch != std::string::npos && clusteredEvaluation != std::string::npos &&
                            activeLightBranch < clusteredEvaluation,
                        "deferred lighting must bypass clustered buffer queries when no light intersects the view");
+}
+
+bool testClusteredFrameResourceIdentityContract() {
+    std::string pass;
+    std::string deferred;
+    if (!requireTrue(readProjectFile("src/renderer/passes/ClusteredLightingPass.cpp", pass),
+                     "clustered-light pass source must be readable") ||
+        !requireTrue(readProjectFile("src/renderer/core/DeferredPipeline.cpp", deferred),
+                     "deferred pipeline source must be readable")) {
+        return false;
+    }
+    return requireTrue(pass.find("std::shared_ptr<const BuildFrameData> frame = m_preparedFrame") != std::string::npos,
+                       "cluster graph callbacks must retain an immutable frame snapshot") &&
+           requireTrue(pass.find("resources.consumerBindGroup = slot.consumerBindGroup") != std::string::npos &&
+                           pass.find("resources.slotIndex = frame.slotIndex") != std::string::npos,
+                       "imported graph resources must retain the producing slot identity") &&
+           requireTrue(pass.find("recordCount(pass.commandList(), *frame)") != std::string::npos &&
+                           pass.find("recordFill(pass.commandList(), *frame)") != std::string::npos &&
+                           pass.find("recordValidateAndReadback(pass.commandList(), *frame)") != std::string::npos,
+                       "count, fill, and validation must use the same retained frame snapshot") &&
+           requireTrue(deferred.find("clusteredLightingResources.consumerBindGroup") != std::string::npos &&
+                           deferred.find("clusteredLightingResources.activeLightCount") != std::string::npos,
+                       "deferred lighting must use the imported frame consumer binding and light count");
 }
 
 bool testComputeShaderContracts() {
@@ -403,6 +426,7 @@ bool testSharedLightingConsumers() {
 int main() {
     if (!testGridAndLogarithmicSlices() || !testCoverageAndCapacity() || !testPointShadowDepthFormula() ||
         !testComputeShaderContracts() || !testReadbackCompletionContract() || !testEmptyLightingSteadyStateContract() ||
+        !testClusteredFrameResourceIdentityContract() ||
         !testSharedLightingConsumers()) {
         return 1;
     }

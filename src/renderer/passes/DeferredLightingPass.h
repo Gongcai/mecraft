@@ -4,6 +4,7 @@
 #include "RenderPass.h"
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
+#include "../contracts/ClusteredLightingContract.h"
 #include "../rhi/RhiHandles.h"
 
 #include <array>
@@ -48,11 +49,16 @@ public:
     /// @param rtgiEmissiveDirectView Current-frame pre-exposed emissive direct texture.
     /// @param rtgiEncoding Exact indirect RTGI signal encoding consumed by the fragment shader.
     /// @param rtgiRadianceScale Scale converting indirect RTGI into the pre-exposed scene HDR domain.
+    /// @param clusteredLightingBindGroup Consumer descriptor set for this frame's build slot.
+    /// @param clusteredActiveLightCount Number of lights intersecting the current view.
+    /// @param clusteredGrid Grid parameters paired with clusteredLightingBindGroup.
     /// @return True when resources were prepared and lighting commands were recorded.
     [[nodiscard]] bool execute(RhiCommandList& commandList, const FrameContext& ctx, const RenderSettings& settings,
                                DeferredRenderTargets& targets, RhiTextureViewHandle rtgiDiffuseView,
                                RhiTextureViewHandle rtgiEmissiveDirectView, RtgiDiffuseEncoding rtgiEncoding,
-                               float rtgiRadianceScale);
+                               float rtgiRadianceScale, RhiBindGroupHandle clusteredLightingBindGroup,
+                               uint32_t clusteredActiveLightCount,
+                               const renderer::contracts::ClusterGrid& clusteredGrid);
 
 private:
     bool ensureRhiPipeline(RhiDevice& rhiDevice);

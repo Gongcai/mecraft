@@ -105,6 +105,8 @@ void appendCombinedTextureSamplerBinding(RhiBindGroupDesc& desc, const uint32_t 
 
 bool ClusteredLightingPass::setLights(std::vector<renderer::contracts::GpuLight> lights) {
     m_lights = std::move(lights);
+    m_preparedFrame.reset();
+    m_emptyBuildFrame.reset();
     m_inputValid = validateLights();
     if (!m_inputValid) {
         m_lights.clear();
@@ -144,6 +146,10 @@ bool ClusteredLightingPass::setLocalShadowResources(const LocalShadowResources& 
         }
     }
     m_localShadowResources = resources;
+    if (changed) {
+        m_prepared = false;
+        m_preparedFrame.reset();
+    }
     return true;
 }
 
@@ -201,6 +207,7 @@ bool ClusteredLightingPass::prepareGraphFrame(RhiDevice& rhiDevice, const FrameC
     }
     m_rhiDevice = &rhiDevice;
     m_prepared = false;
+    m_preparedFrame.reset();
     // Build resources rotate across ring slots. The slot selected here was
     // last used kBuildSlotCount frames ago; that submission is normally
     // already complete because the swapchain frame-slot fence was waited on
@@ -219,8 +226,30 @@ bool ClusteredLightingPass::prepareGraphFrame(RhiDevice& rhiDevice, const FrameC
         !ensureBuildBindGroups(rhiDevice, slot) || !ensureConsumerBindGroup(rhiDevice, slot)) {
         return false;
     }
+    auto frame = std::make_shared<BuildFrameData>();
+    frame->slotIndex = m_activeSlot;
+    frame->grid = m_grid;
+    frame->inverseProjection = m_inverseProjection;
+    frame->indexCapacity = m_indexCapacity;
+    frame->lights = m_lights;
+    frame->lightBounds = m_lightBounds;
+    frame->worldLightGrid = m_worldLightGrid;
+    frame->zeroClusterWords = m_zeroClusterWords;
+    frame->scanLevels = m_scanLevels;
+    m_preparedFrame = std::move(frame);
     m_prepared = true;
     return true;
+}
+
+uint32_t ClusteredLightingPass::preparedSlotIndex() const {
+    return m_preparedFrame != nullptr ? m_preparedFrame->slotIndex : std::numeric_limits<uint32_t>::max();
+}
+
+RhiBindGroupHandle ClusteredLightingPass::consumerBindGroup(const uint32_t slotIndex) const {
+    if (slotIndex >= kBuildSlotCount) {
+        return {};
+    }
+    return m_buildSlots[slotIndex].consumerBindGroup;
 }
 
 bool ClusteredLightingPass::consumeReadback(RhiDevice& rhiDevice) {
@@ -517,7 +546,8 @@ bool ClusteredLightingPass::ensureBuffers(RhiDevice& rhiDevice, BuildSlot& slot)
         return false;
     }
     m_indexCapacity = static_cast<uint32_t>(
-        std::min<uint64_t>(slot.compactIndexBuffer.capacityBytes / sizeof(uint32_t), std::numeric_limits<uint32_t>::max()));
+        std::min<uint64_t>(slot.compactIndexBuffer.capacityBytes / sizeof(uint32_t),
+                           std::numeric_limits<uint32_t>::max()));
     return m_indexCapacity >= std::max(m_requiredIndexCount, 1u);
 }
 
@@ -676,22 +706,33 @@ bool ClusteredLightingPass::ensureConsumerBindGroup(RhiDevice& rhiDevice, BuildS
 }
 
 bool ClusteredLightingPass::importGraphResources(RenderGraph& graph, GraphResources& resources) const {
-    if (!m_prepared || m_rhiDevice == nullptr) {
+    if (!m_prepared || m_rhiDevice == nullptr || m_preparedFrame == nullptr ||
+        m_preparedFrame->slotIndex >= kBuildSlotCount) {
         return false;
     }
-    const BuildSlot& slot = m_buildSlots[m_activeSlot];
-    return importBuffer(graph, slot.lightBuffer, resources.lights) &&
-           importBuffer(graph, slot.lightBoundsBuffer, resources.lightBounds) &&
-           importBuffer(graph, slot.countBuffer, resources.counts) &&
-           importBuffer(graph, slot.offsetBuffer, resources.offsets) &&
-           importBuffer(graph, slot.recordBuffer, resources.records) &&
-           importBuffer(graph, slot.cursorBuffer, resources.cursors) &&
-           importBuffer(graph, slot.compactIndexBuffer, resources.compactIndices) &&
-           importBuffer(graph, slot.scanScratchBuffer, resources.scanScratch) &&
-           importBuffer(graph, slot.statsBuffer, resources.stats) &&
-           importBuffer(graph, slot.worldCellBuffer, resources.worldCells) &&
-           importBuffer(graph, slot.worldIndexBuffer, resources.worldIndices) &&
-           importBuffer(graph, slot.worldHeaderBuffer, resources.worldHeader);
+    const BuildFrameData& frame = *m_preparedFrame;
+    const BuildSlot& slot = m_buildSlots[frame.slotIndex];
+    const bool imported =
+        importBuffer(graph, slot.lightBuffer, resources.lights) &&
+        importBuffer(graph, slot.lightBoundsBuffer, resources.lightBounds) &&
+        importBuffer(graph, slot.countBuffer, resources.counts) &&
+        importBuffer(graph, slot.offsetBuffer, resources.offsets) &&
+        importBuffer(graph, slot.recordBuffer, resources.records) &&
+        importBuffer(graph, slot.cursorBuffer, resources.cursors) &&
+        importBuffer(graph, slot.compactIndexBuffer, resources.compactIndices) &&
+        importBuffer(graph, slot.scanScratchBuffer, resources.scanScratch) &&
+        importBuffer(graph, slot.statsBuffer, resources.stats) &&
+        importBuffer(graph, slot.worldCellBuffer, resources.worldCells) &&
+        importBuffer(graph, slot.worldIndexBuffer, resources.worldIndices) &&
+        importBuffer(graph, slot.worldHeaderBuffer, resources.worldHeader);
+    if (imported) {
+        resources.consumerBindGroup = slot.consumerBindGroup;
+        resources.grid = frame.grid;
+        resources.activeLightCount = static_cast<uint32_t>(frame.lightBounds.size());
+        resources.indexCapacity = frame.indexCapacity;
+        resources.slotIndex = frame.slotIndex;
+    }
+    return imported;
 }
 
 bool ClusteredLightingPass::importBuffer(RenderGraph& graph, const BufferResource& resource,
@@ -715,15 +756,18 @@ bool ClusteredLightingPass::importBuffer(RenderGraph& graph, const BufferResourc
 
 RgPassHandle ClusteredLightingPass::addGraphPasses(RenderGraph& graph, const GraphResources& resources,
                                                    const RgPassHandle dependency) {
-    if (!m_prepared || !dependency.isValid()) {
+    if (!m_prepared || m_preparedFrame == nullptr || !dependency.isValid() ||
+        resources.slotIndex != m_preparedFrame->slotIndex || !resources.consumerBindGroup.isValid()) {
         return {};
     }
+    const std::shared_ptr<const BuildFrameData> frame = m_preparedFrame;
     m_emptyBuildScheduled = false;
-    if (m_lights.empty() && m_emptyBuildReady) {
-        publishEmptyFrameStats();
+    m_emptyBuildFrame = frame;
+    if (frame->lights.empty() && m_emptyBuildReady) {
+        publishEmptyFrameStats(*frame);
         return dependency;
     }
-    m_emptyBuildScheduled = m_lights.empty();
+    m_emptyBuildScheduled = frame->lights.empty();
 
     RenderGraphPassBuilder upload =
         graph.addPass({"ClusteredLighting.Upload", RgPassType::Copy, RhiQueueType::Graphics});
@@ -736,7 +780,7 @@ RgPassHandle ClusteredLightingPass::addGraphPasses(RenderGraph& graph, const Gra
         .writeBuffer(resources.worldCells, RhiResourceState::TransferDst)
         .writeBuffer(resources.worldIndices, RhiResourceState::TransferDst)
         .writeBuffer(resources.worldHeader, RhiResourceState::TransferDst)
-        .setExecute([this](RgPassContext& pass) { return recordUpload(pass.commandList()); });
+        .setExecute([this, frame](RgPassContext& pass) { return recordUpload(pass.commandList(), *frame); });
     RgPassHandle tail = upload.handle();
 
     RenderGraphPassBuilder count =
@@ -744,10 +788,10 @@ RgPassHandle ClusteredLightingPass::addGraphPasses(RenderGraph& graph, const Gra
     count.dependsOn(tail)
         .readBuffer(resources.lightBounds, RhiResourceState::StorageBuffer)
         .readWriteBuffer(resources.counts, RhiResourceState::StorageBuffer)
-        .setExecute([this](RgPassContext& pass) { return recordCount(pass.commandList()); });
+        .setExecute([this, frame](RgPassContext& pass) { return recordCount(pass.commandList(), *frame); });
     tail = count.handle();
 
-    for (uint32_t level = 0u; level < m_scanLevels.size(); ++level) {
+    for (uint32_t level = 0u; level < frame->scanLevels.size(); ++level) {
         const std::string passName = "ClusteredLighting.Scan." + std::to_string(level);
         RenderGraphPassBuilder scan = graph.addPass({passName.c_str(), RgPassType::Compute, RhiQueueType::Compute});
         scan.dependsOn(tail);
@@ -758,11 +802,13 @@ RgPassHandle ClusteredLightingPass::addGraphPasses(RenderGraph& graph, const Gra
         } else {
             scan.readWriteBuffer(resources.scanScratch, RhiResourceState::StorageBuffer);
         }
-        scan.setExecute([this, level](RgPassContext& pass) { return recordScan(pass.commandList(), level); });
+        scan.setExecute([this, frame, level](RgPassContext& pass) {
+            return recordScan(pass.commandList(), *frame, level);
+        });
         tail = scan.handle();
     }
 
-    for (uint32_t child = static_cast<uint32_t>(m_scanLevels.size() - 1u); child > 0u; --child) {
+    for (uint32_t child = static_cast<uint32_t>(frame->scanLevels.size() - 1u); child > 0u; --child) {
         const uint32_t childLevel = child - 1u;
         const std::string passName = "ClusteredLighting.ScanAdd." + std::to_string(childLevel);
         RenderGraphPassBuilder add = graph.addPass({passName.c_str(), RgPassType::Compute, RhiQueueType::Compute});
@@ -773,8 +819,9 @@ RgPassHandle ClusteredLightingPass::addGraphPasses(RenderGraph& graph, const Gra
         } else {
             add.readWriteBuffer(resources.scanScratch, RhiResourceState::StorageBuffer);
         }
-        add.setExecute(
-            [this, childLevel](RgPassContext& pass) { return recordScanAdd(pass.commandList(), childLevel); });
+        add.setExecute([this, frame, childLevel](RgPassContext& pass) {
+            return recordScanAdd(pass.commandList(), *frame, childLevel);
+        });
         tail = add.handle();
     }
 
@@ -785,7 +832,7 @@ RgPassHandle ClusteredLightingPass::addGraphPasses(RenderGraph& graph, const Gra
         .readBuffer(resources.offsets, RhiResourceState::StorageBuffer)
         .writeBuffer(resources.records, RhiResourceState::StorageBuffer)
         .readWriteBuffer(resources.stats, RhiResourceState::StorageBuffer)
-        .setExecute([this](RgPassContext& pass) { return recordFinalize(pass.commandList()); });
+        .setExecute([this, frame](RgPassContext& pass) { return recordFinalize(pass.commandList(), *frame); });
     tail = finalize.handle();
 
     RenderGraphPassBuilder fill = graph.addPass({"ClusteredLighting.Fill", RgPassType::Compute, RhiQueueType::Compute});
@@ -795,7 +842,7 @@ RgPassHandle ClusteredLightingPass::addGraphPasses(RenderGraph& graph, const Gra
         .readWriteBuffer(resources.cursors, RhiResourceState::StorageBuffer)
         .writeBuffer(resources.compactIndices, RhiResourceState::StorageBuffer)
         .readWriteBuffer(resources.stats, RhiResourceState::StorageBuffer)
-        .setExecute([this](RgPassContext& pass) { return recordFill(pass.commandList()); });
+        .setExecute([this, frame](RgPassContext& pass) { return recordFill(pass.commandList(), *frame); });
     tail = fill.handle();
 
     RenderGraphPassBuilder validate =
@@ -804,82 +851,90 @@ RgPassHandle ClusteredLightingPass::addGraphPasses(RenderGraph& graph, const Gra
         .readBuffer(resources.records, RhiResourceState::StorageBuffer)
         .readBuffer(resources.cursors, RhiResourceState::StorageBuffer)
         .readWriteBuffer(resources.stats, RhiResourceState::StorageBuffer)
-        .setExecute([this](RgPassContext& pass) { return recordValidateAndReadback(pass.commandList()); });
+        .setExecute([this, frame](RgPassContext& pass) {
+            return recordValidateAndReadback(pass.commandList(), *frame);
+        });
     return validate.handle();
 }
 
-bool ClusteredLightingPass::recordUpload(RhiCommandList& commandList) const {
-    const BuildSlot& slot = m_buildSlots[m_activeSlot];
-    if (!m_lights.empty()) {
-        commandList.updateBuffer(slot.lightBuffer.handle, 0u, m_lights.data(), m_lights.size() * sizeof(m_lights.front()));
+bool ClusteredLightingPass::recordUpload(RhiCommandList& commandList, const BuildFrameData& frame) const {
+    const BuildSlot& slot = m_buildSlots[frame.slotIndex];
+    if (!frame.lights.empty()) {
+        commandList.updateBuffer(slot.lightBuffer.handle, 0u, frame.lights.data(),
+                                 frame.lights.size() * sizeof(frame.lights.front()));
     }
-    if (!m_lightBounds.empty()) {
-        commandList.updateBuffer(slot.lightBoundsBuffer.handle, 0u, m_lightBounds.data(),
-                                 m_lightBounds.size() * sizeof(m_lightBounds.front()));
+    if (!frame.lightBounds.empty()) {
+        commandList.updateBuffer(slot.lightBoundsBuffer.handle, 0u, frame.lightBounds.data(),
+                                 frame.lightBounds.size() * sizeof(frame.lightBounds.front()));
     }
-    if (!m_worldLightGrid.cells.empty()) {
-        commandList.updateBuffer(slot.worldCellBuffer.handle, 0u, m_worldLightGrid.cells.data(),
-                                 m_worldLightGrid.cells.size() * sizeof(m_worldLightGrid.cells.front()));
+    if (!frame.worldLightGrid.cells.empty()) {
+        commandList.updateBuffer(slot.worldCellBuffer.handle, 0u, frame.worldLightGrid.cells.data(),
+                                 frame.worldLightGrid.cells.size() * sizeof(frame.worldLightGrid.cells.front()));
     }
-    if (!m_worldLightGrid.lightIndices.empty()) {
-        commandList.updateBuffer(slot.worldIndexBuffer.handle, 0u, m_worldLightGrid.lightIndices.data(),
-                                 m_worldLightGrid.lightIndices.size() * sizeof(m_worldLightGrid.lightIndices.front()));
+    if (!frame.worldLightGrid.lightIndices.empty()) {
+        commandList.updateBuffer(
+            slot.worldIndexBuffer.handle, 0u, frame.worldLightGrid.lightIndices.data(),
+            frame.worldLightGrid.lightIndices.size() * sizeof(frame.worldLightGrid.lightIndices.front()));
     }
-    commandList.updateBuffer(slot.worldHeaderBuffer.handle, 0u, &m_worldLightGrid.header, sizeof(m_worldLightGrid.header));
-    commandList.updateBuffer(slot.countBuffer.handle, 0u, m_zeroClusterWords.data(),
-                             m_zeroClusterWords.size() * sizeof(m_zeroClusterWords.front()));
-    commandList.updateBuffer(slot.cursorBuffer.handle, 0u, m_zeroClusterWords.data(),
-                             m_zeroClusterWords.size() * sizeof(m_zeroClusterWords.front()));
+    commandList.updateBuffer(slot.worldHeaderBuffer.handle, 0u, &frame.worldLightGrid.header,
+                             sizeof(frame.worldLightGrid.header));
+    commandList.updateBuffer(slot.countBuffer.handle, 0u, frame.zeroClusterWords.data(),
+                             frame.zeroClusterWords.size() * sizeof(frame.zeroClusterWords.front()));
+    commandList.updateBuffer(slot.cursorBuffer.handle, 0u, frame.zeroClusterWords.data(),
+                             frame.zeroClusterWords.size() * sizeof(frame.zeroClusterWords.front()));
     const uint32_t stats[kStatsWordCount] = {0u,
                                              0u,
                                              0u,
                                              0u,
-                                             m_grid.clusterCount,
-                                             static_cast<uint32_t>(m_lights.size()),
-                                             m_indexCapacity,
+                                             frame.grid.clusterCount,
+                                             static_cast<uint32_t>(frame.lights.size()),
+                                             frame.indexCapacity,
                                              renderer::contracts::kGpuLightContractVersion};
     commandList.updateBuffer(slot.statsBuffer.handle, 0u, stats, sizeof(stats));
     return true;
 }
 
-bool ClusteredLightingPass::recordCount(RhiCommandList& commandList) const {
-    if (m_lightBounds.empty()) {
+bool ClusteredLightingPass::recordCount(RhiCommandList& commandList, const BuildFrameData& frame) const {
+    if (frame.lightBounds.empty()) {
         return true;
     }
     ClusterGridPushConstants push;
-    push.inverseProjection = m_inverseProjection;
-    push.gridAndLightCount = {m_grid.tileCountX, m_grid.tileCountY, m_grid.depthSliceCount,
-                              static_cast<uint32_t>(m_lightBounds.size())};
-    push.depthParameters = {m_grid.nearPlane, m_grid.farPlane, m_grid.depthLogScale, m_grid.depthLogBias};
+    push.inverseProjection = frame.inverseProjection;
+    push.gridAndLightCount = {frame.grid.tileCountX, frame.grid.tileCountY, frame.grid.depthSliceCount,
+                              static_cast<uint32_t>(frame.lightBounds.size())};
+    push.depthParameters = {frame.grid.nearPlane, frame.grid.farPlane, frame.grid.depthLogScale,
+                            frame.grid.depthLogBias};
     commandList.setComputePipeline(m_countStage.pipeline);
-    commandList.setBindGroup(0u, m_buildSlots[m_activeSlot].countBindGroup);
+    commandList.setBindGroup(0u, m_buildSlots[frame.slotIndex].countBindGroup);
     commandList.pushConstants(&push, sizeof(push), rhiFlag(RhiShaderStage::Compute));
-    commandList.dispatch(static_cast<uint32_t>(m_lightBounds.size()), m_grid.depthSliceCount, 1u);
+    commandList.dispatch(static_cast<uint32_t>(frame.lightBounds.size()), frame.grid.depthSliceCount, 1u);
     return true;
 }
 
-bool ClusteredLightingPass::recordScan(RhiCommandList& commandList, const uint32_t level) const {
-    if (level >= m_scanLevels.size()) {
+bool ClusteredLightingPass::recordScan(RhiCommandList& commandList, const BuildFrameData& frame,
+                                       const uint32_t level) const {
+    if (level >= frame.scanLevels.size()) {
         return false;
     }
-    const ScanLevel& scanLevel = m_scanLevels[level];
+    const ScanLevel& scanLevel = frame.scanLevels[level];
     ClusterScanPushConstants push;
     push.offsetsAndCount = {scanLevel.inputOffsetWords, scanLevel.outputOffsetWords, scanLevel.blockSumOffsetWords,
                             scanLevel.elementCount};
     commandList.setComputePipeline(level == 0u ? m_scanStage.pipeline : m_scanScratchStage.pipeline);
-    commandList.setBindGroup(0u, m_buildSlots[m_activeSlot].scanBindGroups[level]);
+    commandList.setBindGroup(0u, m_buildSlots[frame.slotIndex].scanBindGroups[level]);
     commandList.pushConstants(&push, sizeof(push), rhiFlag(RhiShaderStage::Compute));
     commandList.dispatch(scanLevel.groupCount, 1u, 1u);
     return true;
 }
 
-bool ClusteredLightingPass::recordScanAdd(RhiCommandList& commandList, const uint32_t childLevel) const {
-    const BuildSlot& slot = m_buildSlots[m_activeSlot];
-    if (childLevel + 1u >= m_scanLevels.size() || childLevel >= slot.scanAddBindGroups.size()) {
+bool ClusteredLightingPass::recordScanAdd(RhiCommandList& commandList, const BuildFrameData& frame,
+                                          const uint32_t childLevel) const {
+    const BuildSlot& slot = m_buildSlots[frame.slotIndex];
+    if (childLevel + 1u >= frame.scanLevels.size() || childLevel >= slot.scanAddBindGroups.size()) {
         return false;
     }
-    const ScanLevel& child = m_scanLevels[childLevel];
-    const ScanLevel& parent = m_scanLevels[childLevel + 1u];
+    const ScanLevel& child = frame.scanLevels[childLevel];
+    const ScanLevel& parent = frame.scanLevels[childLevel + 1u];
     ClusterScanPushConstants push;
     push.offsetsAndCount = {child.outputOffsetWords, parent.outputOffsetWords, child.elementCount,
                             renderer::contracts::kClusterScanElementsPerWorkgroup};
@@ -890,47 +945,50 @@ bool ClusteredLightingPass::recordScanAdd(RhiCommandList& commandList, const uin
     return true;
 }
 
-bool ClusteredLightingPass::recordFinalize(RhiCommandList& commandList) const {
+bool ClusteredLightingPass::recordFinalize(RhiCommandList& commandList, const BuildFrameData& frame) const {
     ClusterScanPushConstants push;
-    push.offsetsAndCount = {m_grid.clusterCount, m_indexCapacity, static_cast<uint32_t>(m_lights.size()), 0u};
+    push.offsetsAndCount = {frame.grid.clusterCount, frame.indexCapacity, static_cast<uint32_t>(frame.lights.size()),
+                            0u};
     commandList.setComputePipeline(m_finalizeStage.pipeline);
-    commandList.setBindGroup(0u, m_buildSlots[m_activeSlot].finalizeBindGroup);
+    commandList.setBindGroup(0u, m_buildSlots[frame.slotIndex].finalizeBindGroup);
     commandList.pushConstants(&push, sizeof(push), rhiFlag(RhiShaderStage::Compute));
-    commandList.dispatch((m_grid.clusterCount + 255u) / 256u, 1u, 1u);
+    commandList.dispatch((frame.grid.clusterCount + 255u) / 256u, 1u, 1u);
     return true;
 }
 
-bool ClusteredLightingPass::recordFill(RhiCommandList& commandList) const {
-    if (m_lightBounds.empty()) {
+bool ClusteredLightingPass::recordFill(RhiCommandList& commandList, const BuildFrameData& frame) const {
+    if (frame.lightBounds.empty()) {
         return true;
     }
     ClusterFillPushConstants push;
-    push.inverseProjection = m_inverseProjection;
-    push.gridAndLightCount = {m_grid.tileCountX, m_grid.tileCountY, m_grid.depthSliceCount,
-                              static_cast<uint32_t>(m_lightBounds.size())};
-    push.depthParameters = {m_grid.nearPlane, m_grid.farPlane, m_grid.depthLogScale, m_grid.depthLogBias};
-    push.capacity = {m_indexCapacity, 0u, 0u, 0u};
+    push.inverseProjection = frame.inverseProjection;
+    push.gridAndLightCount = {frame.grid.tileCountX, frame.grid.tileCountY, frame.grid.depthSliceCount,
+                              static_cast<uint32_t>(frame.lightBounds.size())};
+    push.depthParameters = {frame.grid.nearPlane, frame.grid.farPlane, frame.grid.depthLogScale,
+                            frame.grid.depthLogBias};
+    push.capacity = {frame.indexCapacity, 0u, 0u, 0u};
     commandList.setComputePipeline(m_fillStage.pipeline);
-    commandList.setBindGroup(0u, m_buildSlots[m_activeSlot].fillBindGroup);
+    commandList.setBindGroup(0u, m_buildSlots[frame.slotIndex].fillBindGroup);
     commandList.pushConstants(&push, sizeof(push), rhiFlag(RhiShaderStage::Compute));
-    commandList.dispatch(static_cast<uint32_t>(m_lightBounds.size()), m_grid.depthSliceCount, 1u);
+    commandList.dispatch(static_cast<uint32_t>(frame.lightBounds.size()), frame.grid.depthSliceCount, 1u);
     return true;
 }
 
-bool ClusteredLightingPass::recordValidateAndReadback(RhiCommandList& commandList) {
-    const BuildSlot& slot = m_buildSlots[m_activeSlot];
+bool ClusteredLightingPass::recordValidateAndReadback(RhiCommandList& commandList, const BuildFrameData& frame) {
+    const BuildSlot& slot = m_buildSlots[frame.slotIndex];
     ClusterScanPushConstants push;
-    push.offsetsAndCount = {m_grid.clusterCount, m_indexCapacity, 0u, 0u};
+    push.offsetsAndCount = {frame.grid.clusterCount, frame.indexCapacity, 0u, 0u};
     commandList.setComputePipeline(m_validateStage.pipeline);
     commandList.setBindGroup(0u, slot.validateBindGroup);
     commandList.pushConstants(&push, sizeof(push), rhiFlag(RhiShaderStage::Compute));
-    commandList.dispatch((m_grid.clusterCount + 255u) / 256u, 1u, 1u);
+    commandList.dispatch((frame.grid.clusterCount + 255u) / 256u, 1u, 1u);
     if (!m_statsReadbackSlotAvailable) {
         return true;
     }
 
     const uint32_t ringIndex = m_statsReadbackWriteIndex;
-    commandList.bufferBarrier({slot.statsBuffer.handle, RhiResourceState::StorageBuffer, RhiResourceState::TransferSrc});
+    commandList.bufferBarrier(
+        {slot.statsBuffer.handle, RhiResourceState::StorageBuffer, RhiResourceState::TransferSrc});
     if (m_statsReadbackWritten[ringIndex]) {
         commandList.bufferBarrier(
             {m_statsReadbackBuffers[ringIndex], RhiResourceState::HostRead, RhiResourceState::TransferDst});
@@ -942,17 +1000,19 @@ bool ClusteredLightingPass::recordValidateAndReadback(RhiCommandList& commandLis
     commandList.copyBuffer(copy);
     commandList.bufferBarrier(
         {m_statsReadbackBuffers[ringIndex], RhiResourceState::TransferDst, RhiResourceState::HostRead});
-    commandList.bufferBarrier({slot.statsBuffer.handle, RhiResourceState::TransferSrc, RhiResourceState::StorageBuffer});
-    m_statsReadbackWorldSnapshots[ringIndex] = captureWorldLightGridStats();
+    commandList.bufferBarrier(
+        {slot.statsBuffer.handle, RhiResourceState::TransferSrc, RhiResourceState::StorageBuffer});
+    m_statsReadbackWorldSnapshots[ringIndex] = captureWorldLightGridStats(frame);
     m_pendingStatsReadbackIndex = ringIndex;
     m_statsReadbackPending = true;
     return true;
 }
 
-ClusteredLightingPass::WorldLightGridStatsSnapshot ClusteredLightingPass::captureWorldLightGridStats() const {
-    return {static_cast<uint32_t>(m_worldLightGrid.cells.size()),
-            static_cast<uint32_t>(m_worldLightGrid.lightIndices.size()), m_worldLightGrid.header.countsAndVersion.z,
-            m_worldLightGrid.maxLightsPerCell};
+ClusteredLightingPass::WorldLightGridStatsSnapshot ClusteredLightingPass::captureWorldLightGridStats(
+    const BuildFrameData& frame) const {
+    return {static_cast<uint32_t>(frame.worldLightGrid.cells.size()),
+            static_cast<uint32_t>(frame.worldLightGrid.lightIndices.size()),
+            frame.worldLightGrid.header.countsAndVersion.z, frame.worldLightGrid.maxLightsPerCell};
 }
 
 void ClusteredLightingPass::applyWorldLightGridStats(const WorldLightGridStatsSnapshot& snapshot) {
@@ -962,29 +1022,38 @@ void ClusteredLightingPass::applyWorldLightGridStats(const WorldLightGridStatsSn
     m_frameStats.maxWorldLightsPerCell = snapshot.maxLightsPerCell;
 }
 
-void ClusteredLightingPass::publishEmptyFrameStats() {
+void ClusteredLightingPass::publishEmptyFrameStats(const BuildFrameData& frame) {
     m_frameStats = {};
     m_frameStats.valid = true;
-    m_frameStats.clusterCount = m_grid.clusterCount;
-    m_frameStats.indexCapacity = m_indexCapacity;
-    applyWorldLightGridStats(captureWorldLightGridStats());
+    m_frameStats.clusterCount = frame.grid.clusterCount;
+    m_frameStats.indexCapacity = frame.indexCapacity;
+    applyWorldLightGridStats(captureWorldLightGridStats(frame));
 }
 
-void ClusteredLightingPass::finishGraphExecution(const bool succeeded, const RhiSubmissionToken completionToken) {
+void ClusteredLightingPass::finishGraphExecution(const bool succeeded, const RhiSubmissionToken completionToken,
+                                                 const uint32_t slotIndex) {
     if (!succeeded) {
         m_emptyBuildReady = false;
     }
     // Record the token even for failed frames: partial submissions may have
     // already touched this slot's buffers, so the next reuse must still wait.
     if (completionToken.isValid()) {
-        m_buildSlots[m_activeSlot].lastUseToken = completionToken;
+        if (slotIndex >= kBuildSlotCount) {
+            m_gpuBuildFailed = true;
+            MECRAFT_LOG_STREAM(std::cerr << "[ClusteredLightingPass] Completion token has no build slot\n");
+        } else {
+            m_buildSlots[slotIndex].lastUseToken = completionToken;
+        }
     }
     const bool emptyBuildScheduled = m_emptyBuildScheduled;
     m_emptyBuildScheduled = false;
+    const std::shared_ptr<const BuildFrameData> emptyBuildFrame = std::move(m_emptyBuildFrame);
     if (!m_statsReadbackPending) {
         if (emptyBuildScheduled && succeeded) {
             m_emptyBuildReady = true;
-            publishEmptyFrameStats();
+            if (emptyBuildFrame != nullptr) {
+                publishEmptyFrameStats(*emptyBuildFrame);
+            }
         }
         return;
     }
@@ -1001,8 +1070,8 @@ void ClusteredLightingPass::finishGraphExecution(const bool succeeded, const Rhi
     m_statsReadbackPending = false;
     if (emptyBuildScheduled) {
         m_emptyBuildReady = completionValid;
-        if (m_emptyBuildReady) {
-            publishEmptyFrameStats();
+        if (m_emptyBuildReady && emptyBuildFrame != nullptr) {
+            publishEmptyFrameStats(*emptyBuildFrame);
         }
     }
 }
@@ -1099,6 +1168,7 @@ void ClusteredLightingPass::destroyBuffers() {
     m_statsReadbackPending = false;
     m_emptyBuildReady = false;
     m_emptyBuildScheduled = false;
+    m_emptyBuildFrame.reset();
 }
 
 void ClusteredLightingPass::shutdown() {
@@ -1122,4 +1192,6 @@ void ClusteredLightingPass::shutdown() {
     m_frameStats = {};
     m_localShadowResources = {};
     m_activeSlot = 0u;
+    m_preparedFrame.reset();
+    m_emptyBuildFrame.reset();
 }

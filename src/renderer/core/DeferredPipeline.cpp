@@ -1227,6 +1227,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     bool volumetricGraphPrepared = false;
     bool localShadowGraphPrepared = false;
     bool clusteredLightingGraphPrepared = false;
+    uint32_t clusteredLightingSlotIndex = std::numeric_limits<uint32_t>::max();
     bool rtgiTraceGraphPrepared = false;
     bool rtgiEmissiveTemporalGraphPrepared = false;
     bool skyIblGraphPrepared = false;
@@ -1262,7 +1263,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             skyIblGraphPrepared = false;
         }
         if (clusteredLightingGraphPrepared) {
-            m_clusteredLightingPass->finishGraphExecution(false, RhiSubmissionToken{});
+            m_clusteredLightingPass->finishGraphExecution(false, RhiSubmissionToken{}, clusteredLightingSlotIndex);
             clusteredLightingGraphPrepared = false;
         }
         if (rtgiTraceGraphPrepared) {
@@ -1312,11 +1313,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                                                         ctx.temporalExtents.renderExtent.height)) {
             return failGraphSetup(__LINE__);
         }
+        const uint32_t slotIndex = m_clusteredLightingPass->preparedSlotIndex();
         clusteredLightingGraphPrepared = true;
-
-        const DeferredClusteredLightingResources clusteredResources{m_clusteredLightingPass->consumerBindGroupLayout(),
-                                                                    m_clusteredLightingPass->consumerBindGroup(),
-                                                                    m_clusteredLightingPass->grid()};
+        clusteredLightingSlotIndex = slotIndex;
+        const DeferredClusteredLightingResources clusteredResources{
+            m_clusteredLightingPass->consumerBindGroupLayout(),
+            m_clusteredLightingPass->consumerBindGroup(slotIndex), m_clusteredLightingPass->grid()};
         if ((m_shared->staticMeshRenderer != nullptr &&
              !m_shared->staticMeshRenderer->configureClusteredLighting(
                  clusteredResources.bindGroupLayout, clusteredResources.bindGroup, clusteredResources.grid)) ||
@@ -2117,7 +2119,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
 
         RtgiTracePass::LightingResources rtgiLighting;
         rtgiLighting.bindGroupLayout = m_clusteredLightingPass->consumerBindGroupLayout();
-        rtgiLighting.bindGroup = m_clusteredLightingPass->consumerBindGroup();
+        rtgiLighting.bindGroup = clusteredLightingResources.consumerBindGroup;
         rtgiLighting.lights = clusteredLightingResources.lights;
         rtgiLighting.worldCells = clusteredLightingResources.worldCells;
         rtgiLighting.worldIndices = clusteredLightingResources.worldIndices;
@@ -2401,7 +2403,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                          rtgiRadianceScale](RgPassContext& pass) {
         return m_lightingPass->execute(pass.commandList(), ctx, settings, targets,
                                        pass.textureView(rtgiDiffuseTexture), pass.textureView(rtgiEmissiveTexture),
-                                       rtgiDiffuseEncoding, rtgiRadianceScale);
+                                       rtgiDiffuseEncoding, rtgiRadianceScale,
+                                       clusteredLightingResources.consumerBindGroup,
+                                       clusteredLightingResources.activeLightCount,
+                                       clusteredLightingResources.grid);
     });
     if (clusteredLightingActive) {
         lighting.readBuffer(clusteredLightingResources.lights, RhiResourceState::StorageBuffer)
@@ -3202,7 +3207,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         m_hiZPass->finishGraphExecution(executed.succeeded());
     }
     if (clusteredLightingGraphPrepared) {
-        m_clusteredLightingPass->finishGraphExecution(executed.succeeded(), executed.completionToken());
+        m_clusteredLightingPass->finishGraphExecution(executed.succeeded(), executed.completionToken(),
+                                                      clusteredLightingSlotIndex);
     }
     if (localShadowGraphPrepared) {
         m_localShadowPass->finishGraphExecution(executed.succeeded());

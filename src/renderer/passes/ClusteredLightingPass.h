@@ -10,6 +10,8 @@
 
 #include <array>
 #include <cstdint>
+#include <limits>
+#include <memory>
 #include <vector>
 
 class RhiCommandList;
@@ -59,6 +61,13 @@ public:
         RgBufferHandle worldCells;
         RgBufferHandle worldIndices;
         RgBufferHandle worldHeader;
+        /// Consumer descriptor set bound to the same build slot as the graph buffers.
+        RhiBindGroupHandle consumerBindGroup;
+        /// Immutable build parameters captured when the graph resources were imported.
+        renderer::contracts::ClusterGrid grid;
+        uint32_t activeLightCount = 0u;
+        uint32_t indexCapacity = 0u;
+        uint32_t slotIndex = std::numeric_limits<uint32_t>::max();
     };
 
     void shutdown() override;
@@ -106,13 +115,18 @@ public:
     /// Commits delayed statistics only after the graph submission succeeds.
     /// @param succeeded True when every graph command list was submitted.
     /// @param completionToken Final graph submission that depends on validation.
-    void finishGraphExecution(bool succeeded, RhiSubmissionToken completionToken);
+    /// @param slotIndex Build slot used by this graph execution.
+    void finishGraphExecution(bool succeeded, RhiSubmissionToken completionToken, uint32_t slotIndex);
 
     [[nodiscard]] const renderer::contracts::ClusterGrid& grid() const { return m_grid; }
     [[nodiscard]] const ClusteredLightingFrameStats& frameStats() const { return m_frameStats; }
     [[nodiscard]] uint32_t activeLightCount() const { return static_cast<uint32_t>(m_lightBounds.size()); }
+    /// @return Build slot retained by the prepared graph frame, or an invalid index.
+    [[nodiscard]] uint32_t preparedSlotIndex() const;
     [[nodiscard]] RhiBindGroupLayoutHandle consumerBindGroupLayout() const { return m_consumerBindGroupLayout; }
-    [[nodiscard]] RhiBindGroupHandle consumerBindGroup() const { return m_buildSlots[m_activeSlot].consumerBindGroup; }
+    /// @param slotIndex Build slot whose consumer descriptor set is requested.
+    /// @return Descriptor set for the slot, or an invalid handle.
+    [[nodiscard]] RhiBindGroupHandle consumerBindGroup(uint32_t slotIndex) const;
 
 private:
     struct BufferResource final {
@@ -165,6 +179,18 @@ private:
         uint32_t blockSumOffsetWords = 0u;
     };
 
+    struct BuildFrameData final {
+        uint32_t slotIndex = std::numeric_limits<uint32_t>::max();
+        renderer::contracts::ClusterGrid grid;
+        glm::mat4 inverseProjection{1.0f};
+        uint32_t indexCapacity = 0u;
+        std::vector<renderer::contracts::GpuLight> lights;
+        std::vector<renderer::contracts::GpuClusterLightBounds> lightBounds;
+        renderer::contracts::WorldLightGridBuildResult worldLightGrid;
+        std::vector<uint32_t> zeroClusterWords;
+        std::vector<ScanLevel> scanLevels;
+    };
+
     struct WorldLightGridStatsSnapshot final {
         uint32_t cellCount = 0u;
         uint32_t indexCount = 0u;
@@ -186,16 +212,17 @@ private:
     [[nodiscard]] bool importBuffer(RenderGraph& graph, const BufferResource& resource,
                                     RgBufferHandle& graphBuffer) const;
 
-    [[nodiscard]] bool recordUpload(RhiCommandList& commandList) const;
-    [[nodiscard]] bool recordCount(RhiCommandList& commandList) const;
-    [[nodiscard]] bool recordScan(RhiCommandList& commandList, uint32_t level) const;
-    [[nodiscard]] bool recordScanAdd(RhiCommandList& commandList, uint32_t childLevel) const;
-    [[nodiscard]] bool recordFinalize(RhiCommandList& commandList) const;
-    [[nodiscard]] bool recordFill(RhiCommandList& commandList) const;
-    [[nodiscard]] bool recordValidateAndReadback(RhiCommandList& commandList);
-    [[nodiscard]] WorldLightGridStatsSnapshot captureWorldLightGridStats() const;
+    [[nodiscard]] bool recordUpload(RhiCommandList& commandList, const BuildFrameData& frame) const;
+    [[nodiscard]] bool recordCount(RhiCommandList& commandList, const BuildFrameData& frame) const;
+    [[nodiscard]] bool recordScan(RhiCommandList& commandList, const BuildFrameData& frame, uint32_t level) const;
+    [[nodiscard]] bool recordScanAdd(RhiCommandList& commandList, const BuildFrameData& frame,
+                                     uint32_t childLevel) const;
+    [[nodiscard]] bool recordFinalize(RhiCommandList& commandList, const BuildFrameData& frame) const;
+    [[nodiscard]] bool recordFill(RhiCommandList& commandList, const BuildFrameData& frame) const;
+    [[nodiscard]] bool recordValidateAndReadback(RhiCommandList& commandList, const BuildFrameData& frame);
+    [[nodiscard]] WorldLightGridStatsSnapshot captureWorldLightGridStats(const BuildFrameData& frame) const;
     void applyWorldLightGridStats(const WorldLightGridStatsSnapshot& snapshot);
-    void publishEmptyFrameStats();
+    void publishEmptyFrameStats(const BuildFrameData& frame);
 
     void destroyBuildBindGroups(BuildSlot& slot);
     void destroyComputeStage(ComputeStage& stage);
@@ -225,6 +252,8 @@ private:
     static constexpr uint32_t kBuildSlotCount = 2u;
     std::array<BuildSlot, kBuildSlotCount> m_buildSlots;
     uint32_t m_activeSlot = 0u;
+    std::shared_ptr<const BuildFrameData> m_preparedFrame;
+    std::shared_ptr<const BuildFrameData> m_emptyBuildFrame;
 
     ComputeStage m_countStage;
     ComputeStage m_scanStage;

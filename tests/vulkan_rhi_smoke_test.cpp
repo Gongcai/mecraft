@@ -4897,7 +4897,7 @@ namespace {
     bool clusteredFinished = false;
     const auto cleanup = [&]() {
         if (clusteredPrepared && !clusteredFinished) {
-            clusteredLightingPass.finishGraphExecution(false, {});
+            clusteredLightingPass.finishGraphExecution(false, {}, clusteredLightingPass.preparedSlotIndex());
         }
         device.waitIdle();
         reblurSignalPackPass.shutdown();
@@ -5245,7 +5245,8 @@ namespace {
                                             .handle();
         const RgPassHandle clusteredReady = clusteredLightingPass.addGraphPasses(graph, clusteredResources, inputReady);
         lightingResources.bindGroupLayout = clusteredLightingPass.consumerBindGroupLayout();
-        lightingResources.bindGroup = clusteredLightingPass.consumerBindGroup();
+        lightingResources.bindGroup =
+            clusteredLightingPass.consumerBindGroup(clusteredLightingPass.preparedSlotIndex());
         lightingResources.lights = clusteredResources.lights;
         lightingResources.worldCells = clusteredResources.worldCells;
         lightingResources.worldIndices = clusteredResources.worldIndices;
@@ -5335,7 +5336,8 @@ namespace {
     }
     if (valid) {
         const RgExecuteResult executed = graph.execute(device, commandPool);
-        clusteredLightingPass.finishGraphExecution(executed.succeeded(), executed.completionToken());
+        clusteredLightingPass.finishGraphExecution(executed.succeeded(), executed.completionToken(),
+                                                   clusteredLightingPass.preparedSlotIndex());
         clusteredFinished = true;
         sceneTlas.finishGraphExecution(executed.succeeded(), executed.completionToken());
         tracePass.finishGraphExecution(executed.succeeded(), executed.completionToken());
