@@ -91,108 +91,6 @@ glm::vec2 mixLight(const glm::vec2& a, const glm::vec2& b, const float t) {
     return a + (b - a) * t;
 }
 
-// CPU port of blackbodyApprox() from deferred_lighting.frag — the warm tint
-// both pipelines apply to block light. Keep both implementations in sync.
-glm::vec3 blackbodyApproxSrgb(const float temperature) {
-    const float t = std::clamp(temperature, 1000.0f, 15000.0f);
-    const float it = 1.0f / t;
-    const float it2 = it * it;
-    const glm::vec4 vx(-0.2661239e9f, -0.2343580e6f, 0.8776956e3f, 0.179910f);
-    const glm::vec4 vy(-1.1063814f, -1.34811020f, 2.18555832f, -0.20219683f);
-    const float x = glm::dot(vx, glm::vec4(it * it2, it2, it, 1.0f));
-    const float x2 = x * x;
-    const float y = glm::dot(vy, glm::vec4(x * x2, x2, x, 1.0f));
-    const glm::mat3 xyzToSrgb(3.2404542f, -0.9692660f, 0.0556434f, -1.5371385f, 1.8760108f, -0.2040259f,
-                              -0.4985314f, 0.0415560f, 1.0572252f);
-    const glm::vec3 xyz(x / y, 1.0f, (1.0f - x - y) / y);
-    const glm::vec3 srgb = glm::max(xyz * xyzToSrgb, glm::vec3(0.0f));
-    return srgb / std::max(std::min(srgb.r, std::min(srgb.g, srgb.b)), 0.001f);
-}
-
-// CPU port of artisticSunIlluminance() from the lighting shaders.
-glm::vec3 artisticSunIlluminance(const glm::vec3& sunColor, const glm::vec3& sunDirection) {
-    const float elevation = std::clamp(sunDirection.y, 0.0f, 1.0f);
-    const glm::vec3 noonWarmth(1.10f, 1.00f, 0.84f);
-    const glm::vec3 lowSunWarmth(1.38f, 0.82f, 0.42f);
-    const glm::vec3 tint = glm::mix(lowSunWarmth, noonWarmth, glm::smoothstep(0.08f, 0.62f, elevation));
-    const float energy = glm::mix(1.35f, 1.08f, glm::smoothstep(0.04f, 0.70f, elevation));
-    return glm::max(sunColor * tint * energy, glm::vec3(0.0f));
-}
-
-/// Scene-calibrated radiance factors for the first-person held item pass.
-/// ambient and direct are linear radiance multipliers on the linearized item
-/// albedo. directAlbedoPower reproduces the extra albedo multiply that
-/// deferred_lighting.frag applies to the direct sun term (its diffuse BRDF
-/// already contains one albedo factor); the forward pipeline multiplies the
-/// albedo once, so it uses 0.
-struct HeldItemSceneLighting {
-    glm::vec3 ambient{0.0f};
-    glm::vec3 direct{0.0f};
-    float directAlbedoPower = 0.0f;
-};
-
-HeldItemSceneLighting computeHeldItemSceneLighting(const FrameContext& ctx, const RenderSettings& settings,
-                                                   const PipelineMode pipelineMode, const float skyLevel,
-                                                   const float blockLevel) {
-    const SkyColorsData& sky = ctx.skyColors;
-    const float s = std::clamp(skyLevel, 0.0f, 1.0f);
-    const float b = std::clamp(blockLevel, 0.0f, 1.0f);
-    const float moonMask = std::clamp(s * sky.moonVisibility, 0.0f, 1.0f);
-    const float outdoorMask = std::max(s, moonMask);
-    const float skylightScale = settings.weather.skylightScale;
-    const glm::vec3 blockLightColor = blackbodyApproxSrgb(3000.0f);
-    const glm::vec3 blockLight = blockLightColor * std::pow(b, 2.2f) * settings.postProcess.blockLightStrength;
-
-    HeldItemSceneLighting lighting;
-    if (pipelineMode == PipelineMode::Forward) {
-        // Mirrors the lightColor composition of chunk_lit_common.frag: every
-        // term is multiplied by the albedo exactly once and the forward blit
-        // applies no pre-exposure.
-        constexpr float kForwardSunEnergy = 1.56f;
-        constexpr float kAverageUpwardSkyWeight = 0.87f; // mix(0.48, 1.0, upward) averaged over faces
-        constexpr float kAverageMoonDiffuse = 0.70f;     // pow(NdotM, 0.9) averaged over faces
-        const glm::vec3 warmSun = artisticSunIlluminance(sky.sunLightColor, sky.sunDirection);
-        const glm::vec3 sunDirect =
-            warmSun * sky.sunVisibility * s * settings.postProcess.directSunStrength * kForwardSunEnergy;
-        const glm::vec3 moonDirect = sky.moonLightColor * (moonMask * kAverageMoonDiffuse) *
-                                     (0.36f + 0.18f * settings.postProcess.skyAmbientStrength);
-        glm::vec3 ambient = sky.skyAmbientColor * (0.026f + 0.54f * outdoorMask) *
-                            settings.postProcess.skyAmbientStrength * kAverageUpwardSkyWeight * skylightScale *
-                            (1.0f + ctx.weather.lightningFlash * 4.0f);
-        ambient += sky.moonLightColor * moonMask * (0.026f + 0.052f * settings.postProcess.skyAmbientStrength);
-        ambient +=
-            sky.shadowTintColor * settings.postProcess.minimumAmbient * glm::mix(0.28f, 0.92f, outdoorMask) * 0.62f;
-        ambient += blockLight;
-        lighting.ambient = ambient;
-        lighting.direct = sunDirect + moonDirect;
-        lighting.directAlbedoPower = 0.0f;
-        return lighting;
-    }
-
-    // Mirrors deferred_lighting.frag radiance conventions, including the
-    // pre-exposed scene color storage; the composite pass divides the
-    // pre-exposure back out before exposure and tonemapping.
-    constexpr float kDeferredSunEnergy = 64.0f;
-    constexpr float kHammonSingleLobeScale = 0.33f; // rPI * 1.05 of the DiffuseHammon single lobe
-    constexpr float kSkyShDirectionalBoost = 3.0f;  // average of (normal.y * 2.0 + 3.0)
-    const float skyLightMask = s * s * s;
-    const float weatherAttenuation =
-        1.0f - std::clamp(ctx.weather.wetness * 0.35f + ctx.weather.storm * 0.45f, 0.0f, 0.70f);
-    const glm::vec3 skyRadiance = 0.5f * (sky.top + sky.horizon); // sky-capture SH radiance proxy
-    glm::vec3 ambient =
-        skyRadiance * kSkyShDirectionalBoost * (0.8f - 0.2f * ctx.weather.skyWetness) * skylightScale * skyLightMask;
-    ambient += sky.shadowTintColor * settings.postProcess.minimumAmbient * glm::mix(0.35f, 1.0f, outdoorMask) * 0.62f;
-    ambient += glm::vec3(0.0005f); // BASIC_BRIGHTNESS
-    ambient += glm::vec3(1.0f) * ctx.weather.lightningFlash * 1.2f;
-    ambient += blockLight * 2.0f; // deferred block-light energy factor
-    const glm::vec3 direct = ctx.skyIlluminance.directIlluminance * kDeferredSunEnergy *
-                             settings.postProcess.directSunStrength * s * weatherAttenuation * kHammonSingleLobeScale;
-    lighting.ambient = ambient * ctx.preExposure;
-    lighting.direct = direct * ctx.preExposure;
-    lighting.directAlbedoPower = 1.0f;
-    return lighting;
-}
-
 bool beginSceneCaptureRendering(RhiCommandList& commandList, const FrameContext& ctx, const char* debugName) {
     if (!ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid()) {
         return false;
@@ -473,25 +371,6 @@ bool RenderScene::executeSceneOverlayGraph(const RenderGameplayFrameRequest& req
                                           weather.snowStrength, request.frameTime);
     }
 
-    const bool heldItemVisible = request.renderFirstPersonHeldItem && request.firstPersonHeldItemRenderer != nullptr &&
-                                 request.firstPersonInventory != nullptr &&
-                                 request.firstPersonHeldItemMotion != nullptr;
-    if (heldItemVisible) {
-        request.firstPersonHeldItemRenderer->setShadowData(
-            FirstPersonHeldItemRenderer::fromFirstPersonShadowData(getHeldItemShadowData()));
-        const glm::vec2 heldLight = sampleHeldItemLight(request.worldView, request.camera.getPosition());
-        request.firstPersonHeldItemRenderer->setEnvironmentLight(heldLight.x, heldLight.y);
-        const HeldItemSceneLighting heldLighting = computeHeldItemSceneLighting(m_currentContext, m_settings,
-                                                                                getPipelineMode(), heldLight.x,
-                                                                                heldLight.y);
-        request.firstPersonHeldItemRenderer->setSceneLighting(heldLighting.ambient, heldLighting.direct,
-                                                              heldLighting.directAlbedoPower);
-        request.firstPersonHeldItemRenderer->prepareFrameResources(*request.firstPersonInventory);
-        request.firstPersonHeldItemRenderer->prepareFrame(
-            frameRenderSize.x, frameRenderSize.y, *request.firstPersonInventory, *request.firstPersonHeldItemMotion,
-            static_cast<float>(Time::getGameTime()));
-    }
-
     RhiDevice& rhiDevice = *m_shared.rhiDevice;
     m_sceneOverlayGraph.reset();
     const auto importTexture = [&](const RhiTextureHandle texture, const RhiTextureViewHandle view,
@@ -608,46 +487,30 @@ bool RenderScene::executeSceneOverlayGraph(const RenderGameplayFrameRequest& req
         graphTail = precipitation.handle();
     }
 
-    if (heldItemVisible) {
-        const FirstPersonShadowData& shadowData = getHeldItemShadowData();
-        RgTextureHandle shadowDepth;
-        RgTextureHandle shadowDepthAll;
-        RgTextureHandle shadowColor0;
-        RgTextureHandle shadowColor1;
-        if (shadowData.shadowsEnabled != 0) {
-            const bool matchingDepthHandles =
-                shadowData.shadowTextureHandle.index == shadowData.shadowDepthRawHandle.index &&
-                shadowData.shadowTextureHandle.generation == shadowData.shadowDepthRawHandle.generation &&
-                shadowData.shadowDepthAllHandle.index == shadowData.shadowDepthAllRawHandle.index &&
-                shadowData.shadowDepthAllHandle.generation == shadowData.shadowDepthAllRawHandle.generation;
-            if (!matchingDepthHandles ||
-                !importTexture(shadowData.shadowDepthRawHandle, {}, RhiResourceState::DepthRead, shadowDepth) ||
-                !importTexture(shadowData.shadowDepthAllRawHandle, {}, RhiResourceState::DepthRead, shadowDepthAll) ||
-                !importTexture(shadowData.shadowColor0Handle, {}, RhiResourceState::ShaderRead, shadowColor0) ||
-                !importTexture(shadowData.shadowColor1Handle, {}, RhiResourceState::ShaderRead, shadowColor1)) {
-                return false;
-            }
-        }
-
+    // Forward mode: the held item is shaded with the vanilla lightmap model in the overlay
+    // pass. Deferred mode instead writes the held meshes into the GBuffer during the main
+    // scene pass, so no overlay geometry is emitted here.
+    const bool heldItemForwardVisible = m_renderFirstPersonHeldItem &&
+                                        getPipelineMode() == PipelineMode::Forward &&
+                                        request.firstPersonHeldItemRenderer != nullptr &&
+                                        request.firstPersonHeldItemRenderer->hasPreparedDraw();
+    if (heldItemForwardVisible) {
         RenderGraphPassBuilder heldItem = m_sceneOverlayGraph.addPass(
             {"SceneOverlay.FirstPersonHeldItem", RgPassType::Graphics, RhiQueueType::Graphics});
         heldItem.dependsOn(graphTail)
             .readWriteTexture(sceneColor, RhiResourceState::RenderTarget)
             .readWriteTexture(sceneDepth, RhiResourceState::DepthWrite);
-        if (shadowData.shadowsEnabled != 0) {
-            heldItem.readTexture(shadowDepth, RhiResourceState::DepthRead)
-                .readTexture(shadowDepthAll, RhiResourceState::DepthRead)
-                .readTexture(shadowColor0, RhiResourceState::ShaderRead)
-                .readTexture(shadowColor1, RhiResourceState::ShaderRead);
-        }
         FirstPersonHeldItemRenderer* heldItemRenderer = request.firstPersonHeldItemRenderer;
         heldItem.setExecute([this, heldItemRenderer](RgPassContext& pass) {
             RhiCommandList& commandList = pass.commandList();
-            heldItemRenderer->prepareRhiFrame(commandList);
             if (!beginSceneCaptureRendering(commandList, m_currentContext, "SceneCapture.FirstPersonHeldItem")) {
                 return false;
             }
-            heldItemRenderer->renderPrepared(commandList);
+            const TemporalExtent& renderExtent = m_currentContext.temporalExtents.renderExtent;
+            heldItemRenderer->renderPreparedForward(commandList, m_currentContext.camera.viewProj,
+                                                    m_currentContext.skyIntensity, m_currentContext.animationTime,
+                                                    static_cast<int>(renderExtent.width),
+                                                    static_cast<int>(renderExtent.height));
             commandList.endRendering();
             return true;
         });
@@ -710,6 +573,21 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     }
     m_voxelLightsCpuMs =
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - voxelLightsStart).count();
+
+    // Prepare the first-person held item before the scene pass so that deferred mode can emit
+    // the held meshes into the GBuffer, and forward mode can draw them in the overlay pass.
+    m_renderFirstPersonHeldItem = request.renderFirstPersonHeldItem &&
+                                  request.firstPersonHeldItemRenderer != nullptr &&
+                                  request.firstPersonInventory != nullptr &&
+                                  request.firstPersonHeldItemMotion != nullptr;
+    if (m_renderFirstPersonHeldItem) {
+        FirstPersonHeldItemRenderer* heldItemRenderer = request.firstPersonHeldItemRenderer;
+        const glm::vec2 heldLight = sampleHeldItemLight(request.worldView, request.camera.getPosition());
+        heldItemRenderer->setEnvironmentLight(heldLight.x, heldLight.y);
+        heldItemRenderer->prepareFrameResources(*request.firstPersonInventory);
+        heldItemRenderer->prepareFrame(request.camera.getViewMatrix(), *request.firstPersonInventory,
+                                       *request.firstPersonHeldItemMotion, static_cast<float>(Time::getGameTime()));
+    }
 
     if (!renderFrame(request.worldView, request.camera, request.window, frameRenderSize, displaySize, frameAspectRatio,
                      request.dayNightSystem, request.weatherSystem, request.frameClock)) {
@@ -1007,6 +885,11 @@ void RenderScene::setFallingBlockRenderer(FallingBlockRenderer* fbr) {
 void RenderScene::setParticleSystem(ParticleSystem* ps) {
     m_particleSystem = ps;
     m_shared.particleSystem = ps;
+}
+
+void RenderScene::setFirstPersonHeldItemRenderer(FirstPersonHeldItemRenderer* hIR) {
+    m_firstPersonHeldItemRenderer = hIR;
+    m_shared.firstPersonHeldItemRenderer = hIR;
 }
 
 void RenderScene::setDropSystem(DropSystem* ds) {
@@ -1389,6 +1272,7 @@ RenderScene::buildFrameContext(const IWorldView& worldView, const Camera& camera
     ctx.windowPtr = &window;
     ctx.debugService = &m_debugService;
     ctx.renderLocalPlayerModel = m_renderLocalPlayerModel;
+    ctx.renderFirstPersonHeldItem = m_renderFirstPersonHeldItem;
 
     const TemporalExtent renderExtent{static_cast<uint32_t>(std::max(1, frameRenderSize.x)),
                                       static_cast<uint32_t>(std::max(1, frameRenderSize.y))};

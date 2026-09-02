@@ -246,6 +246,9 @@ struct FrameContext {
 
     // Whether first-person camera should hide the local player model.
     bool renderLocalPlayerModel = false;
+
+    // Whether the first-person held item should be emitted into the deferred GBuffer.
+    bool renderFirstPersonHeldItem = false;
 };
 
 #endif // MECRAFT_FRAME_CONTEXT_H

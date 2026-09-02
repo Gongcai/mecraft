@@ -230,6 +230,7 @@ bool GameplayRenderRuntime::init(GameResources& resources, GameSession& session,
     renderScene.setHumanoidRenderer(&humanoidRenderer);
     renderScene.setDropRenderer(&dropRenderer);
     renderScene.setFallingBlockRenderer(&fallingBlockRenderer);
+    renderScene.setFirstPersonHeldItemRenderer(&firstPersonHeldItemRenderer);
     renderScene.setDropSystem(&session.dropSystem());
     renderScene.setGameplayRegistry(&session.gameplayScene().registry());
     renderScene.setParticleSystem(&session.particleSystem());

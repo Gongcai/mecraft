@@ -2507,9 +2507,6 @@ void Dashboard::showHeldItemPreviewSettings(FirstPersonHeldItemRenderer& firstPe
         FirstPersonHeldItemRenderer::Config config = firstPersonHeldItemRenderer.getConfig();
         bool changed = false;
 
-        changed |= ImGui::SliderFloat("FOV", &config.fovDegrees, 20.0f, 120.0f, "%.1f");
-
-        ImGui::Separator();
         ImGui::Text("Arm");
         changed |= ImGui::SliderFloat("Arm X", &config.armPosX, -2.0f, 2.0f, "%.3f");
         changed |= ImGui::SliderFloat("Arm Y", &config.armPosY, -2.0f, 2.0f, "%.3f");

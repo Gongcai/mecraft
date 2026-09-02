@@ -1,36 +1,27 @@
 #version 450 core
 layout(location = 0) in vec2 vUv;
 layout(location = 1) in float vShade;
-layout(location = 2) in vec3 vNormal;
 layout(location = 0) out vec4 fragColor;
 layout(binding = 0) uniform sampler2D uAtlas;
+layout(binding = 1) uniform sampler2D uLightmapDay;
+layout(binding = 2) uniform sampler2D uLightmapNight;
+
 layout(push_constant) uniform RhiPushConstants {
     mat4 uViewProj;
     mat4 uModel;
-    vec4 uAmbientRadiance;
-    vec4 uDirectRadiance;
+    vec4 uLightingParams; // (skyLight, blockLight, skyIntensity, animationTime)
 };
-
-// Texture stores sRGB-encoded texels; the HDR scene color buffer is linear.
-vec3 srgbToLinear(vec3 color) {
-    return pow(max(color, vec3(0.0)), vec3(2.2));
-}
-
-// Scene-calibrated lighting: uAmbientRadiance/uDirectRadiance are linear
-// radiance factors computed on the CPU from the same environment data the
-// terrain shaders use. uDirectRadiance.w reproduces the deferred pipeline's
-// extra albedo multiply on the direct sun term.
-vec3 evaluateHeldRadiance(vec3 albedo, vec3 normal) {
-    float diffuse = max(dot(normalize(normal), normalize(vec3(0.3, 1.0, 0.5))), 0.0);
-    vec3 direct = uDirectRadiance.rgb * diffuse * mix(vec3(1.0), albedo, uDirectRadiance.w);
-    return albedo * uAmbientRadiance.rgb + albedo * direct;
-}
 
 void main() {
     vec4 texel = texture(uAtlas, vUv);
     if (texel.a < 0.1) {
         discard;
     }
-    vec3 radiance = evaluateHeldRadiance(srgbToLinear(texel.rgb), vNormal) * clamp(vShade, 0.0, 1.0);
-    fragColor = vec4(radiance, texel.a);
+    // Vanilla lightmap shading, identical to forward_basic_terrain.frag.
+    // vShade is the baked per-face shade of the extruded item mesh.
+    vec2 lightmapUv = vec2(uLightingParams.y, 1.0 - uLightingParams.x);
+    vec3 dayLight = texture(uLightmapDay, lightmapUv).rgb;
+    vec3 nightLight = texture(uLightmapNight, lightmapUv).rgb;
+    vec3 lightColor = mix(nightLight, dayLight, clamp(uLightingParams.z, 0.0, 1.0));
+    fragColor = vec4(texel.rgb * vShade * lightColor, texel.a);
 }

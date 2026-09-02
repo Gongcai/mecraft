@@ -1983,7 +1983,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
                    m_gbufferPass->executeDrops(pass.commandList(), *ctx.worldView, ctx, settings, targets,
                                                m_shared->dropRenderer, m_shared->dropSystem) &&
                    m_gbufferPass->executeFallingBlocks(pass.commandList(), *ctx.worldView, ctx, settings, targets,
-                                                       m_shared->fallingBlockRenderer, m_shared->gameplayRegistry);
+                                                       m_shared->fallingBlockRenderer, m_shared->gameplayRegistry) &&
+                   m_gbufferPass->executeFirstPersonHeldItem(pass.commandList(), ctx, settings, targets,
+                                                             m_shared->firstPersonHeldItemRenderer);
         });
     graphTail = gbuffer.handle();
 
@@ -4044,36 +4046,6 @@ FrameOutput DeferredPipeline::buildFrameOutput(const FrameContext& ctx) {
         output.weatherMask = m_shared->deferredTargets->weatherMaskTextureHandle();
         output.reactiveMask = m_shared->deferredTargets->reactiveMaskTextureHandle();
         output.transparencyMask = m_shared->deferredTargets->transparencyMaskTextureHandle();
-    }
-
-    if (m_shared && m_shared->deferredTargets && m_shared->shadowRenderer) {
-        auto& shadowData = output.heldItemShadow;
-        const auto& cascades = m_shared->shadowRenderer->cascades();
-        for (int i = 0; i < shadow::ShadowRenderer::CASCADE_COUNT; ++i) {
-            shadowData.cascadeViewProj[i] = cascades[i].viewProj;
-            shadowData.cascadeSplitFar[i] = cascades[i].splitFar;
-            shadowData.cascadeTexelWorldSize[i] = cascades[i].texelWorldSize;
-            shadowData.cascadeDepthExtent[i] = cascades[i].depthExtent;
-        }
-        shadowData.shadowTextureHandle = m_shared->deferredTargets->csmShadowDepthComparisonTextureHandle();
-        shadowData.shadowDepthRawHandle = m_shared->deferredTargets->csmShadowDepthTextureHandle();
-        shadowData.shadowDepthAllHandle = m_shared->deferredTargets->csmShadowDepthAllComparisonTextureHandle();
-        shadowData.shadowDepthAllRawHandle = m_shared->deferredTargets->csmShadowDepthAllTextureHandle();
-        shadowData.shadowColor0Handle = m_shared->deferredTargets->csmShadowColor0TextureHandle();
-        shadowData.shadowColor1Handle = m_shared->deferredTargets->csmShadowColor1TextureHandle();
-        shadowData.cameraPos = ctx.camera.position;
-        shadowData.sunDirection = m_shared->shadowRenderer->lightDirection();
-        shadowData.shadowDistance = m_currentSettings.shadow.distance;
-        shadowData.constantBias = m_currentSettings.shadow.constantBias;
-        shadowData.slopeBias = m_currentSettings.shadow.slopeBias;
-        shadowData.normalOffset = m_currentSettings.shadow.normalOffset;
-        shadowData.softness = m_currentSettings.shadow.softness;
-        shadowData.pcssStrength = m_currentSettings.shadow.pcssStrength;
-        shadowData.cascadeCount = shadow::ShadowRenderer::CASCADE_COUNT;
-        shadowData.softShadowsEnabled = m_currentSettings.shadow.softShadowsEnabled ? 1 : 0;
-        shadowData.pcssShadowsEnabled = m_currentSettings.shadow.pcssShadowsEnabled ? 1 : 0;
-        shadowData.shadowsEnabled = m_currentSettings.shadow.enabled ? 1 : 0;
-        shadowData.skyIntensity = ctx.skyIntensity;
     }
 
     output.hasDeferredInputs = m_deferredFrameActive;

@@ -101,6 +101,7 @@ struct SharedRenderResources {
     HumanoidRenderer* humanoidRenderer = nullptr;
     DropRenderer* dropRenderer = nullptr;
     FallingBlockRenderer* fallingBlockRenderer = nullptr;
+    FirstPersonHeldItemRenderer* firstPersonHeldItemRenderer = nullptr;
     ParticleSystem* particleSystem = nullptr;
     DropSystem* dropSystem = nullptr;
     ecs::GameplayRegistry* gameplayRegistry = nullptr;
@@ -179,6 +180,7 @@ public:
     void setHumanoidRenderer(HumanoidRenderer* hr);
     void setDropRenderer(DropRenderer* dr);
     void setFallingBlockRenderer(FallingBlockRenderer* fbr);
+    void setFirstPersonHeldItemRenderer(FirstPersonHeldItemRenderer* hIR);
     void setParticleSystem(ParticleSystem* ps);
     void setDropSystem(DropSystem* ds);
     void setGameplayRegistry(ecs::GameplayRegistry* reg);
@@ -308,9 +310,6 @@ public:
                                                float screenRollRadians, const DayNightSystem& dayNightSystem,
                                                const WeatherSystem& weatherSystem) const;
 
-    /// Get held item shadow data from the last frame output.
-    const FirstPersonShadowData& getHeldItemShadowData() const { return m_lastFrameOutput.heldItemShadow; }
-
     /// Get camera rain visibility from the current frame context.
     float getCameraRainVisibility() const { return m_currentContext.cameraRainVisibility; }
 
@@ -405,6 +404,7 @@ private:
     double m_postProcessCpuMs = 0.0;
     bool m_eyeInWater = false;
     bool m_renderLocalPlayerModel = false;
+    bool m_renderFirstPersonHeldItem = false;
     renderer::lighting::VoxelLightRegistry m_voxelLightRegistry;
 
     // Pipeline implementations (Phase 9)
@@ -420,6 +420,7 @@ private:
     HumanoidRenderer* m_humanoidRenderer = nullptr;
     DropRenderer* m_dropRenderer = nullptr;
     FallingBlockRenderer* m_fallingBlockRenderer = nullptr;
+    FirstPersonHeldItemRenderer* m_firstPersonHeldItemRenderer = nullptr;
     ParticleSystem* m_particleSystem = nullptr;
     DropSystem* m_dropSystem = nullptr;
     ecs::GameplayRegistry* m_gameplayRegistry = nullptr;

@@ -11,6 +11,7 @@ class StaticMeshRenderer;
 class HumanoidRenderer;
 class DropRenderer;
 class FallingBlockRenderer;
+class FirstPersonHeldItemRenderer;
 class DropSystem;
 class IWorldView;
 class RhiCommandList;
@@ -104,6 +105,15 @@ public:
                                             const FrameContext& ctx, const RenderSettings& settings,
                                             DeferredRenderTargets& targets, FallingBlockRenderer* fallingBlockRenderer,
                                             ecs::GameplayRegistry* gameplayRegistry);
+
+    /// Emits the first-person held item into the GBuffer so it is shaded by the deferred
+    /// lighting pass like any other world geometry. The held meshes are prepared ahead of
+    /// time by RenderScene; this only records the draw commands.
+    /// @param heldItemRenderer Optional held-item renderer.
+    /// @return True when optional work was skipped or all commands were recorded.
+    [[nodiscard]] bool executeFirstPersonHeldItem(RhiCommandList& commandList, const FrameContext& ctx,
+                                                  const RenderSettings& settings, DeferredRenderTargets& targets,
+                                                  FirstPersonHeldItemRenderer* heldItemRenderer);
 };
 
 #endif // MECRAFT_GBUFFER_PASS_H

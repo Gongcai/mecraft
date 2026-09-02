@@ -12,6 +12,7 @@
 #include "../renderers/HumanoidRenderer.h"
 #include "../renderers/DropRenderer.h"
 #include "../renderers/FallingBlockRenderer.h"
+#include "../renderers/FirstPersonHeldItemRenderer.h"
 #include "../../resource/GameResources.h"
 #include "../../ecs/GameplayRegistry.h"
 #include "../../world/IWorldView.h"
@@ -338,6 +339,38 @@ bool GBufferPass::executeFallingBlocks(RhiCommandList& commandList, const IWorld
                                     : ctx.camera.viewProj;
     const glm::mat4& previousViewProj = ctx.previousViewProjWithCurrentJitter;
     fallingBlockRenderer->renderToGBuffer(commandList, viewProj, previousViewProj, ctx.animationTime);
+
+    endObjectGBufferRendering(commandList);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, gpuTimer);
+    }
+    return true;
+}
+
+bool GBufferPass::executeFirstPersonHeldItem(RhiCommandList& commandList, const FrameContext& ctx,
+                                             const RenderSettings& settings, DeferredRenderTargets& targets,
+                                             FirstPersonHeldItemRenderer* heldItemRenderer) {
+    if (heldItemRenderer == nullptr || !ctx.renderFirstPersonHeldItem || !heldItemRenderer->hasPreparedDraw()) {
+        return true;
+    }
+
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
+        return false;
+    }
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    if (!beginObjectGBufferRendering(rhiDevice, commandList, targets, "GBuffer.FirstPersonHeldItem", false)) {
+        return false;
+    }
+    const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
+                                              ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::GBuffer)
+                                              : GpuTimerSegmentToken{};
+
+    const glm::mat4& viewProj = usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled)
+                                    ? ctx.camera.jitteredViewProj
+                                    : ctx.camera.viewProj;
+    const glm::mat4& previousViewProj = ctx.previousViewProjWithCurrentJitter;
+    heldItemRenderer->renderPreparedToGBuffer(commandList, viewProj, previousViewProj, ctx.animationTime);
 
     endObjectGBufferRendering(commandList);
     if (ctx.debugService != nullptr) {

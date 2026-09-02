@@ -9,7 +9,6 @@
 
 #include "../../item/Item.h"
 #include "../../world/block/Block.h"
-#include "../core/FrameOutput.h"
 #include "../rhi/RhiHandles.h"
 
 class Inventory;
@@ -26,11 +25,15 @@ struct FirstPersonHeldItemMotion {
     float cameraPitchDegrees = 0.0f;
 };
 
+/// Renders the first-person arm / held item / held block as world-space
+/// geometry so it receives exactly the same lighting as the world:
+/// - Deferred: meshes are written into the GBuffer (renderPreparedToGBuffer)
+///   and shaded by the deferred lighting pass.
+/// - Forward: meshes are drawn with the vanilla lightmap shading used by
+///   forward terrain (renderPreparedForward).
 class FirstPersonHeldItemRenderer {
 public:
     struct Config {
-        float fovDegrees = 70.0f;
-
         float armPosX = 0.72f;
         float armPosY = -0.82f;
         float armPosZ = -1.08f;
@@ -99,70 +102,30 @@ public:
 
     void triggerSwing();
     void setContinuousSwing(bool active);
+    /// Normalized (sunlight, blockLight) levels sampled from the voxel light
+    /// grid at the camera position; consumed as the per-draw light input.
     void setEnvironmentLight(float sunlight, float blockLight);
-    void setSceneLighting(const glm::vec3& ambientRadiance, const glm::vec3& directRadiance,
-                          float directAlbedoPower);
     void prepareFrameResources(const Inventory& inventory);
-    void prepareFrame(int width, int height, const Inventory& inventory, const FirstPersonHeldItemMotion& motion,
-                      float timeSeconds);
-    void prepareRhiFrame(RhiCommandList& commandList);
-    void renderPrepared(RhiCommandList& commandList);
+    /// Advances animation state and builds the world-space model matrix for
+    /// this frame (model_world = inverse(cameraView) * eye-space placement).
+    void prepareFrame(const glm::mat4& cameraView, const Inventory& inventory,
+                      const FirstPersonHeldItemMotion& motion, float timeSeconds);
+    [[nodiscard]] bool hasPreparedDraw() const;
 
-    // Shadow data from Renderer — must be set before render() each frame.
-    struct ShadowData {
-        glm::mat4 cascadeViewProj[4]{};
-        float cascadeSplitFar[4]{};
-        float cascadeTexelWorldSize[4]{};
-        float cascadeDepthExtent[4]{};
-        RhiTextureHandle shadowTexture; // sampler2DArrayShadow (shadowtex1)
-        RhiTextureHandle shadowDepthRaw; // sampler2DArray
-        RhiTextureHandle shadowDepthAll; // sampler2DArrayShadow (shadowtex0)
-        RhiTextureHandle shadowDepthAllRaw; // sampler2DArray
-        RhiTextureHandle shadowColor0; // sampler2DArray
-        RhiTextureHandle shadowColor1; // sampler2DArray
-        glm::vec3 cameraPos = glm::vec3(0.0f);
-        glm::vec3 sunDirection = glm::vec3(0.0f, 1.0f, 0.0f);
-        float shadowDistance = 192.0f;
-        float constantBias = 0.0007f;
-        float slopeBias = 0.0022f;
-        float normalOffset = 0.035f;
-        float softness = 1.0f;
-        float pcssStrength = 0.72f;
-        int cascadeCount = 4;
-        int softShadowsEnabled = 1;
-        int pcssShadowsEnabled = 1;
-        int shadowsEnabled = 1;
-        float skyIntensity = 1.0f;
-        float ambientStrength = 0.55f;
-    };
-    void setShadowData(const ShadowData& data);
-
-    /// Convert FirstPersonShadowData (from FrameOutput) to ShadowData.
-    static ShadowData fromFirstPersonShadowData(const FirstPersonShadowData& sd);
+    /// Forward pipeline: vanilla lightmap shading on the scene capture target.
+    void renderPreparedForward(RhiCommandList& commandList, const glm::mat4& viewProj, float skyIntensity,
+                               float animationTime, int width, int height);
+    /// Deferred pipeline: writes the mesh into the GBuffer with real depth and
+    /// per-object velocity; shaded afterwards by the deferred lighting pass.
+    void renderPreparedToGBuffer(RhiCommandList& commandList, const glm::mat4& viewProj,
+                                 const glm::mat4& previousViewProj, float animationTime);
 
 private:
-    struct alignas(16) CascadeUniform {
-        glm::mat4 viewProj{1.0f};
-        glm::vec4 splitNearFarTexelResolution{0.0f};
-        glm::vec4 depthExtentPadding{0.0f};
-    };
-
-    struct alignas(16) ShadowUniforms {
-        std::array<CascadeUniform, 4> cascades{};
-        glm::vec4 cameraPosShadowDistance{0.0f};
-        glm::vec4 sunDirectionConstantBias{0.0f};
-        glm::vec4 shadowParams{0.0f};
-        glm::ivec4 shadowFlags{0};
-        glm::vec4 lighting{0.0f};
-        glm::vec4 hdrScalePadding{0.0f};
-    };
-    static_assert(sizeof(CascadeUniform) == 96u);
-    static_assert(sizeof(ShadowUniforms) == 480u);
-
     struct Mesh {
         RhiBufferHandle rhiVertexBuffer;
         RhiDevice* rhiDevice = nullptr;
         uint32_t vertexCount = 0;
+        uint32_t materialId = 0;
     };
 
     Mesh* getOrCreateBlockMesh(BlockID blockId);
@@ -179,8 +142,12 @@ private:
     void destroyItemRhiResources();
     void createBlockRhiResources();
     void destroyBlockRhiResources();
-    void synchronizeShadowTextureViews();
-    void destroyShadowTextureViews();
+    void createArmGBufferResources();
+    void destroyArmGBufferResources();
+    void createItemGBufferResources();
+    void destroyItemGBufferResources();
+    void createBlockGBufferResources();
+    void destroyBlockGBufferResources();
 
     GameResources* m_resources = nullptr;
     RhiDevice* m_rhiDevice = nullptr;
@@ -193,11 +160,9 @@ private:
     RhiTextureViewHandle m_foliageColormapView;
     RhiSamplerHandle m_textureSampler;
     RhiSamplerHandle m_blockTextureSampler;
-    std::array<RhiTextureHandle, 6> m_shadowTextureHandles{};
-    std::array<RhiTextureViewHandle, 6> m_shadowTextureViews{};
-    RhiSamplerHandle m_shadowCompareSampler;
-    RhiSamplerHandle m_shadowRawSampler;
-    RhiBufferHandle m_shadowUniformBuffer;
+    RhiSamplerHandle m_armNearestSampler;
+
+    // Forward (vanilla lightmap) pipelines.
     RhiShaderHandle m_armVertexShader;
     RhiShaderHandle m_armFragmentShader;
     RhiBindGroupLayoutHandle m_armBindGroupLayout;
@@ -216,6 +181,30 @@ private:
     RhiPipelineLayoutHandle m_blockPipelineLayout;
     RhiPipelineHandle m_blockPipeline;
     RhiBindGroupHandle m_blockBindGroup;
+
+    // Deferred GBuffer pipelines (shared world shaders).
+    RhiShaderHandle m_armGBufferVertexShader;
+    RhiShaderHandle m_armGBufferFragmentShader;
+    RhiBindGroupLayoutHandle m_armGBufferBindGroupLayout;
+    RhiPipelineLayoutHandle m_armGBufferPipelineLayout;
+    RhiPipelineHandle m_armGBufferPipeline;
+    RhiBindGroupHandle m_armGBufferBindGroup;
+    RhiBufferHandle m_armMaterialIdentityBuffer;
+    RhiShaderHandle m_itemGBufferVertexShader;
+    RhiShaderHandle m_itemGBufferFragmentShader;
+    RhiBindGroupLayoutHandle m_itemGBufferBindGroupLayout;
+    RhiPipelineLayoutHandle m_itemGBufferPipelineLayout;
+    RhiPipelineHandle m_itemGBufferPipeline;
+    RhiBindGroupHandle m_itemGBufferBindGroup;
+    RhiShaderHandle m_blockGBufferVertexShader;
+    RhiShaderHandle m_blockGBufferFragmentShader;
+    RhiBindGroupLayoutHandle m_blockGBufferBindGroupLayout;
+    RhiPipelineLayoutHandle m_blockGBufferPipelineLayout;
+    RhiPipelineHandle m_blockGBufferPipeline;
+    RhiBindGroupHandle m_blockGBufferBindGroup;
+    uint32_t m_objectId = 0;
+    uint32_t m_armMaterialId = 0;
+
     Mesh m_rightArmMesh;
     std::unordered_map<BlockID, Mesh> m_blockMeshes;
     std::unordered_map<ItemID, Mesh> m_itemMeshes;
@@ -233,25 +222,19 @@ private:
     bool m_continuousSwing = false;
     float m_swingElapsed = 0.0f;
     Config m_config;
-    ShadowData m_shadowData{};
     float m_environmentSunlight = 1.0f;
     float m_environmentBlockLight = 0.0f;
-    glm::vec3 m_sceneAmbientRadiance{0.0f};
-    glm::vec3 m_sceneDirectRadiance{0.0f};
-    float m_directAlbedoPower = 0.0f;
     bool m_initialized = false;
 
     enum class PreparedDrawKind : uint8_t { None, Arm, Item, Block };
     struct PreparedHeldItemFrame {
         PreparedDrawKind kind = PreparedDrawKind::None;
-        glm::mat4 view{1.0f};
-        glm::mat4 viewProj{1.0f};
         glm::mat4 model{1.0f};
+        glm::mat4 previousModel{1.0f};
         ItemID itemId = 0;
-        int width = 0;
-        int height = 0;
     };
     PreparedHeldItemFrame m_preparedFrame;
+    bool m_hasPreparedHistory = false;
 };
 
 #endif // MECRAFT_FIRST_PERSON_HELD_ITEM_RENDERER_H
