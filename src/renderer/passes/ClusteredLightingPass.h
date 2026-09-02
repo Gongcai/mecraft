@@ -112,12 +112,42 @@ public:
     [[nodiscard]] const ClusteredLightingFrameStats& frameStats() const { return m_frameStats; }
     [[nodiscard]] uint32_t activeLightCount() const { return static_cast<uint32_t>(m_lightBounds.size()); }
     [[nodiscard]] RhiBindGroupLayoutHandle consumerBindGroupLayout() const { return m_consumerBindGroupLayout; }
-    [[nodiscard]] RhiBindGroupHandle consumerBindGroup() const { return m_consumerBindGroup; }
+    [[nodiscard]] RhiBindGroupHandle consumerBindGroup() const { return m_buildSlots[m_activeSlot].consumerBindGroup; }
 
 private:
     struct BufferResource final {
         RhiBufferHandle handle;
         uint64_t capacityBytes = 0u;
+    };
+
+    /// One ring slot of persistent build resources. Slots rotate across
+    /// prepared frames so a frame only waits for the submission from
+    /// kBuildSlotCount frames earlier instead of stalling on the entire
+    /// previous frame while it is still executing on the GPU.
+    struct BuildSlot final {
+        BufferResource lightBuffer;
+        BufferResource lightBoundsBuffer;
+        BufferResource countBuffer;
+        BufferResource offsetBuffer;
+        BufferResource recordBuffer;
+        BufferResource cursorBuffer;
+        BufferResource compactIndexBuffer;
+        BufferResource scanScratchBuffer;
+        BufferResource statsBuffer;
+        BufferResource worldCellBuffer;
+        BufferResource worldIndexBuffer;
+        BufferResource worldHeaderBuffer;
+
+        RhiBindGroupHandle countBindGroup;
+        std::vector<RhiBindGroupHandle> scanBindGroups;
+        std::vector<RhiBindGroupHandle> scanAddBindGroups;
+        RhiBindGroupHandle finalizeBindGroup;
+        RhiBindGroupHandle fillBindGroup;
+        RhiBindGroupHandle validateBindGroup;
+        RhiBindGroupHandle consumerBindGroup;
+
+        /// Last graph submission that may still read or write this slot.
+        RhiSubmissionToken lastUseToken;
     };
 
     struct ComputeStage final {
@@ -147,12 +177,12 @@ private:
     [[nodiscard]] bool buildCoverage(const FrameContext& ctx, uint32_t renderWidth, uint32_t renderHeight);
     [[nodiscard]] bool buildScanPlan();
     [[nodiscard]] bool ensurePipelines(RhiDevice& rhiDevice);
-    [[nodiscard]] bool ensureBuffers(RhiDevice& rhiDevice);
+    [[nodiscard]] bool ensureBuffers(RhiDevice& rhiDevice, BuildSlot& slot);
     [[nodiscard]] bool ensureBuffer(RhiDevice& rhiDevice, BufferResource& resource, uint64_t requiredBytes,
                                     RhiBufferUsageFlags usage, RhiMemoryCategory memoryCategory, const char* debugName);
     [[nodiscard]] bool ensureReadbackBuffers(RhiDevice& rhiDevice);
-    [[nodiscard]] bool ensureBuildBindGroups(RhiDevice& rhiDevice);
-    [[nodiscard]] bool ensureConsumerBindGroup(RhiDevice& rhiDevice);
+    [[nodiscard]] bool ensureBuildBindGroups(RhiDevice& rhiDevice, BuildSlot& slot);
+    [[nodiscard]] bool ensureConsumerBindGroup(RhiDevice& rhiDevice, BuildSlot& slot);
     [[nodiscard]] bool importBuffer(RenderGraph& graph, const BufferResource& resource,
                                     RgBufferHandle& graphBuffer) const;
 
@@ -167,7 +197,7 @@ private:
     void applyWorldLightGridStats(const WorldLightGridStatsSnapshot& snapshot);
     void publishEmptyFrameStats();
 
-    void destroyBuildBindGroups();
+    void destroyBuildBindGroups(BuildSlot& slot);
     void destroyComputeStage(ComputeStage& stage);
     void destroyPipelines();
     void destroyBuffers();
@@ -189,18 +219,12 @@ private:
     uint32_t m_scanScratchWordCount = 0u;
     std::vector<ScanLevel> m_scanLevels;
 
-    BufferResource m_lightBuffer;
-    BufferResource m_lightBoundsBuffer;
-    BufferResource m_countBuffer;
-    BufferResource m_offsetBuffer;
-    BufferResource m_recordBuffer;
-    BufferResource m_cursorBuffer;
-    BufferResource m_compactIndexBuffer;
-    BufferResource m_scanScratchBuffer;
-    BufferResource m_statsBuffer;
-    BufferResource m_worldCellBuffer;
-    BufferResource m_worldIndexBuffer;
-    BufferResource m_worldHeaderBuffer;
+    /// Persistent build resources ring across slots; depth matches the two
+    /// swapchain frames in flight so the reuse wait targets a submission that
+    /// is normally already complete.
+    static constexpr uint32_t kBuildSlotCount = 2u;
+    std::array<BuildSlot, kBuildSlotCount> m_buildSlots;
+    uint32_t m_activeSlot = 0u;
 
     ComputeStage m_countStage;
     ComputeStage m_scanStage;
@@ -210,14 +234,6 @@ private:
     ComputeStage m_fillStage;
     ComputeStage m_validateStage;
     RhiBindGroupLayoutHandle m_consumerBindGroupLayout;
-
-    RhiBindGroupHandle m_countBindGroup;
-    std::vector<RhiBindGroupHandle> m_scanBindGroups;
-    std::vector<RhiBindGroupHandle> m_scanAddBindGroups;
-    RhiBindGroupHandle m_finalizeBindGroup;
-    RhiBindGroupHandle m_fillBindGroup;
-    RhiBindGroupHandle m_validateBindGroup;
-    RhiBindGroupHandle m_consumerBindGroup;
     LocalShadowResources m_localShadowResources;
 
     static constexpr uint32_t kStatsWordCount = 8u;
@@ -230,10 +246,6 @@ private:
     uint32_t m_pendingStatsReadbackIndex = 0u;
     bool m_statsReadbackSlotAvailable = true;
     bool m_statsReadbackPending = false;
-    // Last graph submission that may still read or write the single-buffered
-    // persistent build buffers. The next prepare call blocks on it because
-    // the buffers are shared across in-flight frames.
-    RhiSubmissionToken m_lastBuildToken;
     ClusteredLightingFrameStats m_frameStats;
 };
 
