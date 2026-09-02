@@ -217,6 +217,17 @@ find_package(glfw3 REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(OpenAL CONFIG REQUIRED)
+
+# OpenAL Soft is a C++ static library on Linux. Its package target contains
+# weak inline C++ symbols that are not handled correctly when mixed with GCC
+# LTO objects, so disable LTO for all targets that consume this static archive.
+get_target_property(MECRAFT_OPENAL_TYPE OpenAL::OpenAL TYPE)
+if(UNIX AND NOT APPLE AND MECRAFT_OPENAL_TYPE STREQUAL "STATIC_LIBRARY" AND
+   CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(OpenAL::OpenAL INTERFACE -fno-lto)
+endif()
+unset(MECRAFT_OPENAL_TYPE)
+
 find_package(Vorbis CONFIG REQUIRED COMPONENTS File)
 find_package(Freetype REQUIRED)
 find_package(EnTT CONFIG REQUIRED)
