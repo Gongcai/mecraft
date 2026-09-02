@@ -39,8 +39,9 @@ struct ClusterGrid final {
 /// compute passes, plus the light sphere in view space used for exact
 /// sphere-vs-cluster intersection. minCluster.w is one for an intersecting
 /// light and zero for a light outside the current view. ClusteredLightingPass
-/// stores the source GpuLight index in maxCluster.w after removing inactive
-/// bounds. viewSphere.w is negative for directional lights.
+/// replaces it with a one-based coverage-mask offset and stores the one-based
+/// source GpuLight index in maxCluster.w after removing inactive bounds.
+/// viewSphere.w is negative for directional lights.
 struct alignas(16) GpuClusterLightBounds final {
     glm::uvec4 minCluster{0u};
     glm::uvec4 maxCluster{0u};

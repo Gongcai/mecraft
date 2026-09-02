@@ -294,9 +294,11 @@ bool testComputeShaderContracts() {
            requireTrue(fill.find("CLUSTER_BUILD_ERROR") != std::string::npos,
                        "capacity and cursor failures must be explicit") &&
            requireTrue(count.find("clusterSphereIntersectsCluster") != std::string::npos &&
-                           fill.find("clusterSphereIntersectsCluster") != std::string::npos &&
+                           count.find("uCoverageMaskWords") != std::string::npos &&
+                           fill.find("uCoverageMaskWords") != std::string::npos &&
+                           fill.find("clusterSphereIntersectsCluster") == std::string::npos &&
                            intersection.find("clusterPointTriangleDistanceSquared") != std::string::npos,
-                       "count and fill must share exact sphere-cluster intersection coverage");
+                       "fill must consume the count-stage exact coverage mask instead of repeating the intersection");
 }
 
 bool testSharedLightingConsumers() {

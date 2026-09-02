@@ -12,6 +12,9 @@ layout(binding = 0, std430) readonly buffer LightBoundsBuffer {
 layout(binding = 1, std430) buffer ClusterCountBuffer {
     uint uClusterCounts[];
 };
+layout(binding = 2, std430) buffer ClusterCoverageMaskBuffer {
+    uint uCoverageMaskWords[];
+};
 
 layout(push_constant) uniform RhiPushConstants {
     mat4 uInverseProjection;
@@ -27,7 +30,7 @@ void main() {
         return;
     }
     const ClusterLightBounds bounds = uLightBounds[boundsIndex];
-    if (bounds.minCluster.w == 0u) {
+    if (bounds.maxCluster.w == 0u) {
         return;
     }
     const uint depthSlice = bounds.minCluster.z + gl_WorkGroupID.y;
@@ -49,6 +52,9 @@ void main() {
         if (!clusterSphereIntersectsCluster(bounds.viewSphere, frustum)) {
             continue;
         }
+        const uint candidateIndex = bounds.minCluster.w - 1u +
+            (depthSlice - bounds.minCluster.z) * coverageCount + coverageIndex;
+        atomicOr(uCoverageMaskWords[candidateIndex >> 5u], 1u << (candidateIndex & 31u));
         const uint clusterIndex = clusteredLightClusterIndex(
             cluster, gridSize);
         atomicAdd(uClusterCounts[clusterIndex], 1u);

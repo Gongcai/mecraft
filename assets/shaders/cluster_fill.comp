@@ -1,6 +1,5 @@
 #version 450 core
 #include "cluster_build_contract.glsl"
-#include "cluster_sphere_intersection.glsl"
 
 layout(local_size_x = CLUSTER_COVERAGE_WORKGROUP_SIZE,
        local_size_y = 1,
@@ -21,6 +20,9 @@ layout(binding = 3, std430) buffer CompactLightIndexBuffer {
 layout(binding = 4, std430) buffer ClusterStatsBuffer {
     uint uClusterStats[];
 };
+layout(binding = 5, std430) readonly buffer ClusterCoverageMaskBuffer {
+    uint uCoverageMaskWords[];
+};
 
 layout(push_constant) uniform RhiPushConstants {
     mat4 uInverseProjection;
@@ -38,14 +40,14 @@ void main() {
         return;
     }
     const ClusterLightBounds bounds = uLightBounds[boundsIndex];
-    if (bounds.minCluster.w == 0u) {
+    if (bounds.maxCluster.w == 0u) {
         return;
     }
     const uint depthSlice = bounds.minCluster.z + gl_WorkGroupID.y;
     if (depthSlice > bounds.maxCluster.z) {
         return;
     }
-    const uint lightIndex = bounds.maxCluster.w;
+    const uint lightIndex = bounds.maxCluster.w - 1u;
     const uvec2 minimumCluster = bounds.minCluster.xy;
     const uvec2 coverageExtent =
         bounds.maxCluster.xy - minimumCluster + uvec2(1u);
@@ -56,9 +58,9 @@ void main() {
          coverageIndex += CLUSTER_COVERAGE_WORKGROUP_SIZE) {
         const uvec3 cluster = clusteredLightCoverageCoordinate(
             coverageIndex, minimumCluster, coverageExtent, depthSlice);
-        const ClusterFrustumCorners frustum = buildClusterFrustumCorners(
-            uInverseProjection, uDepthParameters, cluster, gridSize);
-        if (!clusterSphereIntersectsCluster(bounds.viewSphere, frustum)) {
+        const uint candidateIndex = bounds.minCluster.w - 1u +
+            (depthSlice - bounds.minCluster.z) * coverageCount + coverageIndex;
+        if ((uCoverageMaskWords[candidateIndex >> 5u] & (1u << (candidateIndex & 31u))) == 0u) {
             continue;
         }
         const uint clusterIndex = clusteredLightClusterIndex(

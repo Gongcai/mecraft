@@ -235,6 +235,7 @@ bool ClusteredLightingPass::prepareGraphFrame(RhiDevice& rhiDevice, const FrameC
     frame->lightBounds = m_lightBounds;
     frame->worldLightGrid = m_worldLightGrid;
     frame->zeroClusterWords = m_zeroClusterWords;
+    frame->zeroCoverageMaskWords = m_zeroCoverageMaskWords;
     frame->scanLevels = m_scanLevels;
     m_preparedFrame = std::move(frame);
     m_prepared = true;
@@ -349,7 +350,27 @@ bool ClusteredLightingPass::buildCoverage(const FrameContext& ctx, const uint32_
         return false;
     }
     m_requiredIndexCount = *required;
+    uint32_t coverageOffset = 0u;
+    for (GpuClusterLightBounds& bounds : m_lightBounds) {
+        const uint32_t coverageCount = clusterLightCoverageCount(bounds);
+        if (coverageCount == 0u || coverageOffset > std::numeric_limits<uint32_t>::max() - coverageCount) {
+            return false;
+        }
+        // Store a one-based offset so zero remains the inactive marker.
+        bounds.minCluster.w = coverageOffset + 1u;
+        bounds.maxCluster.w += 1u;
+        coverageOffset += coverageCount;
+    }
+    if (coverageOffset != m_requiredIndexCount) {
+        return false;
+    }
     m_zeroClusterWords.assign(m_grid.clusterCount, 0u);
+    const uint64_t coverageMaskWordCount =
+        (static_cast<uint64_t>(std::max(m_requiredIndexCount, 1u)) + 31u) / 32u;
+    if (coverageMaskWordCount > std::numeric_limits<uint32_t>::max()) {
+        return false;
+    }
+    m_zeroCoverageMaskWords.assign(static_cast<size_t>(coverageMaskWordCount), 0u);
     return true;
 }
 
@@ -459,7 +480,7 @@ bool ClusteredLightingPass::ensurePipelines(RhiDevice& rhiDevice) {
         return stage.pipeline.isValid();
     };
 
-    if (!createStage(m_countStage, "assets/shaders/cluster_count.comp", "ClusteredLighting.Count", 2u,
+    if (!createStage(m_countStage, "assets/shaders/cluster_count.comp", "ClusteredLighting.Count", 3u,
                      sizeof(ClusterGridPushConstants)) ||
         !createStage(m_scanStage, "assets/shaders/cluster_scan.comp", "ClusteredLighting.Scan", 3u,
                      sizeof(ClusterScanPushConstants)) ||
@@ -469,7 +490,7 @@ bool ClusteredLightingPass::ensurePipelines(RhiDevice& rhiDevice) {
                      sizeof(ClusterScanPushConstants)) ||
         !createStage(m_finalizeStage, "assets/shaders/cluster_finalize.comp", "ClusteredLighting.Finalize", 4u,
                      sizeof(ClusterScanPushConstants)) ||
-        !createStage(m_fillStage, "assets/shaders/cluster_fill.comp", "ClusteredLighting.Fill", 5u,
+        !createStage(m_fillStage, "assets/shaders/cluster_fill.comp", "ClusteredLighting.Fill", 6u,
                      sizeof(ClusterFillPushConstants)) ||
         !createStage(m_validateStage, "assets/shaders/cluster_validate.comp", "ClusteredLighting.Validate", 3u,
                      sizeof(ClusterScanPushConstants))) {
@@ -485,6 +506,7 @@ bool ClusteredLightingPass::ensureBuffers(RhiDevice& rhiDevice, BuildSlot& slot)
     uint64_t clusterWordBytes = 0u;
     uint64_t recordBytes = 0u;
     uint64_t indexBytes = 0u;
+    uint64_t coverageMaskBytes = 0u;
     uint64_t scratchBytes = 0u;
     uint64_t worldCellBytes = 0u;
     uint64_t worldIndexBytes = 0u;
@@ -494,6 +516,7 @@ bool ClusteredLightingPass::ensureBuffers(RhiDevice& rhiDevice, BuildSlot& slot)
         !multiplyBytes(m_grid.clusterCount, sizeof(uint32_t), clusterWordBytes) ||
         !multiplyBytes(m_grid.clusterCount, sizeof(uint32_t) * 2u, recordBytes) ||
         !multiplyBytes(std::max(m_requiredIndexCount, 1u), sizeof(uint32_t), indexBytes) ||
+        !multiplyBytes(std::max<size_t>(m_zeroCoverageMaskWords.size(), 1u), sizeof(uint32_t), coverageMaskBytes) ||
         !multiplyBytes(std::max(m_scanScratchWordCount, 1u), sizeof(uint32_t), scratchBytes) ||
         !multiplyBytes(std::max<size_t>(m_worldLightGrid.cells.size(), 1u),
                        sizeof(renderer::contracts::GpuWorldLightCell), worldCellBytes) ||
@@ -505,7 +528,8 @@ bool ClusteredLightingPass::ensureBuffers(RhiDevice& rhiDevice, BuildSlot& slot)
         lightBytes > slot.lightBuffer.capacityBytes || boundsBytes > slot.lightBoundsBuffer.capacityBytes ||
         clusterWordBytes > slot.countBuffer.capacityBytes || clusterWordBytes > slot.offsetBuffer.capacityBytes ||
         recordBytes > slot.recordBuffer.capacityBytes || clusterWordBytes > slot.cursorBuffer.capacityBytes ||
-        indexBytes > slot.compactIndexBuffer.capacityBytes || scratchBytes > slot.scanScratchBuffer.capacityBytes ||
+        indexBytes > slot.compactIndexBuffer.capacityBytes ||
+        coverageMaskBytes > slot.coverageMaskBuffer.capacityBytes || scratchBytes > slot.scanScratchBuffer.capacityBytes ||
         sizeof(uint32_t) * kStatsWordCount > slot.statsBuffer.capacityBytes ||
         worldCellBytes > slot.worldCellBuffer.capacityBytes || worldIndexBytes > slot.worldIndexBuffer.capacityBytes ||
         sizeof(renderer::contracts::GpuWorldLightGridHeader) > slot.worldHeaderBuffer.capacityBytes;
@@ -531,6 +555,8 @@ bool ClusteredLightingPass::ensureBuffers(RhiDevice& rhiDevice, BuildSlot& slot)
                       "ClusteredLighting.Cursors") ||
         !ensureBuffer(rhiDevice, slot.compactIndexBuffer, indexBytes, storageUsage, RhiMemoryCategory::SceneData,
                       "ClusteredLighting.CompactIndices") ||
+        !ensureBuffer(rhiDevice, slot.coverageMaskBuffer, coverageMaskBytes, storageUploadUsage,
+                      RhiMemoryCategory::SceneData, "ClusteredLighting.CoverageMask") ||
         !ensureBuffer(rhiDevice, slot.scanScratchBuffer, scratchBytes, storageUsage, RhiMemoryCategory::SceneData,
                       "ClusteredLighting.ScanScratch") ||
         !ensureBuffer(rhiDevice, slot.statsBuffer, sizeof(uint32_t) * kStatsWordCount,
@@ -615,6 +641,7 @@ bool ClusteredLightingPass::ensureBuildBindGroups(RhiDevice& rhiDevice, BuildSlo
     countDesc.layout = m_countStage.bindGroupLayout;
     appendStorageBinding(countDesc, 0u, slot.lightBoundsBuffer.handle, slot.lightBoundsBuffer.capacityBytes);
     appendStorageBinding(countDesc, 1u, slot.countBuffer.handle, slot.countBuffer.capacityBytes);
+    appendStorageBinding(countDesc, 2u, slot.coverageMaskBuffer.handle, slot.coverageMaskBuffer.capacityBytes);
     slot.countBindGroup = rhiDevice.createBindGroup(countDesc);
     if (!slot.countBindGroup.isValid()) {
         return false;
@@ -669,6 +696,7 @@ bool ClusteredLightingPass::ensureBuildBindGroups(RhiDevice& rhiDevice, BuildSlo
     appendStorageBinding(fillDesc, 2u, slot.cursorBuffer.handle, slot.cursorBuffer.capacityBytes);
     appendStorageBinding(fillDesc, 3u, slot.compactIndexBuffer.handle, slot.compactIndexBuffer.capacityBytes);
     appendStorageBinding(fillDesc, 4u, slot.statsBuffer.handle, slot.statsBuffer.capacityBytes);
+    appendStorageBinding(fillDesc, 5u, slot.coverageMaskBuffer.handle, slot.coverageMaskBuffer.capacityBytes);
     slot.fillBindGroup = rhiDevice.createBindGroup(fillDesc);
 
     RhiBindGroupDesc validateDesc;
@@ -720,6 +748,7 @@ bool ClusteredLightingPass::importGraphResources(RenderGraph& graph, GraphResour
         importBuffer(graph, slot.recordBuffer, resources.records) &&
         importBuffer(graph, slot.cursorBuffer, resources.cursors) &&
         importBuffer(graph, slot.compactIndexBuffer, resources.compactIndices) &&
+        importBuffer(graph, slot.coverageMaskBuffer, resources.coverageMask) &&
         importBuffer(graph, slot.scanScratchBuffer, resources.scanScratch) &&
         importBuffer(graph, slot.statsBuffer, resources.stats) &&
         importBuffer(graph, slot.worldCellBuffer, resources.worldCells) &&
@@ -776,6 +805,7 @@ RgPassHandle ClusteredLightingPass::addGraphPasses(RenderGraph& graph, const Gra
         .writeBuffer(resources.lightBounds, RhiResourceState::TransferDst)
         .writeBuffer(resources.counts, RhiResourceState::TransferDst)
         .writeBuffer(resources.cursors, RhiResourceState::TransferDst)
+        .writeBuffer(resources.coverageMask, RhiResourceState::TransferDst)
         .writeBuffer(resources.stats, RhiResourceState::TransferDst)
         .writeBuffer(resources.worldCells, RhiResourceState::TransferDst)
         .writeBuffer(resources.worldIndices, RhiResourceState::TransferDst)
@@ -788,6 +818,7 @@ RgPassHandle ClusteredLightingPass::addGraphPasses(RenderGraph& graph, const Gra
     count.dependsOn(tail)
         .readBuffer(resources.lightBounds, RhiResourceState::StorageBuffer)
         .readWriteBuffer(resources.counts, RhiResourceState::StorageBuffer)
+        .readWriteBuffer(resources.coverageMask, RhiResourceState::StorageBuffer)
         .setExecute([this, frame](RgPassContext& pass) { return recordCount(pass.commandList(), *frame); });
     tail = count.handle();
 
@@ -841,6 +872,7 @@ RgPassHandle ClusteredLightingPass::addGraphPasses(RenderGraph& graph, const Gra
         .readBuffer(resources.records, RhiResourceState::StorageBuffer)
         .readWriteBuffer(resources.cursors, RhiResourceState::StorageBuffer)
         .writeBuffer(resources.compactIndices, RhiResourceState::StorageBuffer)
+        .readBuffer(resources.coverageMask, RhiResourceState::StorageBuffer)
         .readWriteBuffer(resources.stats, RhiResourceState::StorageBuffer)
         .setExecute([this, frame](RgPassContext& pass) { return recordFill(pass.commandList(), *frame); });
     tail = fill.handle();
@@ -882,6 +914,8 @@ bool ClusteredLightingPass::recordUpload(RhiCommandList& commandList, const Buil
                              frame.zeroClusterWords.size() * sizeof(frame.zeroClusterWords.front()));
     commandList.updateBuffer(slot.cursorBuffer.handle, 0u, frame.zeroClusterWords.data(),
                              frame.zeroClusterWords.size() * sizeof(frame.zeroClusterWords.front()));
+    commandList.updateBuffer(slot.coverageMaskBuffer.handle, 0u, frame.zeroCoverageMaskWords.data(),
+                             frame.zeroCoverageMaskWords.size() * sizeof(frame.zeroCoverageMaskWords.front()));
     const uint32_t stats[kStatsWordCount] = {0u,
                                              0u,
                                              0u,
@@ -1142,7 +1176,8 @@ void ClusteredLightingPass::destroyBuffers() {
         for (BuildSlot& slot : m_buildSlots) {
             BufferResource* resources[] = {&slot.lightBuffer,        &slot.lightBoundsBuffer, &slot.countBuffer,
                                            &slot.offsetBuffer,       &slot.recordBuffer,      &slot.cursorBuffer,
-                                           &slot.compactIndexBuffer, &slot.scanScratchBuffer, &slot.statsBuffer,
+                                           &slot.compactIndexBuffer, &slot.coverageMaskBuffer, &slot.scanScratchBuffer,
+                                           &slot.statsBuffer,
                                            &slot.worldCellBuffer,    &slot.worldIndexBuffer,  &slot.worldHeaderBuffer};
             for (BufferResource* resource : resources) {
                 if (resource->handle.isValid()) {
@@ -1184,6 +1219,7 @@ void ClusteredLightingPass::shutdown() {
     m_emptyBuildScheduled = false;
     m_lightBounds.clear();
     m_zeroClusterWords.clear();
+    m_zeroCoverageMaskWords.clear();
     m_scanLevels.clear();
     m_grid = {};
     m_requiredIndexCount = 0u;

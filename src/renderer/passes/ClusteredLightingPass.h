@@ -56,6 +56,7 @@ public:
         RgBufferHandle records;
         RgBufferHandle cursors;
         RgBufferHandle compactIndices;
+        RgBufferHandle coverageMask;
         RgBufferHandle scanScratch;
         RgBufferHandle stats;
         RgBufferHandle worldCells;
@@ -146,6 +147,7 @@ private:
         BufferResource recordBuffer;
         BufferResource cursorBuffer;
         BufferResource compactIndexBuffer;
+        BufferResource coverageMaskBuffer;
         BufferResource scanScratchBuffer;
         BufferResource statsBuffer;
         BufferResource worldCellBuffer;
@@ -188,6 +190,7 @@ private:
         std::vector<renderer::contracts::GpuClusterLightBounds> lightBounds;
         renderer::contracts::WorldLightGridBuildResult worldLightGrid;
         std::vector<uint32_t> zeroClusterWords;
+        std::vector<uint32_t> zeroCoverageMaskWords;
         std::vector<ScanLevel> scanLevels;
     };
 
@@ -239,6 +242,7 @@ private:
     std::vector<renderer::contracts::GpuClusterLightBounds> m_lightBounds;
     renderer::contracts::WorldLightGridBuildResult m_worldLightGrid;
     std::vector<uint32_t> m_zeroClusterWords;
+    std::vector<uint32_t> m_zeroCoverageMaskWords;
     renderer::contracts::ClusterGrid m_grid;
     glm::mat4 m_inverseProjection{1.0f};
     uint32_t m_requiredIndexCount = 0u;
