@@ -4222,15 +4222,15 @@ RhiFrameAcquireResult VkRhiDevice::acquireFrame() {
     result.colorTexture = m_data->swapchainTextures[m_data->acquiredImage];
     result.colorView = m_data->swapchainViews[m_data->acquiredImage];
     result.depthStencilView = m_data->depthViews[m_data->acquiredImage];
-    const double totalMs =
-        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - acquireStart).count();
-    if (totalMs >= 1.0) {
-        MECRAFT_LOG_STREAM(std::cerr << "[Vulkan] Slow presentation acquire: " << totalMs << " ms"
-                                     << " (slot=" << m_data->frameSlot << ", fencePending="
-                                     << (fenceWasPending ? 1 : 0) << ", fenceWait=" << fenceWaitMs
-                                     << " ms, vkAcquire=" << nativeAcquireMs << " ms, swapchainRecreate="
-                                     << swapchainRecreateMs << " ms)\n");
-    }
+    // const double totalMs =
+    //     std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - acquireStart).count();
+    // if (totalMs >= 1.0) {
+    //     MECRAFT_LOG_STREAM(std::cerr << "[Vulkan] Slow presentation acquire: " << totalMs << " ms"
+    //                                  << " (slot=" << m_data->frameSlot << ", fencePending="
+    //                                  << (fenceWasPending ? 1 : 0) << ", fenceWait=" << fenceWaitMs
+    //                                  << " ms, vkAcquire=" << nativeAcquireMs << " ms, swapchainRecreate="
+    //                                  << swapchainRecreateMs << " ms)\n");
+    // }
     return result;
 }
 
@@ -5521,21 +5521,21 @@ void VkRhiCommandList::drawIndexedIndirectCount(const RhiBufferHandle indirectBu
     const auto* countRecord = findRecord(m_device->m_data->buffers, countBuffer);
     constexpr uint64_t kCommandSize = sizeof(uint32_t) * 5u;
     const uint64_t commandStride = stride == 0u ? kCommandSize : stride;
-    const bool commandSizeRepresentable = maxDrawCount == 0u ||
-                                          static_cast<uint64_t>(maxDrawCount - 1u) <=
-                                              (std::numeric_limits<uint64_t>::max() - kCommandSize) / commandStride;
+    const bool commandSizeRepresentable =
+        maxDrawCount == 0u || static_cast<uint64_t>(maxDrawCount - 1u) <=
+                                  (std::numeric_limits<uint64_t>::max() - kCommandSize) / commandStride;
     const uint64_t commandBytes = commandSizeRepresentable && maxDrawCount != 0u
                                       ? kCommandSize + static_cast<uint64_t>(maxDrawCount - 1u) * commandStride
                                       : 0u;
-    const bool valid = m_data->rendering && indirectRecord != nullptr && countRecord != nullptr &&
-                       (indirectRecord->desc.usage & rhiFlag(RhiBufferUsage::Indirect)) != 0u &&
-                       (countRecord->desc.usage & rhiFlag(RhiBufferUsage::Indirect)) != 0u && maxDrawCount > 0u &&
-                       maxDrawCount <= m_device->m_data->properties.limits.maxDrawIndirectCount &&
-                       commandSizeRepresentable && commandStride >= kCommandSize && (commandStride & 3u) == 0u &&
-                       (indirectOffset & 3u) == 0u && (countOffset & 3u) == 0u &&
-                       indirectOffset <= indirectRecord->desc.size &&
-                       commandBytes <= indirectRecord->desc.size - indirectOffset && countOffset <= countRecord->desc.size &&
-                       sizeof(uint32_t) <= countRecord->desc.size - countOffset;
+    const bool valid =
+        m_data->rendering && indirectRecord != nullptr && countRecord != nullptr &&
+        (indirectRecord->desc.usage & rhiFlag(RhiBufferUsage::Indirect)) != 0u &&
+        (countRecord->desc.usage & rhiFlag(RhiBufferUsage::Indirect)) != 0u && maxDrawCount > 0u &&
+        maxDrawCount <= m_device->m_data->properties.limits.maxDrawIndirectCount && commandSizeRepresentable &&
+        commandStride >= kCommandSize && (commandStride & 3u) == 0u && (indirectOffset & 3u) == 0u &&
+        (countOffset & 3u) == 0u && indirectOffset <= indirectRecord->desc.size &&
+        commandBytes <= indirectRecord->desc.size - indirectOffset && countOffset <= countRecord->desc.size &&
+        sizeof(uint32_t) <= countRecord->desc.size - countOffset;
     if (!valid) {
         m_data->valid = false;
         return;

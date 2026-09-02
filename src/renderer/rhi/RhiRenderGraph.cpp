@@ -2030,19 +2030,19 @@ RgExecuteResult RenderGraph::execute(RhiDevice& device, RhiCommandListPool& comm
     const auto submitStart = std::chrono::steady_clock::now();
     RgExecuteResult result;
     result.recordMilliseconds = std::chrono::duration<double, std::milli>(submitStart - executeStart).count();
-    if (result.recordMilliseconds >= 1.0) {
-        const auto toMs = [](const auto begin, const auto end) {
-            return std::chrono::duration<double, std::milli>(end - begin).count();
-        };
-        MECRAFT_LOG_STREAM(std::cerr << "[RenderGraph] Slow record: " << result.recordMilliseconds << " ms"
-                                     << " (resolve=" << toMs(executeStart, resourceResolveEnd)
-                                     << " ms, barrierPlan=" << toMs(resourceResolveEnd, barrierPlanEnd)
-                                     << " ms, record+workers=" << toMs(barrierPlanEnd, recordEnd)
-                                     << " ms, epilogue=" << toMs(recordEnd, submitStart)
-                                     << " ms, passes=" << m_compiledPasses.size()
-                                     << ", batches=" << m_submissionBatches.size()
-                                     << ", workerBatches=" << workerBatchCount << ")\n");
-    }
+    // if (result.recordMilliseconds >= 1.0) {
+    //     const auto toMs = [](const auto begin, const auto end) {
+    //         return std::chrono::duration<double, std::milli>(end - begin).count();
+    //     };
+    //     MECRAFT_LOG_STREAM(std::cerr << "[RenderGraph] Slow record: " << result.recordMilliseconds << " ms"
+    //                                  << " (resolve=" << toMs(executeStart, resourceResolveEnd)
+    //                                  << " ms, barrierPlan=" << toMs(resourceResolveEnd, barrierPlanEnd)
+    //                                  << " ms, record+workers=" << toMs(barrierPlanEnd, recordEnd)
+    //                                  << " ms, epilogue=" << toMs(recordEnd, submitStart)
+    //                                  << " ms, passes=" << m_compiledPasses.size()
+    //                                  << ", batches=" << m_submissionBatches.size()
+    //                                  << ", workerBatches=" << workerBatchCount << ")\n");
+    // }
     result.workerRecordedBatchCount = workerBatchCount;
     result.submissions.reserve(prologueBatches.size() + m_submissionBatches.size() + epilogueBatches.size());
     for (TransitionBatch& prologue : prologueBatches) {
