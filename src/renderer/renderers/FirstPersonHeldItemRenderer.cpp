@@ -904,7 +904,9 @@ void FirstPersonHeldItemRenderer::createItemGBufferResources() {
                                            {1u, 0u, RhiVertexFormat::Float2, offsetof(ItemModelVertex, u)},
                                            {2u, 0u, RhiVertexFormat::Float, offsetof(ItemModelVertex, shade)},
                                            {3u, 0u, RhiVertexFormat::Float3, offsetof(ItemModelVertex, nx)}};
-    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    // depthCompare is Always so the held item stays on top of world geometry; that disables
+    // depth-based self-occlusion, so back faces must be culled or they overwrite front faces.
+    pipelineDesc.raster.cullMode = RhiCullMode::Back;
     pipelineDesc.depthStencil.depthTestEnabled = true;
     pipelineDesc.depthStencil.depthWriteEnabled = true;
     pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Always;
@@ -987,7 +989,8 @@ void FirstPersonHeldItemRenderer::createBlockGBufferResources() {
     pipelineDesc.fragmentShader = m_blockGBufferFragmentShader;
     pipelineDesc.layout = m_blockGBufferPipelineLayout;
     renderer::setBlockVertexInputLayout(pipelineDesc);
-    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    // See the item pipeline: Always depth needs back-face culling for self-occlusion.
+    pipelineDesc.raster.cullMode = RhiCullMode::Back;
     pipelineDesc.depthStencil.depthTestEnabled = true;
     pipelineDesc.depthStencil.depthWriteEnabled = true;
     pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Always;
