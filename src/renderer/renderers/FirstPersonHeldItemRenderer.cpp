@@ -45,6 +45,7 @@ void setHeldBlockVertexInputLayout(RhiGraphicsPipelineDesc& pipelineDesc) {
     pipelineDesc.vertexInput.attributes = {
         {0u, 0u, RhiVertexFormat::Float3, static_cast<uint32_t>(offsetof(BlockVertex, x))},
         {1u, 0u, RhiVertexFormat::Float2, static_cast<uint32_t>(offsetof(BlockVertex, u))},
+        {2u, 0u, RhiVertexFormat::Sint8, static_cast<uint32_t>(offsetof(BlockVertex, normal))},
         {5u, 0u, RhiVertexFormat::Uint8, static_cast<uint32_t>(offsetof(BlockVertex, ao))},
         {6u, 0u, RhiVertexFormat::Uint16, static_cast<uint32_t>(offsetof(BlockVertex, layer))},
         {10u, 0u, RhiVertexFormat::Uint16, static_cast<uint32_t>(offsetof(BlockVertex, tintPacked))}};
@@ -133,7 +134,9 @@ void FirstPersonHeldItemRenderer::shutdown() {
     m_swingActive = false;
     m_continuousSwing = false;
     m_swingElapsed = 0.0f;
-    m_sceneHdrScale = 1.0f;
+    m_sceneAmbientRadiance = glm::vec3(0.0f);
+    m_sceneDirectRadiance = glm::vec3(0.0f);
+    m_directAlbedoPower = 0.0f;
     m_initialized = false;
 }
 
@@ -318,16 +321,17 @@ void FirstPersonHeldItemRenderer::setEnvironmentLight(const float sunlight, cons
     m_environmentBlockLight = std::clamp(blockLight, 0.0f, 1.0f);
 }
 
-void FirstPersonHeldItemRenderer::setSceneHdrScale(const float scale) {
-    m_sceneHdrScale = std::clamp(scale, 1.0f, 8.0f);
-}
-
-void FirstPersonHeldItemRenderer::setScenePreExposure(const float preExposure) {
-    if (!std::isfinite(preExposure) || preExposure <= 0.0f) {
-        m_scenePreExposure = 1.0f;
-        return;
-    }
-    m_scenePreExposure = std::clamp(preExposure, 1.0f / 64.0f, 64.0f);
+void FirstPersonHeldItemRenderer::setSceneLighting(const glm::vec3& ambientRadiance, const glm::vec3& directRadiance,
+                                                   const float directAlbedoPower) {
+    const auto sanitize = [](const glm::vec3& radiance) {
+        if (!std::isfinite(radiance.x) || !std::isfinite(radiance.y) || !std::isfinite(radiance.z)) {
+            return glm::vec3(0.0f);
+        }
+        return glm::max(radiance, glm::vec3(0.0f));
+    };
+    m_sceneAmbientRadiance = sanitize(ambientRadiance);
+    m_sceneDirectRadiance = sanitize(directRadiance);
+    m_directAlbedoPower = std::clamp(directAlbedoPower, 0.0f, 1.0f);
 }
 
 void FirstPersonHeldItemRenderer::prepareFrameResources(const Inventory& inventory) {
@@ -519,7 +523,7 @@ void FirstPersonHeldItemRenderer::createArmRhiResources() {
     RhiPipelineLayoutDesc pipelineLayoutDesc;
     pipelineLayoutDesc.debugName = "FirstPerson.Arm.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_armBindGroupLayout);
-    pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u + sizeof(glm::vec4);
+    pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u + sizeof(glm::vec4) * 2u;
     pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
     m_armPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
 
@@ -604,7 +608,7 @@ void FirstPersonHeldItemRenderer::createItemRhiResources() {
     RhiPipelineLayoutDesc pipelineLayoutDesc;
     pipelineLayoutDesc.debugName = "FirstPerson.Item.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_itemBindGroupLayout);
-    pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u + sizeof(glm::vec4);
+    pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u + sizeof(glm::vec4) * 2u;
     pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
     m_itemPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
     RhiGraphicsPipelineDesc pipelineDesc;
@@ -687,7 +691,7 @@ void FirstPersonHeldItemRenderer::createBlockRhiResources() {
     RhiPipelineLayoutDesc pipelineLayoutDesc;
     pipelineLayoutDesc.debugName = "FirstPerson.Block.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_blockBindGroupLayout);
-    pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u + sizeof(glm::vec4);
+    pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u + sizeof(glm::vec4) * 2u;
     pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
     m_blockPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
     RhiGraphicsPipelineDesc pipelineDesc;
@@ -948,7 +952,7 @@ void FirstPersonHeldItemRenderer::prepareRhiFrame(RhiCommandList& commandList) {
                             m_shadowData.shadowsEnabled};
     uniforms.lighting = {m_shadowData.skyIntensity, m_shadowData.ambientStrength, m_environmentSunlight,
                          m_environmentBlockLight};
-    uniforms.hdrScalePadding.x = m_sceneHdrScale;
+    uniforms.hdrScalePadding = glm::vec4(0.0f);
     commandList.bufferBarrier({m_shadowUniformBuffer, RhiResourceState::UniformBuffer, RhiResourceState::TransferDst});
     commandList.updateBuffer(m_shadowUniformBuffer, 0u, &uniforms, sizeof(uniforms));
     commandList.bufferBarrier({m_shadowUniformBuffer, RhiResourceState::TransferDst, RhiResourceState::UniformBuffer});
@@ -962,12 +966,12 @@ void FirstPersonHeldItemRenderer::renderPrepared(RhiCommandList& commandList) {
         struct PushConstants {
             glm::mat4 viewProj;
             glm::mat4 model;
-            glm::vec4 lighting;
+            glm::vec4 ambientRadiance;
+            glm::vec4 directRadiance;
         };
-        const PushConstants constants{
-            m_preparedFrame.viewProj,
-            m_preparedFrame.model,
-            {m_environmentSunlight, m_environmentBlockLight, m_shadowData.skyIntensity, sceneRadianceScale()}};
+        const PushConstants constants{m_preparedFrame.viewProj, m_preparedFrame.model,
+                                      glm::vec4(m_sceneAmbientRadiance, 0.0f),
+                                      glm::vec4(m_sceneDirectRadiance, m_directAlbedoPower)};
         commandList.setViewport({0.0f, 0.0f, static_cast<float>(m_preparedFrame.width),
                                  static_cast<float>(m_preparedFrame.height), 0.0f, 0.08f});
         commandList.setScissor(
@@ -989,12 +993,12 @@ void FirstPersonHeldItemRenderer::renderPrepared(RhiCommandList& commandList) {
         struct PushConstants {
             glm::mat4 viewProj;
             glm::mat4 model;
-            glm::vec4 lighting;
+            glm::vec4 ambientRadiance;
+            glm::vec4 directRadiance;
         };
-        const PushConstants constants{
-            m_preparedFrame.viewProj,
-            m_preparedFrame.model,
-            {m_environmentSunlight, m_environmentBlockLight, m_shadowData.skyIntensity, sceneRadianceScale()}};
+        const PushConstants constants{m_preparedFrame.viewProj, m_preparedFrame.model,
+                                      glm::vec4(m_sceneAmbientRadiance, 0.0f),
+                                      glm::vec4(m_sceneDirectRadiance, m_directAlbedoPower)};
         commandList.setViewport({0.0f, 0.0f, static_cast<float>(m_preparedFrame.width),
                                  static_cast<float>(m_preparedFrame.height), 0.0f, 0.08f});
         commandList.setScissor(
@@ -1016,12 +1020,12 @@ void FirstPersonHeldItemRenderer::renderPrepared(RhiCommandList& commandList) {
     struct PushConstants {
         glm::mat4 viewProj;
         glm::mat4 model;
-        glm::vec4 lighting;
+        glm::vec4 ambientRadiance;
+        glm::vec4 directRadiance;
     };
-    const PushConstants constants{
-        m_preparedFrame.viewProj,
-        m_preparedFrame.model,
-        {m_environmentSunlight, m_environmentBlockLight, m_shadowData.skyIntensity, sceneRadianceScale()}};
+    const PushConstants constants{m_preparedFrame.viewProj, m_preparedFrame.model,
+                                  glm::vec4(m_sceneAmbientRadiance, 0.0f),
+                                  glm::vec4(m_sceneDirectRadiance, m_directAlbedoPower)};
     commandList.setViewport({0.0f, 0.0f, static_cast<float>(m_preparedFrame.width),
                              static_cast<float>(m_preparedFrame.height), 0.0f, 0.08f});
     commandList.setScissor(

@@ -10,7 +10,8 @@ layout(location = 1) out vec3 vNormal;
 layout(push_constant) uniform RhiPushConstants {
     mat4 uViewProj;
     mat4 uModel;
-    vec4 uLighting;
+    vec4 uAmbientRadiance;
+    vec4 uDirectRadiance;
 };
 
 void main() {
