@@ -261,7 +261,8 @@ void RenderScene::shutdown() {
 bool RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera, const Window& window,
                               const glm::ivec2& frameRenderSize, const glm::ivec2& frameOutputSize,
                               const float frameAspectRatio, const DayNightSystem& dayNightSystem,
-                              const WeatherSystem& weatherSystem, const std::optional<RenderFrameClock>& frameClock) {
+                              const WeatherSystem& weatherSystem, const std::optional<RenderFrameClock>& frameClock,
+                              const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot) {
     if (!prepareFrameResources(frameRenderSize)) {
         MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Failed to prepare frame resources for " << frameRenderSize.x
                                      << 'x' << frameRenderSize.y << '\n');
@@ -314,7 +315,7 @@ bool RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera,
         return false;
     }
 
-    m_lastFrameOutput = m_activePipeline->renderFrame(m_currentContext, m_settings);
+    m_lastFrameOutput = m_activePipeline->renderFrame(m_currentContext, m_settings, gameplaySnapshot);
     if (!m_lastFrameOutput.sceneColor.isValid() || !m_lastFrameOutput.sceneDepth.isValid()) {
         MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Active pipeline produced an invalid frame output\n");
         m_terrainStreamingService.endFrame();
@@ -490,8 +491,7 @@ bool RenderScene::executeSceneOverlayGraph(const RenderGameplayFrameRequest& req
     // Forward mode: the held item is shaded with the vanilla lightmap model in the overlay
     // pass. Deferred mode instead writes the held meshes into the GBuffer during the main
     // scene pass, so no overlay geometry is emitted here.
-    const bool heldItemForwardVisible = m_renderFirstPersonHeldItem &&
-                                        getPipelineMode() == PipelineMode::Forward &&
+    const bool heldItemForwardVisible = m_renderFirstPersonHeldItem && getPipelineMode() == PipelineMode::Forward &&
                                         request.firstPersonHeldItemRenderer != nullptr &&
                                         request.firstPersonHeldItemRenderer->hasPreparedDraw();
     if (heldItemForwardVisible) {
@@ -576,8 +576,7 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
 
     // Prepare the first-person held item before the scene pass so that deferred mode can emit
     // the held meshes into the GBuffer, and forward mode can draw them in the overlay pass.
-    m_renderFirstPersonHeldItem = request.renderFirstPersonHeldItem &&
-                                  request.firstPersonHeldItemRenderer != nullptr &&
+    m_renderFirstPersonHeldItem = request.renderFirstPersonHeldItem && request.firstPersonHeldItemRenderer != nullptr &&
                                   request.firstPersonInventory != nullptr &&
                                   request.firstPersonHeldItemMotion != nullptr;
     if (m_renderFirstPersonHeldItem) {
@@ -590,7 +589,7 @@ bool RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     }
 
     if (!renderFrame(request.worldView, request.camera, request.window, frameRenderSize, displaySize, frameAspectRatio,
-                     request.dayNightSystem, request.weatherSystem, request.frameClock)) {
+                     request.dayNightSystem, request.weatherSystem, request.frameClock, &request.gameplaySnapshot)) {
         return false;
     }
     const auto overlayStart = std::chrono::steady_clock::now();
@@ -890,22 +889,6 @@ void RenderScene::setParticleSystem(ParticleSystem* ps) {
 void RenderScene::setFirstPersonHeldItemRenderer(FirstPersonHeldItemRenderer* hIR) {
     m_firstPersonHeldItemRenderer = hIR;
     m_shared.firstPersonHeldItemRenderer = hIR;
-}
-
-void RenderScene::setDropSystem(DropSystem* ds) {
-    m_dropSystem = ds;
-    m_shared.dropSystem = ds;
-    if (m_deferredPipeline && m_deferredPipeline->shadowPass()) {
-        m_deferredPipeline->shadowPass()->setDropSystem(ds);
-    }
-}
-
-void RenderScene::setGameplayRegistry(ecs::GameplayRegistry* reg) {
-    m_gameplayRegistry = reg;
-    m_shared.gameplayRegistry = reg;
-    if (m_deferredPipeline && m_deferredPipeline->shadowPass()) {
-        m_deferredPipeline->shadowPass()->setGameplayRegistry(reg);
-    }
 }
 
 const FrameOutput& RenderScene::getLastFrameOutput() const {

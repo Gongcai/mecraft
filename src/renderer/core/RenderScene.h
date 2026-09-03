@@ -40,7 +40,6 @@ class HumanoidRenderer;
 class DropRenderer;
 class FallingBlockRenderer;
 class ParticleSystem;
-class DropSystem;
 class TerrainRenderCache;
 class TerrainStreamingService;
 class TerrainRenderer;
@@ -61,8 +60,8 @@ struct BlockTargetRenderData;
 struct BlockBreakRenderData;
 struct FirstPersonHeldItemMotion;
 
-namespace ecs {
-class GameplayRegistry;
+namespace renderer::contracts {
+struct GameplayRenderSnapshot;
 }
 namespace shadow {
 class ShadowRenderer;
@@ -103,8 +102,6 @@ struct SharedRenderResources {
     FallingBlockRenderer* fallingBlockRenderer = nullptr;
     FirstPersonHeldItemRenderer* firstPersonHeldItemRenderer = nullptr;
     ParticleSystem* particleSystem = nullptr;
-    DropSystem* dropSystem = nullptr;
-    ecs::GameplayRegistry* gameplayRegistry = nullptr;
 
     // Explicit non-world geometry source used by editor and tooling scenes.
     IDeferredGeometryProvider* deferredGeometryProvider = nullptr;
@@ -113,6 +110,7 @@ struct SharedRenderResources {
 /// High-level render request for one gameplay frame.
 struct RenderGameplayFrameRequest {
     const IWorldView& worldView;
+    const renderer::contracts::GameplayRenderSnapshot& gameplaySnapshot;
     const Camera& camera;
     Window& window;
     /// Immutable swapchain extent returned by acquireFrame() for this frame.
@@ -149,7 +147,8 @@ public:
                                    const glm::ivec2& frameRenderSize, const glm::ivec2& frameOutputSize,
                                    float frameAspectRatio, const DayNightSystem& dayNightSystem,
                                    const WeatherSystem& weatherSystem,
-                                   const std::optional<RenderFrameClock>& frameClock);
+                                   const std::optional<RenderFrameClock>& frameClock,
+                                   const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot = nullptr);
 
     /// Render a complete gameplay frame, including scene, precipitation, and post-process setup.
     /// @return True when every scene, temporal, and composite stage succeeds.
@@ -174,7 +173,7 @@ public:
     /// Reports whether current renderer settings produce dense temporal inputs for DLSS-G.
     [[nodiscard]] bool supportsFrameGenerationInputs() const;
 
-    // Sub-renderer injection (temporary until ECS-driven)
+    // Gameplay renderer injection
     void setBlockEntityRenderer(BlockEntityRenderer* ber);
     void setStaticMeshRenderer(StaticMeshRenderer* smr);
     void setHumanoidRenderer(HumanoidRenderer* hr);
@@ -182,8 +181,6 @@ public:
     void setFallingBlockRenderer(FallingBlockRenderer* fbr);
     void setFirstPersonHeldItemRenderer(FirstPersonHeldItemRenderer* hIR);
     void setParticleSystem(ParticleSystem* ps);
-    void setDropSystem(DropSystem* ds);
-    void setGameplayRegistry(ecs::GameplayRegistry* reg);
 
     // State
     void setEyeInWater(bool inWater);
@@ -422,8 +419,6 @@ private:
     FallingBlockRenderer* m_fallingBlockRenderer = nullptr;
     FirstPersonHeldItemRenderer* m_firstPersonHeldItemRenderer = nullptr;
     ParticleSystem* m_particleSystem = nullptr;
-    DropSystem* m_dropSystem = nullptr;
-    ecs::GameplayRegistry* m_gameplayRegistry = nullptr;
 };
 
 #endif // MECRAFT_RENDER_SCENE_H

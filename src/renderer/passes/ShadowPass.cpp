@@ -20,8 +20,7 @@
 #include "../renderers/HumanoidRenderer.h"
 #include "../renderers/DropRenderer.h"
 #include "../renderers/FallingBlockRenderer.h"
-#include "../../world/DropSystem.h"
-#include "../../ecs/GameplayRegistry.h"
+#include "../contracts/GameplayRenderSnapshot.h"
 
 #include "../rhi/RhiShaderSourceLoader.h"
 
@@ -67,6 +66,7 @@ void ShadowPass::shutdown() {
     m_frameContext = nullptr;
     m_frameTargets = nullptr;
     m_frameDebugService = nullptr;
+    m_gameplaySnapshot = nullptr;
     m_graphFramePrepared = false;
     m_graphExecutionBegun = false;
     m_shadowStatsActive = false;
@@ -75,7 +75,7 @@ void ShadowPass::shutdown() {
 
 void ShadowPass::renderShadowEntities(RhiCommandList& commandList, const glm::mat4& shadowViewProj,
                                       const glm::vec3& cameraPos, const float splitNear, const float splitFar) {
-    if (m_humanoidRenderer == nullptr || m_gameplayRegistry == nullptr) {
+    if (m_humanoidRenderer == nullptr || m_gameplaySnapshot == nullptr) {
         return;
     }
     m_humanoidRenderer->renderPreparedToShadowMap(commandList, shadowViewProj, cameraPos, splitNear, splitFar);
@@ -96,7 +96,7 @@ void ShadowPass::renderShadowStaticMeshes(RhiCommandList& commandList, const glm
 
 void ShadowPass::renderShadowDrops(RhiCommandList& commandList, const glm::mat4& shadowViewProj,
                                    const float animationTime) {
-    if (m_dropRenderer == nullptr || m_dropSystem == nullptr) {
+    if (m_dropRenderer == nullptr || m_gameplaySnapshot == nullptr) {
         return;
     }
     m_dropRenderer->renderToShadowMap(commandList, shadowViewProj, animationTime);
@@ -106,7 +106,7 @@ void ShadowPass::renderShadowFallingBlocks(RhiCommandList& commandList, const gl
                                            float animationTime) {
     // Render falling-block entities into the current shadow cascade layer.
     // The caller has already begun rendering for the selected cascade layer.
-    if (m_fallingBlockRenderer == nullptr || m_gameplayRegistry == nullptr) {
+    if (m_fallingBlockRenderer == nullptr || m_gameplaySnapshot == nullptr) {
         return;
     }
 
@@ -114,7 +114,8 @@ void ShadowPass::renderShadowFallingBlocks(RhiCommandList& commandList, const gl
 }
 
 bool ShadowPass::prepareGraphFrame(const FrameContext& ctx, const RenderSettings& settings,
-                                   DeferredRenderTargets& targets, const IWorldView* worldView) {
+                                   DeferredRenderTargets& targets, const IWorldView* worldView,
+                                   const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot) {
     if (m_graphFramePrepared || m_shadowRenderer == nullptr || m_resources == nullptr || ctx.shared == nullptr ||
         ctx.shared->rhiDevice == nullptr) {
         return false;
@@ -156,11 +157,11 @@ bool ShadowPass::prepareGraphFrame(const FrameContext& ctx, const RenderSettings
     // force a full refresh because frozen matrices would no longer match
     // the world the stale shadow map captured.
     const glm::vec3 lightDirection = m_shadowRenderer->lightDirection();
-    const bool forceAllCascades = !settings.shadow.farCascadeInterleaved || !m_farCascadesPrimed ||
-                                  ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, ctx.temporalResetReasons) ||
-                                  settings.shadow.resolution != m_lastShadowResolution ||
-                                  settings.shadow.distance != m_lastShadowDistance ||
-                                  glm::dot(lightDirection, m_lastShadowLightDirection) < 0.999f;
+    const bool forceAllCascades =
+        !settings.shadow.farCascadeInterleaved || !m_farCascadesPrimed ||
+        ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, ctx.temporalResetReasons) ||
+        settings.shadow.resolution != m_lastShadowResolution || settings.shadow.distance != m_lastShadowDistance ||
+        glm::dot(lightDirection, m_lastShadowLightDirection) < 0.999f;
     m_cascadeRenderedThisFrame = {true, true, true, true};
     if (!forceAllCascades) {
         const bool evenFrame = (ctx.frameIndex % 2u) == 0u;
@@ -261,6 +262,7 @@ bool ShadowPass::prepareGraphFrame(const FrameContext& ctx, const RenderSettings
     m_frameContext = &ctx;
     m_frameTargets = &targets;
     m_frameDebugService = ctx.debugService;
+    m_gameplaySnapshot = gameplaySnapshot;
     m_graphFramePrepared = true;
     return true;
 }
@@ -358,6 +360,7 @@ void ShadowPass::finishGraphExecution(const bool succeeded) {
     m_frameContext = nullptr;
     m_frameTargets = nullptr;
     m_frameDebugService = nullptr;
+    m_gameplaySnapshot = nullptr;
     m_graphFramePrepared = false;
     m_graphExecutionBegun = false;
     m_shadowStatsActive = false;
@@ -417,16 +420,16 @@ bool ShadowPass::recordOpaquePass(RhiCommandList& commandList, const int cascade
         if (m_blockEntityRenderer != nullptr && !m_blockEntityRenderer->prepareFrame(*ctx.worldView)) {
             return false;
         }
-        if (m_dropRenderer != nullptr && m_dropSystem != nullptr &&
-            !m_dropRenderer->prepareFrame(*ctx.worldView, *m_dropSystem)) {
+        if (m_dropRenderer != nullptr && m_gameplaySnapshot != nullptr &&
+            !m_dropRenderer->prepareFrame(*m_gameplaySnapshot)) {
             return false;
         }
-        if (m_humanoidRenderer != nullptr && m_gameplayRegistry != nullptr &&
-            !m_humanoidRenderer->prepareFrame(*ctx.worldView, *m_gameplayRegistry, HumanoidRenderer::kRenderAll)) {
+        if (m_humanoidRenderer != nullptr && m_gameplaySnapshot != nullptr &&
+            !m_humanoidRenderer->prepareFrame(*m_gameplaySnapshot, HumanoidRenderer::kRenderAll)) {
             return false;
         }
-        if (m_fallingBlockRenderer != nullptr && m_gameplayRegistry != nullptr &&
-            !m_fallingBlockRenderer->prepareFrame(*ctx.worldView, *m_gameplayRegistry)) {
+        if (m_fallingBlockRenderer != nullptr && m_gameplaySnapshot != nullptr &&
+            !m_fallingBlockRenderer->prepareFrame(*m_gameplaySnapshot)) {
             return false;
         }
     }

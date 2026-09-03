@@ -27,23 +27,28 @@ public:
     // RenderPipeline interface
     void init(SharedRenderResources& shared) override;
     void shutdown() override;
-    FrameOutput renderFrame(const FrameContext& ctx, const RenderSettings& settings) override;
+    FrameOutput renderFrame(const FrameContext& ctx, const RenderSettings& settings,
+                            const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot) override;
     const char* name() const override { return "Forward (Vanilla)"; }
     bool supportsDeferred() const override { return false; }
     bool supportsDebugView() const override { return false; }
 
 private:
-    [[nodiscard]] bool executeFrameGraph(const FrameContext& ctx, const RenderSettings& settings);
+    [[nodiscard]] bool executeFrameGraph(const FrameContext& ctx, const RenderSettings& settings,
+                                         const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot);
     [[nodiscard]] bool prepareSceneTlas(const glm::vec3& cameraPosition);
     [[nodiscard]] bool prepareGraphFrame(const FrameContext& ctx, const RenderSettings& settings,
+                                         const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot,
                                          RhiCommandList& commandList);
     [[nodiscard]] bool recordSkyPass(const FrameContext& ctx, RhiCommandList& commandList);
     [[nodiscard]] bool recordScenePass(const FrameContext& ctx, const RenderSettings& settings,
+                                       const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot,
                                        RhiCommandList& commandList);
     bool prepareTerrain(const FrameContext& ctx, RhiCommandList& commandList);
     void renderSky(const FrameContext& ctx, RhiCommandList& commandList);
     void renderTerrain(RhiCommandList& commandList);
     void renderEntitiesAndParticles(const FrameContext& ctx, const RenderSettings& settings,
+                                    const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot,
                                     RhiCommandList& commandList);
     void renderTransparent(RhiCommandList& commandList);
     FrameOutput buildFrameOutput(const FrameContext& ctx);

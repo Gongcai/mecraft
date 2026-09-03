@@ -22,6 +22,7 @@
 #include "../mesh/WorldRenderBuffer.h"
 #include "../mesh/TerrainRenderCache.h"
 #include "../contracts/VoxelReflectionProbeSourceContract.h"
+#include "../contracts/GameplayRenderSnapshot.h"
 #include "../../world/World.h"
 #include "../../world/chunk/Chunk.h"
 #include "../../particle/ParticleSystem.h"
@@ -449,9 +450,9 @@ bool DeferredPipeline::recordReflectionProbeRadianceOpaque(RhiCommandList& comma
     for (const DrawBatchEntry& entry : transparentBatch) {
         worldBuffer.addTransparent(entry.range);
     }
-    if (!m_shared->terrainRhiPipelines->prepareReflectionProbeCapture(commandList, *m_resources, frame,
-                                                                      terrainSettings, probeLights,
-                                                                      work.opaqueColorView, work.opaqueDepthView) ||
+    if (!m_shared->terrainRhiPipelines->prepareReflectionProbeCapture(commandList, *m_resources, frame, terrainSettings,
+                                                                      probeLights, work.opaqueColorView,
+                                                                      work.opaqueDepthView) ||
         !worldBuffer.prepareRhiOpaqueAndCutout(commandList,
                                                m_shared->terrainRhiPipelines->reflectionProbeCaptureMetadataLayout()) ||
         !worldBuffer.prepareRhiTransparent(commandList,
@@ -469,17 +470,16 @@ bool DeferredPipeline::recordReflectionProbeRadianceOpaque(RhiCommandList& comma
                                                      !m_shared->blockEntityRenderer->prepareForward(commandList))) {
         return false;
     }
-    if (m_shared->dropRenderer != nullptr && m_shared->dropSystem != nullptr &&
-        !m_shared->dropRenderer->prepareFrame(*context.worldView, *m_shared->dropSystem)) {
+    if (m_shared->dropRenderer != nullptr && m_gameplaySnapshot != nullptr &&
+        !m_shared->dropRenderer->prepareFrame(*m_gameplaySnapshot)) {
         return false;
     }
-    if (m_shared->fallingBlockRenderer != nullptr && m_shared->gameplayRegistry != nullptr &&
-        !m_shared->fallingBlockRenderer->prepareFrame(*context.worldView, *m_shared->gameplayRegistry)) {
+    if (m_shared->fallingBlockRenderer != nullptr && m_gameplaySnapshot != nullptr &&
+        !m_shared->fallingBlockRenderer->prepareFrame(*m_gameplaySnapshot)) {
         return false;
     }
-    if (m_shared->humanoidRenderer != nullptr && m_shared->gameplayRegistry != nullptr &&
-        !m_shared->humanoidRenderer->prepareFrame(*context.worldView, *m_shared->gameplayRegistry,
-                                                  HumanoidRenderer::kRenderMobsOnly)) {
+    if (m_shared->humanoidRenderer != nullptr && m_gameplaySnapshot != nullptr &&
+        !m_shared->humanoidRenderer->prepareFrame(*m_gameplaySnapshot, HumanoidRenderer::kRenderMobsOnly)) {
         return false;
     }
 
@@ -520,15 +520,15 @@ bool DeferredPipeline::recordReflectionProbeRadianceOpaque(RhiCommandList& comma
     if (m_shared->blockEntityRenderer != nullptr) {
         m_shared->blockEntityRenderer->renderForward(commandList, work.viewProjection, context.skyIntensity);
     }
-    if (m_shared->dropRenderer != nullptr && m_shared->dropSystem != nullptr) {
+    if (m_shared->dropRenderer != nullptr && m_gameplaySnapshot != nullptr) {
         m_shared->dropRenderer->renderForward(commandList, work.viewProjection, context.skyIntensity,
                                               context.animationTime);
     }
-    if (m_shared->fallingBlockRenderer != nullptr && m_shared->gameplayRegistry != nullptr) {
+    if (m_shared->fallingBlockRenderer != nullptr && m_gameplaySnapshot != nullptr) {
         m_shared->fallingBlockRenderer->renderForward(commandList, work.viewProjection, context.skyIntensity,
                                                       context.animationTime);
     }
-    if (m_shared->humanoidRenderer != nullptr && m_shared->gameplayRegistry != nullptr) {
+    if (m_shared->humanoidRenderer != nullptr && m_gameplaySnapshot != nullptr) {
         m_shared->humanoidRenderer->renderPreparedForward(commandList, work.viewProjection, context.skyIntensity);
     }
     commandList.endRendering();
@@ -674,8 +674,6 @@ void DeferredPipeline::init(SharedRenderResources& shared) {
         m_shadowPass->setHumanoidRenderer(shared.humanoidRenderer);
         m_shadowPass->setDropRenderer(shared.dropRenderer);
         m_shadowPass->setFallingBlockRenderer(shared.fallingBlockRenderer);
-        m_shadowPass->setDropSystem(shared.dropSystem);
-        m_shadowPass->setGameplayRegistry(shared.gameplayRegistry);
     }
     if (m_localShadowPass) {
         m_localShadowPass->setTerrainRenderer(shared.terrain);
@@ -685,8 +683,6 @@ void DeferredPipeline::init(SharedRenderResources& shared) {
         m_localShadowPass->setHumanoidRenderer(shared.humanoidRenderer);
         m_localShadowPass->setDropRenderer(shared.dropRenderer);
         m_localShadowPass->setFallingBlockRenderer(shared.fallingBlockRenderer);
-        m_localShadowPass->setDropSystem(shared.dropSystem);
-        m_localShadowPass->setGameplayRegistry(shared.gameplayRegistry);
     }
 }
 
@@ -788,6 +784,7 @@ void DeferredPipeline::shutdown() {
     m_skyIblPass.reset();
     m_resources = nullptr;
     m_shadowRenderer = nullptr;
+    m_gameplaySnapshot = nullptr;
     m_shared = nullptr;
     m_rtgiTemporalSampleIndex = 0u;
     m_rtgiTraceInspectionActive = false;
@@ -908,7 +905,9 @@ void DeferredPipeline::invalidateHistory() {
     }
 }
 
-FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderSettings& settings) {
+FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderSettings& settings,
+                                          const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot) {
+    m_gameplaySnapshot = nullptr;
     // Pre-condition checks
     if (!m_shared || !m_resources || !m_shared->deferredTargets) {
         MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] render frame aborted: shared resources are missing\n");
@@ -957,7 +956,10 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     m_deferredFrameActive = true;
 
     // Deferred geometry, shadows, SSAO, and lighting execute through one graph.
-    if (!executeFrameGraph(ctx, m_currentSettings)) {
+    m_gameplaySnapshot = gameplaySnapshot;
+    const bool frameGraphSucceeded = executeFrameGraph(ctx, m_currentSettings);
+    m_gameplaySnapshot = nullptr;
+    if (!frameGraphSucceeded) {
         MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] frame graph execution failed\n");
         return {};
     }
@@ -1216,8 +1218,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     }
     {
         const auto shadowPrepStart = std::chrono::steady_clock::now();
-        if (shadowEnabled && (m_shadowPass == nullptr || m_shared->shadowRenderer == nullptr ||
-                              !m_shadowPass->prepareGraphFrame(ctx, settings, targets, ctx.worldView))) {
+        if (shadowEnabled &&
+            (m_shadowPass == nullptr || m_shared->shadowRenderer == nullptr ||
+             !m_shadowPass->prepareGraphFrame(ctx, settings, targets, ctx.worldView, m_gameplaySnapshot))) {
             return false;
         }
         m_graphCpuShadowPrepMs =
@@ -1235,8 +1238,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     bool reflectionProbeGridGraphPrepared = false;
     std::vector<RhiTextureViewHandle> graphOwnedTextureViews;
     const auto failGraphSetup = [&](const int sourceLine = 0) {
-        MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] frame graph setup failed (DeferredPipeline.cpp:"
-                                     << sourceLine << ")\n");
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[DeferredPipeline] frame graph setup failed (DeferredPipeline.cpp:" << sourceLine << ")\n");
 #if defined(MECRAFT_ENABLE_NRD)
         if (m_nrdBridge != nullptr && m_nrdBridge->framePending()) {
             RgExecuteResult failedExecution;
@@ -1298,7 +1301,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             return failGraphSetup(__LINE__);
         }
         m_localShadowPass->setSceneLights(m_sceneLights);
-        if (!m_localShadowPass->prepareGraphFrame(ctx, ctx.worldView)) {
+        if (!m_localShadowPass->prepareGraphFrame(ctx, ctx.worldView, m_gameplaySnapshot)) {
             MECRAFT_LOG_STREAM(std::cerr << "[DeferredPipeline] " << m_localShadowPass->lastError() << '\n');
             return failGraphSetup(__LINE__);
         }
@@ -1317,8 +1320,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         clusteredLightingGraphPrepared = true;
         clusteredLightingSlotIndex = slotIndex;
         const DeferredClusteredLightingResources clusteredResources{
-            m_clusteredLightingPass->consumerBindGroupLayout(),
-            m_clusteredLightingPass->consumerBindGroup(slotIndex), m_clusteredLightingPass->grid()};
+            m_clusteredLightingPass->consumerBindGroupLayout(), m_clusteredLightingPass->consumerBindGroup(slotIndex),
+            m_clusteredLightingPass->grid()};
         if ((m_shared->staticMeshRenderer != nullptr &&
              !m_shared->staticMeshRenderer->configureClusteredLighting(
                  clusteredResources.bindGroupLayout, clusteredResources.bindGroup, clusteredResources.grid)) ||
@@ -1973,17 +1976,17 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             }
             if (m_gbufferPass == nullptr)
                 return true;
-            return m_gbufferPass->executeEntities(pass.commandList(), *ctx.worldView, ctx, settings, targets,
-                                                  m_shared->humanoidRenderer, m_shared->gameplayRegistry,
+            return m_gbufferPass->executeEntities(pass.commandList(), ctx, settings, targets,
+                                                  m_shared->humanoidRenderer, m_gameplaySnapshot,
                                                   ctx.renderLocalPlayerModel) &&
                    m_gbufferPass->executeBlockEntities(pass.commandList(), *ctx.worldView, ctx, settings, targets,
                                                        m_shared->blockEntityRenderer) &&
                    m_gbufferPass->executeStaticMeshes(pass.commandList(), ctx, settings, targets,
                                                       m_shared->staticMeshRenderer) &&
-                   m_gbufferPass->executeDrops(pass.commandList(), *ctx.worldView, ctx, settings, targets,
-                                               m_shared->dropRenderer, m_shared->dropSystem) &&
-                   m_gbufferPass->executeFallingBlocks(pass.commandList(), *ctx.worldView, ctx, settings, targets,
-                                                       m_shared->fallingBlockRenderer, m_shared->gameplayRegistry) &&
+                   m_gbufferPass->executeDrops(pass.commandList(), ctx, settings, targets, m_shared->dropRenderer,
+                                               m_gameplaySnapshot) &&
+                   m_gbufferPass->executeFallingBlocks(pass.commandList(), ctx, settings, targets,
+                                                       m_shared->fallingBlockRenderer, m_gameplaySnapshot) &&
                    m_gbufferPass->executeFirstPersonHeldItem(pass.commandList(), ctx, settings, targets,
                                                              m_shared->firstPersonHeldItemRenderer);
         });
@@ -2342,8 +2345,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             composeResources.denoisedIndirectRadianceHitDistance = nrdOutputDiffuse;
             composeResources.emissiveDirectRadiance = rtgiEmissiveTexture;
             composeResources.combinedValidationRadiance = nrdDiffuseValidationOutput;
-            graphTail = m_rtgiValidationComposePass->addGraphPass(m_renderGraph, ctx, composeSettings,
-                                                                  composeResources, graphTail);
+            graphTail = m_rtgiValidationComposePass->addGraphPass(m_renderGraph, ctx, composeSettings, composeResources,
+                                                                  graphTail);
             if (!graphTail.isValid()) {
                 return failGraphSetup(__LINE__);
             }
@@ -2403,12 +2406,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     }
     lighting.setExecute([&, rtgiDiffuseTexture, rtgiEmissiveTexture, rtgiDiffuseEncoding,
                          rtgiRadianceScale](RgPassContext& pass) {
-        return m_lightingPass->execute(pass.commandList(), ctx, settings, targets,
-                                       pass.textureView(rtgiDiffuseTexture), pass.textureView(rtgiEmissiveTexture),
-                                       rtgiDiffuseEncoding, rtgiRadianceScale,
+        return m_lightingPass->execute(pass.commandList(), ctx, settings, targets, pass.textureView(rtgiDiffuseTexture),
+                                       pass.textureView(rtgiEmissiveTexture), rtgiDiffuseEncoding, rtgiRadianceScale,
                                        clusteredLightingResources.consumerBindGroup,
-                                       clusteredLightingResources.activeLightCount,
-                                       clusteredLightingResources.grid);
+                                       clusteredLightingResources.activeLightCount, clusteredLightingResources.grid);
     });
     if (clusteredLightingActive) {
         lighting.readBuffer(clusteredLightingResources.lights, RhiResourceState::StorageBuffer)
@@ -3979,11 +3980,10 @@ void DeferredPipeline::commitDeferredHistoryState() {
 }
 
 bool DeferredPipeline::recordParticlesPass(RhiCommandList& commandList, const FrameContext& ctx) {
-    if (!m_currentSettings.weather.particlesEnabled) {
+    if (!m_currentSettings.weather.particlesEnabled || m_gameplaySnapshot == nullptr) {
         return true;
     }
-    if (!m_shared || !m_shared->particleSystem || !m_resources || !m_shared->deferredTargets ||
-        !m_shared->rhiDevice) {
+    if (!m_shared || !m_shared->particleSystem || !m_resources || !m_shared->deferredTargets || !m_shared->rhiDevice) {
         return false;
     }
     auto& targets = *m_shared->deferredTargets;
@@ -4015,7 +4015,7 @@ bool DeferredPipeline::recordParticlesPass(RhiCommandList& commandList, const Fr
     const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
                                               ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Transparent)
                                               : GpuTimerSegmentToken{};
-    m_shared->particleSystem->prepareFrame(ctx.camera.view, commandList);
+    m_shared->particleSystem->prepareFrame(ctx.camera.view, m_gameplaySnapshot->particles, commandList);
     commandList.beginRendering(renderingInfo);
 
     const glm::mat4& viewProj =

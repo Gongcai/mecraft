@@ -16,7 +16,6 @@
 #include "../session/GameSession.h"
 #include "../../ui/core/UIRenderer.h"
 #include "../../ecs/GameplayScene.h"
-#include "../../world/DropSystem.h"
 #include "../../particle/ParticleSystem.h"
 #include "../../particle/RainRenderer.h"
 #include "../../app/AppSettings.h"
@@ -231,8 +230,6 @@ bool GameplayRenderRuntime::init(GameResources& resources, GameSession& session,
     renderScene.setDropRenderer(&dropRenderer);
     renderScene.setFallingBlockRenderer(&fallingBlockRenderer);
     renderScene.setFirstPersonHeldItemRenderer(&firstPersonHeldItemRenderer);
-    renderScene.setDropSystem(&session.dropSystem());
-    renderScene.setGameplayRegistry(&session.gameplayScene().registry());
     renderScene.setParticleSystem(&session.particleSystem());
 
     // UI needs humanoid renderer for inventory preview

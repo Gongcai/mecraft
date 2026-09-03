@@ -1,6 +1,7 @@
 #include "ForwardPipeline.h"
 #include "../../Diagnostics.h"
 #include "RenderScene.h"
+#include "../contracts/GameplayRenderSnapshot.h"
 #include "../mesh/TerrainRenderCache.h"
 #include "../mesh/TerrainRhiPipelineSet.h"
 #include "../mesh/WorldRenderBuffer.h"
@@ -59,19 +60,21 @@ void ForwardPipeline::shutdown() {
     m_initialized = false;
 }
 
-FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSettings& settings) {
+FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSettings& settings,
+                                         const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot) {
     if (!m_initialized || !ctx.worldView || m_shared == nullptr || m_shared->rhiDevice == nullptr ||
         m_shared->commandListPool == nullptr) {
         return {};
     }
 
-    if (!executeFrameGraph(ctx, settings)) {
+    if (!executeFrameGraph(ctx, settings, gameplaySnapshot)) {
         return {};
     }
     return buildFrameOutput(ctx);
 }
 
-bool ForwardPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSettings& settings) {
+bool ForwardPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSettings& settings,
+                                        const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot) {
     if (m_shared == nullptr || m_shared->rhiDevice == nullptr || m_shared->commandListPool == nullptr ||
         !ctx.sceneCaptureColorTexture.isValid() || !ctx.sceneCaptureDepthTexture.isValid() ||
         !ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid()) {
@@ -120,7 +123,7 @@ bool ForwardPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSet
     RenderGraphPassBuilder prepare =
         m_renderGraph.addPass({"Forward.Prepare", RgPassType::Graphics, RhiQueueType::Graphics});
     prepare.dependsOn(sceneTlas.handle()).setExecute([&](RgPassContext& pass) {
-        return prepareGraphFrame(ctx, settings, pass.commandList());
+        return prepareGraphFrame(ctx, settings, gameplaySnapshot, pass.commandList());
     });
 
     RenderGraphPassBuilder sky = m_renderGraph.addPass({"Forward.Sky", RgPassType::Graphics, RhiQueueType::Graphics});
@@ -134,7 +137,8 @@ bool ForwardPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSet
     scene.dependsOn(sky.handle())
         .readWriteTexture(sceneColor, RhiResourceState::RenderTarget)
         .writeTexture(sceneDepth, RhiResourceState::DepthWrite)
-        .setExecute([&](RgPassContext& pass) { return recordScenePass(ctx, settings, pass.commandList()); });
+        .setExecute(
+            [&](RgPassContext& pass) { return recordScenePass(ctx, settings, gameplaySnapshot, pass.commandList()); });
 
     const RgCompileResult compiled = m_renderGraph.compile();
     if (!compiled.succeeded()) {
@@ -211,12 +215,13 @@ bool ForwardPipeline::prepareSceneTlas(const glm::vec3& cameraPosition) {
 }
 
 bool ForwardPipeline::prepareGraphFrame(const FrameContext& ctx, const RenderSettings& settings,
+                                        const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot,
                                         RhiCommandList& commandList) {
     if (!prepareTerrain(ctx, commandList)) {
         return false;
     }
-    if (settings.weather.particlesEnabled && m_shared->particleSystem != nullptr) {
-        m_shared->particleSystem->prepareFrame(ctx.camera.view, commandList);
+    if (settings.weather.particlesEnabled && m_shared->particleSystem != nullptr && gameplaySnapshot != nullptr) {
+        m_shared->particleSystem->prepareFrame(ctx.camera.view, gameplaySnapshot->particles, commandList);
     }
     if (m_shared->blockEntityRenderer != nullptr) {
         if (!m_shared->blockEntityRenderer->prepareFrame(*ctx.worldView)) {
@@ -226,14 +231,14 @@ bool ForwardPipeline::prepareGraphFrame(const FrameContext& ctx, const RenderSet
             return false;
         }
     }
-    if (m_shared->dropRenderer != nullptr && m_shared->dropSystem != nullptr &&
-        !m_shared->dropRenderer->prepareFrame(*ctx.worldView, *m_shared->dropSystem)) {
+    if (m_shared->dropRenderer != nullptr && gameplaySnapshot != nullptr &&
+        !m_shared->dropRenderer->prepareFrame(*gameplaySnapshot)) {
         return false;
     }
-    if (m_shared->humanoidRenderer != nullptr && m_shared->gameplayRegistry != nullptr) {
+    if (m_shared->humanoidRenderer != nullptr && gameplaySnapshot != nullptr) {
         const HumanoidRenderer::RenderMode mode =
             ctx.renderLocalPlayerModel ? HumanoidRenderer::kRenderAll : HumanoidRenderer::kRenderMobsOnly;
-        if (!m_shared->humanoidRenderer->prepareFrame(*ctx.worldView, *m_shared->gameplayRegistry, mode)) {
+        if (!m_shared->humanoidRenderer->prepareFrame(*gameplaySnapshot, mode)) {
             return false;
         }
     }
@@ -277,6 +282,7 @@ bool ForwardPipeline::recordSkyPass(const FrameContext& ctx, RhiCommandList& com
 }
 
 bool ForwardPipeline::recordScenePass(const FrameContext& ctx, const RenderSettings& settings,
+                                      const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot,
                                       RhiCommandList& commandList) {
     if (!ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid()) {
         return false;
@@ -304,7 +310,7 @@ bool ForwardPipeline::recordScenePass(const FrameContext& ctx, const RenderSetti
     commandList.setViewport({0.0f, 0.0f, static_cast<float>(ctx.temporalExtents.renderExtent.width),
                              static_cast<float>(ctx.temporalExtents.renderExtent.height), 0.0f, 1.0f});
     renderTerrain(commandList);
-    renderEntitiesAndParticles(ctx, settings, commandList);
+    renderEntitiesAndParticles(ctx, settings, gameplaySnapshot, commandList);
     renderTransparent(commandList);
     commandList.endRendering();
     return true;
@@ -387,6 +393,7 @@ void ForwardPipeline::renderTerrain(RhiCommandList& commandList) {
 }
 
 void ForwardPipeline::renderEntitiesAndParticles(const FrameContext& ctx, const RenderSettings& settings,
+                                                 const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot,
                                                  RhiCommandList& commandList) {
     if (!m_shared || !ctx.cameraPtr || !ctx.windowPtr) {
         return;
@@ -396,16 +403,16 @@ void ForwardPipeline::renderEntitiesAndParticles(const FrameContext& ctx, const 
         m_shared->blockEntityRenderer->renderForward(commandList, ctx.camera.viewProj, ctx.skyIntensity);
     }
 
-    if (m_shared->dropRenderer && m_shared->dropSystem) {
+    if (m_shared->dropRenderer && gameplaySnapshot != nullptr) {
         m_shared->dropRenderer->renderForward(commandList, ctx.camera.viewProj, ctx.skyIntensity, ctx.animationTime);
     }
 
-    if (m_shared->humanoidRenderer && m_shared->gameplayRegistry) {
+    if (m_shared->humanoidRenderer && gameplaySnapshot != nullptr) {
         m_shared->humanoidRenderer->renderPreparedForward(commandList, ctx.camera.viewProj, ctx.skyIntensity);
         m_shared->humanoidRenderer->finishFrame();
     }
 
-    if (settings.weather.particlesEnabled && m_shared->particleSystem) {
+    if (settings.weather.particlesEnabled && m_shared->particleSystem && gameplaySnapshot != nullptr) {
         m_shared->particleSystem->render(commandList, ctx.camera.projection * ctx.camera.view);
     }
 }

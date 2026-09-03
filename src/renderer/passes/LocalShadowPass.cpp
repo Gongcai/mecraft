@@ -3,6 +3,7 @@
 #include "renderer/core/IDeferredGeometryProvider.h"
 #include "renderer/core/RenderScene.h"
 #include "renderer/contracts/CubeMapContract.h"
+#include "renderer/contracts/GameplayRenderSnapshot.h"
 #include "renderer/debug/RenderDebugService.h"
 #include "renderer/mesh/TerrainRhiPipelineSet.h"
 #include "renderer/mesh/WorldRenderBuffer.h"
@@ -15,10 +16,7 @@
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/RhiResources.h"
 #include "resource/GameResources.h"
-#include "world/DropSystem.h"
 #include "world/IWorldView.h"
-#include "ecs/GameplayRegistry.h"
-#include "ecs/components/TagComponents.h"
 
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -73,16 +71,6 @@ namespace {
     return difference.x <= 1.0e-4f && difference.y <= 1.0e-4f && difference.z <= 1.0e-4f && difference.w <= 1.0e-4f;
 }
 
-[[nodiscard]] bool hasDynamicOccluders(const ecs::GameplayRegistry* gameplayRegistry) {
-    if (gameplayRegistry == nullptr) {
-        return false;
-    }
-    const entt::registry& registry = gameplayRegistry->registry();
-    return !registry.view<ecs::SteveTag>().empty() || !registry.view<ecs::MobTag>().empty() ||
-           !registry.view<ecs::DropItemTag>().empty() || !registry.view<ecs::FallingBlockTag>().empty() ||
-           !registry.view<ecs::MovingBlockTag>().empty();
-}
-
 } // namespace
 
 void LocalShadowPass::init(GameResources& resources) {
@@ -93,7 +81,8 @@ void LocalShadowPass::setSceneLights(std::vector<renderer::contracts::SceneLight
     m_sceneLights = std::move(lights);
 }
 
-bool LocalShadowPass::prepareGraphFrame(const FrameContext& ctx, const IWorldView* worldView) {
+bool LocalShadowPass::prepareGraphFrame(const FrameContext& ctx, const IWorldView* worldView,
+                                        const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot) {
     using namespace renderer::contracts;
     if (m_graphFramePrepared || m_resources == nullptr || ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         ctx.shared->rhiDevice->backend() != RhiBackend::Vulkan) {
@@ -139,10 +128,12 @@ bool LocalShadowPass::prepareGraphFrame(const FrameContext& ctx, const IWorldVie
 
     m_frameContext = &ctx;
     m_worldView = worldView;
+    m_gameplaySnapshot = gameplaySnapshot;
     m_worldActorsPrepared = false;
     if (!buildPreparedShadows(ctx, worldView)) {
         m_frameContext = nullptr;
         m_worldView = nullptr;
+        m_gameplaySnapshot = nullptr;
         return false;
     }
     m_graphFramePrepared = true;
@@ -318,7 +309,8 @@ bool LocalShadowPass::buildPreparedShadows(const FrameContext& ctx, const IWorld
             m_lastError = "local shadow terrain geometry revision is unavailable";
             return false;
         }
-        dynamicOccluderRevision = hasDynamicOccluders(m_gameplayRegistry) ? ctx.frameIndex : 0u;
+        dynamicOccluderRevision =
+            m_gameplaySnapshot != nullptr && m_gameplaySnapshot->hasDynamicShadowCasters ? ctx.frameIndex : 0u;
     } else {
         if (!m_externalGeometryFrame) {
             m_lastError = "external geometry local-shadow frame is not active";
@@ -422,8 +414,7 @@ bool LocalShadowPass::buildPreparedShadows(const FrameContext& ctx, const IWorld
         const bool dynamic = allocation.policy == GpuLightShadowPolicy::RasterDynamic;
         const bool gameplayGeometryNeedsEvaluation =
             !m_externalGeometryFrame &&
-            (dynamic || cached == m_cacheRecords.end() ||
-             !sameCacheRecordBase(cached->second, prepared.pendingCache) ||
+            (dynamic || cached == m_cacheRecords.end() || !sameCacheRecordBase(cached->second, prepared.pendingCache) ||
              cached->second.rasterGeometryRevision != rasterGeometryRevision);
         if (gameplayGeometryNeedsEvaluation) {
             geometryPreparedIndices.push_back(m_preparedShadows.size());
@@ -436,8 +427,8 @@ bool LocalShadowPass::buildPreparedShadows(const FrameContext& ctx, const IWorld
             }
             geometryVolumes.push_back(volume);
         } else if (m_externalGeometryFrame) {
-            prepared.redraw = dynamic || cached == m_cacheRecords.end() ||
-                              !sameCacheRecord(cached->second, prepared.pendingCache);
+            prepared.redraw =
+                dynamic || cached == m_cacheRecords.end() || !sameCacheRecord(cached->second, prepared.pendingCache);
             if (prepared.redraw) {
                 if (spot) {
                     ++m_pendingFrameStats.renderedSpotPages;
@@ -474,8 +465,7 @@ bool LocalShadowPass::buildPreparedShadows(const FrameContext& ctx, const IWorld
             prepared.pendingCache.terrainGeometrySignature = ranges[index].geometrySignature;
             const auto cached = m_cacheRecords.find(prepared.allocation.lightId.value);
             prepared.redraw = prepared.allocation.policy == GpuLightShadowPolicy::RasterDynamic ||
-                              cached == m_cacheRecords.end() ||
-                              !sameCacheRecord(cached->second, prepared.pendingCache);
+                              cached == m_cacheRecords.end() || !sameCacheRecord(cached->second, prepared.pendingCache);
             if (prepared.redraw) {
                 prepared.terrainRanges = std::move(ranges[index]);
                 if (prepared.allocation.type == LocalShadowType::Spot) {
@@ -580,16 +570,16 @@ bool LocalShadowPass::prepareWorldActors() {
     if (m_blockEntityRenderer != nullptr && !m_blockEntityRenderer->prepareFrame(*ctx.worldView)) {
         return false;
     }
-    if (m_dropRenderer != nullptr && m_dropSystem != nullptr &&
-        !m_dropRenderer->prepareFrame(*ctx.worldView, *m_dropSystem)) {
+    if (m_dropRenderer != nullptr && m_gameplaySnapshot != nullptr &&
+        !m_dropRenderer->prepareFrame(*m_gameplaySnapshot)) {
         return false;
     }
-    if (m_humanoidRenderer != nullptr && m_gameplayRegistry != nullptr &&
-        !m_humanoidRenderer->prepareFrame(*ctx.worldView, *m_gameplayRegistry, HumanoidRenderer::kRenderAll)) {
+    if (m_humanoidRenderer != nullptr && m_gameplaySnapshot != nullptr &&
+        !m_humanoidRenderer->prepareFrame(*m_gameplaySnapshot, HumanoidRenderer::kRenderAll)) {
         return false;
     }
-    if (m_fallingBlockRenderer != nullptr && m_gameplayRegistry != nullptr &&
-        !m_fallingBlockRenderer->prepareFrame(*ctx.worldView, *m_gameplayRegistry)) {
+    if (m_fallingBlockRenderer != nullptr && m_gameplaySnapshot != nullptr &&
+        !m_fallingBlockRenderer->prepareFrame(*m_gameplaySnapshot)) {
         return false;
     }
     m_worldActorsPrepared = true;
@@ -642,14 +632,14 @@ void LocalShadowPass::drawWorldGeometry(RhiCommandList& commandList, const Prepa
     if (m_staticMeshRenderer != nullptr) {
         m_staticMeshRenderer->renderToShadowMap(commandList, shadow.worldViewProjections[faceIndex]);
     }
-    if (m_humanoidRenderer != nullptr && m_gameplayRegistry != nullptr) {
+    if (m_humanoidRenderer != nullptr && m_gameplaySnapshot != nullptr) {
         m_humanoidRenderer->renderPreparedToShadowMap(commandList, shadow.worldViewProjections[faceIndex],
                                                       shadow.worldPosition, 0.0f, shadow.range);
     }
-    if (m_dropRenderer != nullptr && m_dropSystem != nullptr) {
+    if (m_dropRenderer != nullptr && m_gameplaySnapshot != nullptr) {
         m_dropRenderer->renderToShadowMap(commandList, shadow.worldViewProjections[faceIndex], ctx.animationTime);
     }
-    if (m_fallingBlockRenderer != nullptr && m_gameplayRegistry != nullptr) {
+    if (m_fallingBlockRenderer != nullptr && m_gameplaySnapshot != nullptr) {
         m_fallingBlockRenderer->renderToShadowMap(commandList, shadow.worldViewProjections[faceIndex],
                                                   ctx.animationTime);
     }
@@ -802,6 +792,7 @@ void LocalShadowPass::finishGraphExecution(const bool succeeded) {
     }
     m_frameContext = nullptr;
     m_worldView = nullptr;
+    m_gameplaySnapshot = nullptr;
     m_externalGeometryFrame = false;
     m_worldActorsPrepared = false;
     m_graphFramePrepared = false;
@@ -894,6 +885,7 @@ void LocalShadowPass::shutdown() {
     m_allocations.clear();
     m_frameContext = nullptr;
     m_worldView = nullptr;
+    m_gameplaySnapshot = nullptr;
     m_resources = nullptr;
     m_rhiDevice = nullptr;
     m_graphFramePrepared = false;

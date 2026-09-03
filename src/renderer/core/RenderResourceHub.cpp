@@ -10,12 +10,10 @@
 #include "../rhi/RhiDevice.h"
 #include "../../particle/ParticleSystem.h"
 #include "../mesh/ChunkMesher.h"
-#include "../../ecs/GameplayRegistry.h"
 #include "../shadow/ShadowMatrices.h"
 #include "../shadow/ShadowCasterCuller.h"
 #include "../../Paths.h"
 #include "engine/platform/Time.h"
-#include "../../world/DropSystem.h"
 #include "../../world/World.h"
 
 #include <glm/gtc/matrix_transform.hpp>

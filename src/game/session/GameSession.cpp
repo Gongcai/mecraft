@@ -489,7 +489,6 @@ void GameSession::initECS(const GameSessionDependencies& deps) {
     });
     m_dropSystem->bindRegistry(reg);
     m_dropSystem->bindServices(svc);
-    m_particleSystem->bindRegistry(reg);
 
     const glm::vec3 spawnPos = m_isMultiplayer ? m_client->getAuthoritativePosition() : m_server->getSpawnPosition();
     m_gameplayScene->initLocalPlayer(spawnPos);

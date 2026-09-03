@@ -6,6 +6,9 @@
 #include "RenderSettings.h"
 
 struct SharedRenderResources;
+namespace renderer::contracts {
+struct GameplayRenderSnapshot;
+}
 
 /// Abstract render pipeline interface
 /// Forward and Deferred pipelines implement this interface
@@ -23,8 +26,10 @@ public:
     /// Render a frame
     /// @param ctx Unified frame context
     /// @param settings Render settings for this frame
+    /// @param gameplaySnapshot Immutable gameplay actor data, or null for non-gameplay scenes
     /// @return Frame output with render targets and metadata
-    virtual FrameOutput renderFrame(const FrameContext& ctx, const RenderSettings& settings) = 0;
+    virtual FrameOutput renderFrame(const FrameContext& ctx, const RenderSettings& settings,
+                                    const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot) = 0;
 
     /// Get pipeline name for UI/debug display
     virtual const char* name() const = 0;

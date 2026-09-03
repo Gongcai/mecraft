@@ -3,6 +3,7 @@
 
 #include "RenderPass.h"
 #include "../core/FrameContext.h"
+#include "../contracts/GameplayRenderSnapshot.h"
 
 class DeferredRenderTargets;
 struct GameResources;
@@ -12,15 +13,10 @@ class HumanoidRenderer;
 class DropRenderer;
 class FallingBlockRenderer;
 class FirstPersonHeldItemRenderer;
-class DropSystem;
 class IWorldView;
 class RhiCommandList;
 class IDeferredGeometryProvider;
 struct RenderSettings;
-
-namespace ecs {
-class GameplayRegistry;
-}
 
 /// GBuffer pass for entities and drops.
 /// Terrain GBuffer is handled separately by the terrain rendering pipeline.
@@ -32,18 +28,18 @@ public:
 
     /// Records entity GBuffer rendering into a graph-owned command list.
     /// @param commandList Recording command list supplied by the Render Graph.
-    /// @param worldView Read-only world state used to prepare visible entities.
     /// @param ctx Current frame camera and renderer dependencies.
     /// @param settings Current temporal projection settings.
     /// @param targets Persistent GBuffer attachments and views.
     /// @param humanoidRenderer Optional entity renderer; no work is recorded when null.
-    /// @param gameplayRegistry Optional entity registry paired with the renderer.
+    /// @param gameplaySnapshot Optional immutable actor snapshot for this frame.
     /// @param renderLocalPlayerModel True when the local player belongs in the GBuffer.
     /// @return True when optional work was skipped or all commands were recorded.
-    [[nodiscard]] bool executeEntities(RhiCommandList& commandList, const IWorldView& worldView,
-                                       const FrameContext& ctx, const RenderSettings& settings,
-                                       DeferredRenderTargets& targets, HumanoidRenderer* humanoidRenderer,
-                                       ecs::GameplayRegistry* gameplayRegistry, bool renderLocalPlayerModel);
+    [[nodiscard]] bool executeEntities(RhiCommandList& commandList, const FrameContext& ctx,
+                                       const RenderSettings& settings, DeferredRenderTargets& targets,
+                                       HumanoidRenderer* humanoidRenderer,
+                                       const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot,
+                                       bool renderLocalPlayerModel);
 
     /// Records block entity GBuffer rendering into a graph-owned command list.
     /// @param commandList Recording command list supplied by the Render Graph.
@@ -81,30 +77,29 @@ public:
 
     /// Records dropped item and block GBuffer rendering with per-object velocity.
     /// @param commandList Recording command list supplied by the Render Graph.
-    /// @param worldView Read-only world state used to prepare visible drops.
     /// @param ctx Current frame camera and renderer dependencies.
     /// @param settings Current temporal projection settings.
     /// @param targets Persistent GBuffer attachments and views.
     /// @param dropRenderer Optional dropped-object renderer.
-    /// @param dropSystem Optional dropped-object simulation paired with the renderer.
+    /// @param gameplaySnapshot Optional immutable dropped-object snapshot for this frame.
     /// @return True when optional work was skipped or all commands were recorded.
-    [[nodiscard]] bool executeDrops(RhiCommandList& commandList, const IWorldView& worldView, const FrameContext& ctx,
+    [[nodiscard]] bool executeDrops(RhiCommandList& commandList, const FrameContext& ctx,
                                     const RenderSettings& settings, DeferredRenderTargets& targets,
-                                    DropRenderer* dropRenderer, DropSystem* dropSystem);
+                                    DropRenderer* dropRenderer,
+                                    const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot);
 
     /// Records falling-block GBuffer rendering with per-object velocity.
     /// @param commandList Recording command list supplied by the Render Graph.
-    /// @param worldView Read-only world state used to prepare falling blocks.
     /// @param ctx Current frame camera and renderer dependencies.
     /// @param settings Current temporal projection settings.
     /// @param targets Persistent GBuffer attachments and views.
     /// @param fallingBlockRenderer Optional falling-block renderer.
-    /// @param gameplayRegistry Optional entity registry paired with the renderer.
+    /// @param gameplaySnapshot Optional immutable falling-block snapshot for this frame.
     /// @return True when optional work was skipped or all commands were recorded.
-    [[nodiscard]] bool executeFallingBlocks(RhiCommandList& commandList, const IWorldView& worldView,
-                                            const FrameContext& ctx, const RenderSettings& settings,
-                                            DeferredRenderTargets& targets, FallingBlockRenderer* fallingBlockRenderer,
-                                            ecs::GameplayRegistry* gameplayRegistry);
+    [[nodiscard]] bool executeFallingBlocks(RhiCommandList& commandList, const FrameContext& ctx,
+                                            const RenderSettings& settings, DeferredRenderTargets& targets,
+                                            FallingBlockRenderer* fallingBlockRenderer,
+                                            const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot);
 
     /// Emits the first-person held item into the GBuffer so it is shaded by the deferred
     /// lighting pass like any other world geometry. The held meshes are prepared ahead of

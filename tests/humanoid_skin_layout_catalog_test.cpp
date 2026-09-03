@@ -63,13 +63,15 @@ static void requireTextureMatchesLayout(const PngDimensions dimensions,
 int main() {
     const renderer::HumanoidSkinLayoutDefinitions& definitions = renderer::humanoidSkinLayoutDefinitions();
 
-    const auto steveIndex = renderer::humanoidSkinLayoutIndex(ecs::EntitySkinLayoutKind::Steve64x64);
-    const auto classic64x64Index = renderer::humanoidSkinLayoutIndex(ecs::EntitySkinLayoutKind::Classic64x64);
-    const auto classic64x32Index = renderer::humanoidSkinLayoutIndex(ecs::EntitySkinLayoutKind::Classic64x32);
-    const auto leftArmIndex = renderer::humanoidPartTypeIndex(ecs::StevePartType::LeftArm);
-    const auto rightArmIndex = renderer::humanoidPartTypeIndex(ecs::StevePartType::RightArm);
-    const auto leftLegIndex = renderer::humanoidPartTypeIndex(ecs::StevePartType::LeftLeg);
-    const auto rightLegIndex = renderer::humanoidPartTypeIndex(ecs::StevePartType::RightLeg);
+    using renderer::contracts::HumanoidBodyPart;
+    using renderer::contracts::HumanoidSkinLayout;
+    const auto steveIndex = renderer::humanoidSkinLayoutIndex(HumanoidSkinLayout::Steve64x64);
+    const auto classic64x64Index = renderer::humanoidSkinLayoutIndex(HumanoidSkinLayout::Classic64x64);
+    const auto classic64x32Index = renderer::humanoidSkinLayoutIndex(HumanoidSkinLayout::Classic64x32);
+    const auto leftArmIndex = renderer::humanoidPartTypeIndex(HumanoidBodyPart::LeftArm);
+    const auto rightArmIndex = renderer::humanoidPartTypeIndex(HumanoidBodyPart::RightArm);
+    const auto leftLegIndex = renderer::humanoidPartTypeIndex(HumanoidBodyPart::LeftLeg);
+    const auto rightLegIndex = renderer::humanoidPartTypeIndex(HumanoidBodyPart::RightLeg);
 
     require(steveIndex != classic64x64Index, "skin layout indexes should be distinct");
     require(classic64x64Index != classic64x32Index, "classic skin layout indexes should be distinct");
@@ -87,7 +89,7 @@ int main() {
     require(classic64x32Layout.textureWidth == 64.0f && classic64x32Layout.textureHeight == 32.0f,
             "classic 64x32 layout should declare the legacy texture canvas");
 
-    requireTextureMatchesLayout(readPngDimensions(STEVE_TEXTURE_PATH), steveLayout,
+    requireTextureMatchesLayout(readPngDimensions(ENTITY_TEXTURE_DIR "/steve.png"), steveLayout,
                                 "Steve texture should match its declared skin layout canvas");
     requireTextureMatchesLayout(readPngDimensions(MOBS_TEXTURE_DIR "/zombie.png"), classic64x64Layout,
                                 "zombie texture should match its configured skin layout canvas");

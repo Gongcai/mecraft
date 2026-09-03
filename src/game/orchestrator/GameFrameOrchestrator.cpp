@@ -342,6 +342,7 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session, GameplayRenderRunt
     m_lastHeldItemSwingSequence = snap.heldItemSwingSequence;
 
     RenderGameplayFrameRequest renderRequest{session.worldView(),
+                                             snap.renderScene,
                                              snap.renderCamera,
                                              window,
                                              static_cast<int>(frame.width),

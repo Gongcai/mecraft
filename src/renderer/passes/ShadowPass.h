@@ -26,13 +26,12 @@ class StaticMeshRenderer;
 class HumanoidRenderer;
 class DropRenderer;
 class FallingBlockRenderer;
-class DropSystem;
 class WorldRenderBuffer;
 class RhiCommandList;
 class IDeferredGeometryProvider;
 
-namespace ecs {
-class GameplayRegistry;
+namespace renderer::contracts {
+struct GameplayRenderSnapshot;
 }
 
 namespace shadow {
@@ -56,8 +55,6 @@ public:
     void setHumanoidRenderer(HumanoidRenderer* hr) { m_humanoidRenderer = hr; }
     void setDropRenderer(DropRenderer* dr) { m_dropRenderer = dr; }
     void setFallingBlockRenderer(FallingBlockRenderer* fbr) { m_fallingBlockRenderer = fbr; }
-    void setDropSystem(DropSystem* ds) { m_dropSystem = ds; }
-    void setGameplayRegistry(ecs::GameplayRegistry* reg) { m_gameplayRegistry = reg; }
 
     /// Graph handles for the persistent CSM texture arrays used by all cascades.
     struct GraphResources {
@@ -72,9 +69,11 @@ public:
     /// @param settings Shadow quality and distance settings for this frame.
     /// @param targets Persistent shadow textures and per-layer attachment views.
     /// @param worldView World query interface for gameplay geometry, or null for external geometry.
+    /// @param gameplaySnapshot Immutable gameplay actor data, or null for external geometry.
     /// @return True when all CPU data and attachment views are ready for graph recording.
     [[nodiscard]] bool prepareGraphFrame(const FrameContext& ctx, const RenderSettings& settings,
-                                         DeferredRenderTargets& targets, const IWorldView* worldView);
+                                         DeferredRenderTargets& targets, const IWorldView* worldView,
+                                         const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot);
 
     /// Adds opaque, depth-copy, and transparent passes for every cascade.
     /// @param graph Graph that owns the frame pass declarations.
@@ -151,8 +150,7 @@ private:
     HumanoidRenderer* m_humanoidRenderer = nullptr;
     DropRenderer* m_dropRenderer = nullptr;
     FallingBlockRenderer* m_fallingBlockRenderer = nullptr;
-    DropSystem* m_dropSystem = nullptr;
-    ecs::GameplayRegistry* m_gameplayRegistry = nullptr;
+    const renderer::contracts::GameplayRenderSnapshot* m_gameplaySnapshot = nullptr;
     GameResources* m_resources = nullptr;
 
     std::array<std::vector<GpuMeshRange>, 4> m_cascadeOpaqueRanges;

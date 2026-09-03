@@ -4,28 +4,21 @@
 #include <cstdint>
 #include <vector>
 #include <glm/glm.hpp>
+#include "renderer/contracts/GameplayRenderSnapshot.h"
 #include "renderer/rhi/RhiHandles.h"
-#include "../world/block/Block.h"
 
 struct GameResources;
 class RhiCommandList;
 class RhiDevice;
 struct TextureArray;
 
-namespace ecs {
-class GameplayRegistry;
-}
-
 class ParticleSystem {
 public:
-    void bindRegistry(ecs::GameplayRegistry& registry);
-
     [[nodiscard]] bool init(GameResources& resources, RhiDevice& rhiDevice);
     void shutdown();
 
-    void emit(const glm::ivec3& blockPos, BlockID blockType);
-    void update(float dt);
-    void prepareFrame(const glm::mat4& view, RhiCommandList& commandList);
+    void prepareFrame(const glm::mat4& view, const std::vector<renderer::contracts::ParticleRenderData>& particles,
+                      RhiCommandList& commandList);
 
     /// Reports whether the latest prepareFrame produced billboard vertices.
     /// Used to skip scene writeback copies when no particle was rendered.
@@ -36,14 +29,14 @@ public:
                                float preExposure);
 
 private:
-    // Build billboard vertices from ECS particle data. Returns vertex count.
-    int buildVertices(const glm::mat4& view, std::vector<float>& vertices);
+    // Build billboard vertices from the immutable particle snapshot. Returns particle count.
+    int buildVertices(const glm::mat4& view, const std::vector<renderer::contracts::ParticleRenderData>& particles,
+                      std::vector<float>& vertices);
     [[nodiscard]] bool createRhiResources();
     [[nodiscard]] bool ensureDeferredBindGroup(RhiTextureHandle voxelLightTexture, RhiTextureHandle depthTexture);
     void destroyDeferredBindGroup();
     void destroyRhiResources();
 
-    ecs::GameplayRegistry* m_registry = nullptr;
     RhiDevice* m_rhiDevice = nullptr;
     const TextureArray* m_texArray = nullptr;
     RhiTextureHandle m_boundVoxelLightTexture;

@@ -2,6 +2,7 @@
 #define MECRAFT_GAMEPLAY_PRESENTATION_SNAPSHOT_H
 
 #include "../../engine/camera/Camera.h"
+#include "../../renderer/contracts/GameplayRenderSnapshot.h"
 #include <cstdint>
 #include <glm/glm.hpp>
 
@@ -48,6 +49,9 @@ struct SnapPlayerStats {
 /// Built once per frame by GameplayPresentationBuilder; consumed by render/UI/audio systems.
 /// This decouples Game::renderFrame() from direct ECS queries.
 struct GameplayPresentationSnapshot {
+    // ECS-independent world actor data
+    renderer::contracts::GameplayRenderSnapshot renderScene;
+
     // Camera state
     Camera renderCamera;
     glm::vec3 eyePosition{0.0f};

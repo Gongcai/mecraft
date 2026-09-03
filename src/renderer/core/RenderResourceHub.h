@@ -38,12 +38,7 @@ class Chunk;
 class HumanoidRenderer;
 class DropRenderer;
 class ParticleSystem;
-class DropSystem;
 class RhiCommandListPool;
-
-namespace ecs {
-class GameplayRegistry;
-}
 namespace shadow {
 class ShadowCasterCuller;
 }

@@ -68,23 +68,23 @@ constexpr HumanoidSkinLayoutDefinitions kSkinLayouts{
 
 } // namespace
 
-std::size_t humanoidPartTypeIndex(const ecs::StevePartType partType) {
+std::size_t humanoidPartTypeIndex(const contracts::HumanoidBodyPart partType) {
     switch (partType) {
-    case ecs::StevePartType::Torso: return 0;
-    case ecs::StevePartType::Head: return 1;
-    case ecs::StevePartType::RightArm: return 2;
-    case ecs::StevePartType::LeftArm: return 3;
-    case ecs::StevePartType::RightLeg: return 4;
-    case ecs::StevePartType::LeftLeg: return 5;
+    case contracts::HumanoidBodyPart::Torso: return 0;
+    case contracts::HumanoidBodyPart::Head: return 1;
+    case contracts::HumanoidBodyPart::RightArm: return 2;
+    case contracts::HumanoidBodyPart::LeftArm: return 3;
+    case contracts::HumanoidBodyPart::RightLeg: return 4;
+    case contracts::HumanoidBodyPart::LeftLeg: return 5;
     }
     std::abort();
 }
 
-std::size_t humanoidSkinLayoutIndex(const ecs::EntitySkinLayoutKind skinLayout) {
+std::size_t humanoidSkinLayoutIndex(const contracts::HumanoidSkinLayout skinLayout) {
     switch (skinLayout) {
-    case ecs::EntitySkinLayoutKind::Steve64x64: return 0;
-    case ecs::EntitySkinLayoutKind::Classic64x64: return 1;
-    case ecs::EntitySkinLayoutKind::Classic64x32: return 2;
+    case contracts::HumanoidSkinLayout::Steve64x64: return 0;
+    case contracts::HumanoidSkinLayout::Classic64x64: return 1;
+    case contracts::HumanoidSkinLayout::Classic64x32: return 2;
     }
     std::abort();
 }

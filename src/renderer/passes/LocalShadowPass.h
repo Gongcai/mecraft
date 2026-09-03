@@ -17,7 +17,6 @@
 class BlockEntityRenderer;
 class DeferredRenderTargets;
 class DropRenderer;
-class DropSystem;
 class FallingBlockRenderer;
 class HumanoidRenderer;
 class IDeferredGeometryProvider;
@@ -28,8 +27,8 @@ class RhiDevice;
 class StaticMeshRenderer;
 class WorldRenderBuffer;
 
-namespace ecs {
-class GameplayRegistry;
+namespace renderer::contracts {
+struct GameplayRenderSnapshot;
 }
 
 /// Latest CPU-side local-shadow allocation and cache statistics.
@@ -75,8 +74,6 @@ public:
     void setHumanoidRenderer(HumanoidRenderer* renderer) { m_humanoidRenderer = renderer; }
     void setDropRenderer(DropRenderer* renderer) { m_dropRenderer = renderer; }
     void setFallingBlockRenderer(FallingBlockRenderer* renderer) { m_fallingBlockRenderer = renderer; }
-    void setDropSystem(DropSystem* system) { m_dropSystem = system; }
-    void setGameplayRegistry(ecs::GameplayRegistry* registry) { m_gameplayRegistry = registry; }
 
     /// Replaces the complete unallocated scene-light snapshot.
     /// @param lights Normalized records carrying explicit requested policies.
@@ -86,8 +83,10 @@ public:
     /// final GPU shadow indices before ClusteredLightingPass preparation.
     /// @param ctx Current frame and camera state retained through graph record.
     /// @param worldView Gameplay world revisions, or null for model scenes.
+    /// @param gameplaySnapshot Immutable gameplay actor data, or null for model scenes.
     /// @return True when every request has a complete render plan.
-    [[nodiscard]] bool prepareGraphFrame(const FrameContext& ctx, const IWorldView* worldView);
+    [[nodiscard]] bool prepareGraphFrame(const FrameContext& ctx, const IWorldView* worldView,
+                                         const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot);
 
     /// Imports persistent metadata and depth resources into the frame graph.
     [[nodiscard]] bool importGraphResources(RenderGraph& graph, GraphResources& resources) const;
@@ -168,8 +167,7 @@ private:
     HumanoidRenderer* m_humanoidRenderer = nullptr;
     DropRenderer* m_dropRenderer = nullptr;
     FallingBlockRenderer* m_fallingBlockRenderer = nullptr;
-    DropSystem* m_dropSystem = nullptr;
-    ecs::GameplayRegistry* m_gameplayRegistry = nullptr;
+    const renderer::contracts::GameplayRenderSnapshot* m_gameplaySnapshot = nullptr;
 
     renderer::contracts::LocalShadowStableAllocator m_allocator;
     std::vector<renderer::contracts::SceneLight> m_sceneLights;

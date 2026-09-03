@@ -4,8 +4,7 @@
 #include <array>
 #include <cstddef>
 
-#include "../../ecs/components/SteveComponents.h"
-#include "../../ecs/entity/EntitySkinLayout.h"
+#include "../contracts/GameplayRenderSnapshot.h"
 
 namespace renderer {
 
@@ -37,8 +36,8 @@ struct HumanoidSkinLayoutDefinition {
 
 using HumanoidSkinLayoutDefinitions = std::array<HumanoidSkinLayoutDefinition, kHumanoidSkinLayoutCount>;
 
-[[nodiscard]] std::size_t humanoidPartTypeIndex(ecs::StevePartType partType);
-[[nodiscard]] std::size_t humanoidSkinLayoutIndex(ecs::EntitySkinLayoutKind skinLayout);
+[[nodiscard]] std::size_t humanoidPartTypeIndex(contracts::HumanoidBodyPart partType);
+[[nodiscard]] std::size_t humanoidSkinLayoutIndex(contracts::HumanoidSkinLayout skinLayout);
 [[nodiscard]] const HumanoidSkinLayoutDefinitions& humanoidSkinLayoutDefinitions();
 
 } // namespace renderer

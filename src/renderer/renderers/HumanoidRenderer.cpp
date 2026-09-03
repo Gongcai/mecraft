@@ -6,10 +6,11 @@
 
 #include <algorithm>
 #include <array>
-#include <cassert>
 #include <cmath>
 #include <cstdlib>
+#include <optional>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -19,13 +20,7 @@
 #include "engine/camera/Camera.h"
 #include "engine/platform/Window.h"
 #include "../../resource/GameResources.h"
-#include "../../ecs/GameplayRegistry.h"
-#include "../../ecs/entity/EntitySkinLayout.h"
-#include "../../world/IWorldView.h"
-#include "../../ecs/components/Components.h"
-#include "../../ecs/components/NetworkComponents.h"
 #include "../../world/World.h"
-#include "../../world/chunk/Chunk.h"
 
 namespace {
 constexpr unsigned int kQuadIndices[] = {0, 1, 2, 0, 2, 3};
@@ -38,28 +33,6 @@ constexpr glm::vec3 kFaceNormals[] = {
     {-1, 0, 0}, // left
     {1, 0, 0} // right
 };
-
-bool shouldRenderSteveRoot(const entt::registry& reg, entt::entity steveRoot, HumanoidRenderer::RenderMode mode) {
-    return mode == HumanoidRenderer::kRenderAll || reg.all_of<ecs::EntityNetIdComponent>(steveRoot);
-}
-
-float hurtFlashForRoot(const entt::registry& reg, const entt::entity root) {
-    const auto* hurt = reg.try_get<ecs::HurtEffectComponent>(root);
-    if (hurt == nullptr || hurt->flashDurationSeconds <= 0.0f) {
-        return 0.0f;
-    }
-    return std::clamp(hurt->flashSecondsRemaining / hurt->flashDurationSeconds, 0.0f, 1.0f);
-}
-
-glm::mat4 applyMobVisualScale(const glm::mat4& model, const glm::vec3& pivot, const float scale) {
-    assert(scale > 0.0f);
-    if (std::abs(scale - 1.0f) <= 0.0001f) {
-        return model;
-    }
-
-    return glm::translate(glm::mat4(1.0f), pivot) * glm::scale(glm::mat4(1.0f), glm::vec3(scale)) *
-           glm::translate(glm::mat4(1.0f), -pivot) * model;
-}
 
 } // anonymous namespace
 
@@ -210,8 +183,8 @@ void HumanoidRenderer::destroyMesh(PartMesh& mesh) const {
     mesh.vertexCount = 0;
 }
 
-HumanoidRenderer::PartMesh* HumanoidRenderer::getMeshForPart(ecs::StevePartType partType,
-                                                             ecs::EntitySkinLayoutKind skinLayout) {
+HumanoidRenderer::PartMesh* HumanoidRenderer::getMeshForPart(const renderer::contracts::HumanoidBodyPart partType,
+                                                             const renderer::contracts::HumanoidSkinLayout skinLayout) {
     return &m_skinLayoutMeshes[renderer::humanoidSkinLayoutIndex(skinLayout)]
                               [renderer::humanoidPartTypeIndex(partType)];
 }
@@ -352,14 +325,14 @@ void HumanoidRenderer::shutdown() {
     m_resources = nullptr;
 }
 
-bool HumanoidRenderer::prepareFrame(const IWorldView& worldView, ecs::GameplayRegistry& gameplayRegistry,
+bool HumanoidRenderer::prepareFrame(const renderer::contracts::GameplayRenderSnapshot& snapshot,
                                     const RenderMode mode) {
-    auto& registry = gameplayRegistry.registry();
     m_preparedPartDraws.clear();
     m_currentModelMatrices.clear();
-    std::unordered_set<entt::entity> currentRoots;
+    std::unordered_set<renderer::contracts::GameplayRenderObjectKey> currentRoots;
 
-    const auto objectIdForRoot = [this](const entt::entity root) -> std::optional<renderer::contracts::StableObjectId> {
+    const auto objectIdForRoot = [this](const renderer::contracts::GameplayRenderObjectKey root)
+        -> std::optional<renderer::contracts::StableObjectId> {
         const auto existing = m_rootObjectIds.find(root);
         if (existing != m_rootObjectIds.end()) {
             return existing->second;
@@ -373,118 +346,47 @@ bool HumanoidRenderer::prepareFrame(const IWorldView& worldView, ecs::GameplayRe
         return allocated;
     };
 
-    const auto appendPart = [this](const entt::entity partEntity, const PartMesh* mesh, const TextureResource& texture,
-                                   const glm::mat4& model, const glm::vec3& entityCenter, const glm::vec2& light,
-                                   const float hurtFlash, const renderer::contracts::StableObjectId objectId) {
+    const auto appendPart = [this](const renderer::contracts::GameplayRenderObjectKey partKey, const PartMesh* mesh,
+                                   const TextureResource& texture, const glm::mat4& model,
+                                   const glm::vec3& entityCenter, const glm::vec2& light, const float hurtFlash,
+                                   const renderer::contracts::StableObjectId objectId) {
         if (mesh == nullptr || !mesh->rhiVertexBuffer.isValid() || mesh->vertexCount == 0u) {
             return;
         }
-        const auto previous = m_previousModelMatrices.find(partEntity);
+        const auto previous = m_previousModelMatrices.find(partKey);
         m_preparedPartDraws.push_back({mesh, &texture, model,
                                        previous != m_previousModelMatrices.end() ? previous->second : model,
                                        entityCenter, light, hurtFlash, objectId});
-        m_currentModelMatrices[partEntity] = model;
+        m_currentModelMatrices[partKey] = model;
     };
 
-    const TextureResource* steveTexture = requireTextureResource("steve");
-    if (steveTexture == nullptr) {
-        return false;
-    }
-    auto steveView = registry.view<ecs::SteveTag, ecs::ChildrenComponent>();
-    for (const entt::entity root : steveView) {
-        currentRoots.insert(root);
-        const std::optional<renderer::contracts::StableObjectId> objectId = objectIdForRoot(root);
+    for (const renderer::contracts::HumanoidActorRenderData& actor : snapshot.humanoidActors) {
+        if (actor.firstPart > snapshot.humanoidParts.size() ||
+            actor.partCount > snapshot.humanoidParts.size() - actor.firstPart) {
+            return false;
+        }
+        currentRoots.insert(actor.objectKey);
+        const std::optional<renderer::contracts::StableObjectId> objectId = objectIdForRoot(actor.objectKey);
         if (!objectId.has_value()) {
             return false;
         }
-        if (!shouldRenderSteveRoot(registry, root, mode)) {
+        if (mode == kRenderMobsOnly && actor.localPlayerModel) {
             continue;
         }
-        const auto& rootChildren = steveView.get<ecs::ChildrenComponent>(root);
-        glm::vec3 entityCenter(0.0f);
-        bool hasCenter = false;
-        for (const entt::entity child : rootChildren.children) {
-            if (!registry.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(child)) {
-                continue;
-            }
-            const auto& part = registry.get<ecs::StevePartComponent>(child);
-            if (part.partType == ecs::StevePartType::Torso) {
-                entityCenter = glm::vec3(registry.get<ecs::WorldTransformComponent>(child).worldMatrix[3]);
-                hasCenter = true;
-                break;
-            }
-        }
-        if (!hasCenter) {
-            continue;
-        }
-        const glm::vec2 light = queryWorldLight(worldView, entityCenter);
-        const float hurtFlash = hurtFlashForRoot(registry, root);
-        for (const entt::entity child : rootChildren.children) {
-            if (registry.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(child)) {
-                const auto& part = registry.get<ecs::StevePartComponent>(child);
-                const auto& transform = registry.get<ecs::WorldTransformComponent>(child);
-                appendPart(child, getMeshForPart(part.partType, ecs::EntitySkinLayoutKind::Steve64x64), *steveTexture,
-                           transform.worldMatrix, entityCenter, light, hurtFlash, *objectId);
-            }
-            const auto* children = registry.try_get<ecs::ChildrenComponent>(child);
-            if (children == nullptr) {
-                continue;
-            }
-            for (const entt::entity partEntity : children->children) {
-                if (!registry.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(partEntity)) {
-                    continue;
-                }
-                const auto& part = registry.get<ecs::StevePartComponent>(partEntity);
-                const auto& transform = registry.get<ecs::WorldTransformComponent>(partEntity);
-                appendPart(partEntity, getMeshForPart(part.partType, ecs::EntitySkinLayoutKind::Steve64x64),
-                           *steveTexture, transform.worldMatrix, entityCenter, light, hurtFlash, *objectId);
-            }
-        }
-    }
-
-    auto mobView =
-        registry.view<ecs::MobTag, ecs::ChildrenComponent, ecs::MobVisualComponent, ecs::TransformComponent>();
-    for (const entt::entity root : mobView) {
-        currentRoots.insert(root);
-        const std::optional<renderer::contracts::StableObjectId> objectId = objectIdForRoot(root);
-        if (!objectId.has_value()) {
-            return false;
-        }
-        const auto& visual = mobView.get<ecs::MobVisualComponent>(root);
-        const auto& rootTransform = mobView.get<ecs::TransformComponent>(root);
-        const auto& rootChildren = mobView.get<ecs::ChildrenComponent>(root);
-        const TextureResource* texture = requireTextureResource(visual.textureKey);
+        const TextureResource* texture = requireTextureResource(actor.textureKey);
         if (texture == nullptr) {
             return false;
         }
-        const glm::vec3 entityCenter = rootTransform.position + glm::vec3(0.0f, rootTransform.eyeHeight * 0.5f, 0.0f);
-        const glm::vec2 light = queryWorldLight(worldView, entityCenter);
-        const float hurtFlash = hurtFlashForRoot(registry, root);
-        const auto* modelComponent = registry.try_get<ecs::EntityModelComponent>(root);
-        std::vector<entt::entity> queue(rootChildren.children.begin(), rootChildren.children.end());
-        for (std::size_t index = 0u; index < queue.size(); ++index) {
-            const entt::entity partEntity = queue[index];
-            if (const auto* children = registry.try_get<ecs::ChildrenComponent>(partEntity)) {
-                queue.insert(queue.end(), children->children.begin(), children->children.end());
-            }
-            const auto* transform = registry.try_get<ecs::WorldTransformComponent>(partEntity);
-            if (transform == nullptr) {
-                continue;
-            }
+        const std::size_t partsEnd = actor.firstPart + actor.partCount;
+        for (std::size_t partIndex = actor.firstPart; partIndex < partsEnd; ++partIndex) {
+            const renderer::contracts::HumanoidPartRenderData& part = snapshot.humanoidParts[partIndex];
             PartMesh* mesh = nullptr;
-            if (modelComponent != nullptr) {
-                const auto* part = registry.try_get<ecs::EntityModelPartComponent>(partEntity);
-                if (part != nullptr) {
-                    mesh = getMeshForEntityModelPart(modelComponent->modelId, part->partName);
-                }
+            if (!actor.modelId.empty()) {
+                mesh = getMeshForEntityModelPart(actor.modelId, part.modelPartName);
             } else {
-                const auto* part = registry.try_get<ecs::StevePartComponent>(partEntity);
-                if (part != nullptr) {
-                    mesh = getMeshForPart(part->partType, visual.skinLayout);
-                }
+                mesh = getMeshForPart(part.bodyPart, actor.skinLayout);
             }
-            const glm::mat4 model = applyMobVisualScale(transform->worldMatrix, rootTransform.position, visual.scale);
-            appendPart(partEntity, mesh, *texture, model, entityCenter, light, hurtFlash, *objectId);
+            appendPart(part.partKey, mesh, *texture, part.model, actor.center, actor.light, actor.hurtFlash, *objectId);
         }
     }
 
@@ -790,8 +692,9 @@ void HumanoidRenderer::renderInventoryPreview(RhiCommandList& commandList, const
     commandList.setBindGroup(0u, steveTexture.gbufferBindGroup);
     const glm::mat4 viewProj = projection * view;
 
-    const auto drawPart = [&](ecs::StevePartType partType, const glm::mat4& model) {
-        PartMesh* mesh = getMeshForPart(partType, ecs::EntitySkinLayoutKind::Steve64x64);
+    using renderer::contracts::HumanoidBodyPart;
+    const auto drawPart = [&](const HumanoidBodyPart partType, const glm::mat4& model) {
+        PartMesh* mesh = getMeshForPart(partType, renderer::contracts::HumanoidSkinLayout::Steve64x64);
         if (mesh == nullptr || !mesh->rhiVertexBuffer.isValid() || mesh->vertexCount == 0u) {
             return;
         }
@@ -802,39 +705,17 @@ void HumanoidRenderer::renderInventoryPreview(RhiCommandList& commandList, const
         commandList.draw(mesh->vertexCount, 1u, 0u, 0u);
     };
 
-    drawPart(ecs::StevePartType::Torso, torso);
-    drawPart(ecs::StevePartType::Head, torso * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.375f, 0.0f)) *
-                                           glm::rotate(glm::mat4(1.0f), headYaw, glm::vec3(0.0f, 1.0f, 0.0f)) *
-                                           glm::rotate(glm::mat4(1.0f), headPitch, glm::vec3(1.0f, 0.0f, 0.0f)));
-    drawPart(ecs::StevePartType::RightArm, torso * glm::translate(glm::mat4(1.0f), glm::vec3(-0.3125f, 0.375f, 0.0f)));
-    drawPart(ecs::StevePartType::LeftArm, torso * glm::translate(glm::mat4(1.0f), glm::vec3(0.3125f, 0.375f, 0.0f)));
-    drawPart(ecs::StevePartType::RightLeg, torso * glm::translate(glm::mat4(1.0f), glm::vec3(-0.125f, -0.375f, 0.0f)));
-    drawPart(ecs::StevePartType::LeftLeg, torso * glm::translate(glm::mat4(1.0f), glm::vec3(0.125f, -0.375f, 0.0f)));
+    drawPart(HumanoidBodyPart::Torso, torso);
+    drawPart(HumanoidBodyPart::Head, torso * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.375f, 0.0f)) *
+                                         glm::rotate(glm::mat4(1.0f), headYaw, glm::vec3(0.0f, 1.0f, 0.0f)) *
+                                         glm::rotate(glm::mat4(1.0f), headPitch, glm::vec3(1.0f, 0.0f, 0.0f)));
+    drawPart(HumanoidBodyPart::RightArm, torso * glm::translate(glm::mat4(1.0f), glm::vec3(-0.3125f, 0.375f, 0.0f)));
+    drawPart(HumanoidBodyPart::LeftArm, torso * glm::translate(glm::mat4(1.0f), glm::vec3(0.3125f, 0.375f, 0.0f)));
+    drawPart(HumanoidBodyPart::RightLeg, torso * glm::translate(glm::mat4(1.0f), glm::vec3(-0.125f, -0.375f, 0.0f)));
+    drawPart(HumanoidBodyPart::LeftLeg, torso * glm::translate(glm::mat4(1.0f), glm::vec3(0.125f, -0.375f, 0.0f)));
 
     const uint32_t fullWidth = static_cast<uint32_t>(std::max(1l, std::lround(screenWidth * uiScale)));
     const uint32_t fullHeight = static_cast<uint32_t>(std::max(1l, std::lround(screenHeight * uiScale)));
     commandList.setViewport({0.0f, 0.0f, static_cast<float>(fullWidth), static_cast<float>(fullHeight), 0.0f, 1.0f});
     commandList.setScissor({0, 0, fullWidth, fullHeight});
-}
-
-glm::vec2 HumanoidRenderer::queryWorldLight(const IWorldView& worldView, const glm::vec3& position) {
-    const int bx = static_cast<int>(std::floor(position.x));
-    const int by = static_cast<int>(std::floor(position.y));
-    const int bz = static_cast<int>(std::floor(position.z));
-
-    if (!worldView.isChunkLoadedForBlock(bx, by, bz)) {
-        return {1.0f, 0.0f};
-    }
-
-    const glm::ivec2 cc = worldView.getChunkCoords(bx, bz);
-    const auto& chunks = worldView.getActiveChunks();
-    const auto it = chunks.find(IWorldView::chunkKey(cc.x, cc.y));
-    if (it == chunks.end()) {
-        return {1.0f, 0.0f};
-    }
-
-    const glm::ivec3 local = Chunk::worldToLocal(bx, by, bz);
-    const uint8_t sun = it->second->getSunlight(local.x, local.y, local.z);
-    const uint8_t block = it->second->getBlockLight(local.x, local.y, local.z);
-    return {sun / 15.0f, block / 15.0f};
 }

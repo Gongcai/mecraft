@@ -596,7 +596,7 @@ bool ModelSceneDeferredRenderer::render(const glm::mat4& view, const glm::mat4& 
         state.error = "model scene light snapshot violates the local-shadow contract";
         return false;
     }
-    const FrameOutput output = state.pipeline.renderFrame(context, state.settings);
+    const FrameOutput output = state.pipeline.renderFrame(context, state.settings, nullptr);
     if (!output.sceneColor.isValid() || !output.gbufferDepth.isValid()) {
         state.error = "failed to render model scene deferred pipeline";
         return false;
@@ -887,8 +887,7 @@ RhiTextureHandle ModelSceneDeferredRenderer::rtgiLeakageNormalTextureHandle() co
 }
 
 RhiTextureHandle ModelSceneDeferredRenderer::rtgiLeakageViewZTextureHandle() const {
-    return m_impl->lastFrameOutput.hasRtgiLeakageGuides ? m_impl->lastFrameOutput.rtgiLeakageViewZ
-                                                        : RhiTextureHandle{};
+    return m_impl->lastFrameOutput.hasRtgiLeakageGuides ? m_impl->lastFrameOutput.rtgiLeakageViewZ : RhiTextureHandle{};
 }
 
 float ModelSceneDeferredRenderer::nrdDiffuseToPreExposedScale() const {

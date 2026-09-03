@@ -1,22 +1,16 @@
 #include "FallingBlockRenderer.h"
 
 #include <algorithm>
-#include <cmath>
+#include <optional>
 #include <unordered_set>
-#include <vector>
 
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "engine/camera/Camera.h"
-#include "../../ecs/GameplayRegistry.h"
-#include "../../ecs/components/Components.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiShaderSourceLoader.h"
 #include "../../resource/GameResources.h"
-#include "../../world/IWorldView.h"
-#include "../../world/chunk/Chunk.h"
-#include "../../world/chunk/SubChunk.h"
 
 namespace {
 
@@ -34,30 +28,6 @@ struct FallingBlockShadowPushConstants {
     glm::mat4 model;
     glm::vec4 animationTime;
 };
-
-/// Query world light (sunlight, blockLight) at a position. Falls back to
-/// (1.0, 0.0) when the chunk is not loaded. Mirrors DropRenderer::queryWorldLight.
-glm::vec2 queryWorldLight(const IWorldView& worldView, const glm::vec3& position) {
-    const int bx = static_cast<int>(std::floor(position.x));
-    const int by = static_cast<int>(std::floor(position.y));
-    const int bz = static_cast<int>(std::floor(position.z));
-
-    if (!worldView.isChunkLoadedForBlock(bx, by, bz)) {
-        return {1.0f, 0.0f};
-    }
-
-    const glm::ivec2 cc = worldView.getChunkCoords(bx, bz);
-    const auto& chunks = worldView.getActiveChunks();
-    const auto it = chunks.find(IWorldView::chunkKey(cc.x, cc.y));
-    if (it == chunks.end()) {
-        return {1.0f, 0.0f};
-    }
-
-    const glm::ivec3 local = Chunk::worldToLocal(bx, by, bz);
-    const uint8_t sun = it->second->getSunlight(local.x, local.y, local.z);
-    const uint8_t block = it->second->getBlockLight(local.x, local.y, local.z);
-    return {sun / 15.0f, block / 15.0f};
-}
 
 } // namespace
 
@@ -80,54 +50,29 @@ void FallingBlockRenderer::shutdown() {
     m_resources = nullptr;
 }
 
-bool FallingBlockRenderer::prepareFrame(const IWorldView& worldView, const ecs::GameplayRegistry& registry) {
+bool FallingBlockRenderer::prepareFrame(const renderer::contracts::GameplayRenderSnapshot& snapshot) {
     m_renderInstances.clear();
     m_currentModelMatrices.clear();
-    std::unordered_set<std::size_t> currentEntityIds;
-    auto& reg = registry.registry();
-    auto appendInstance = [&](const BlockStateId stateId, const glm::vec3& position,
-                              const std::size_t entityId) -> bool {
-        currentEntityIds.insert(entityId);
-        auto objectId = m_objectIds.find(entityId);
+    std::unordered_set<renderer::contracts::GameplayRenderObjectKey> currentEntityIds;
+    for (const renderer::contracts::FallingBlockRenderData& block : snapshot.fallingBlocks) {
+        currentEntityIds.insert(block.objectKey);
+        auto objectId = m_objectIds.find(block.objectKey);
         if (objectId == m_objectIds.end()) {
             const std::optional<renderer::contracts::StableObjectId> allocated =
                 renderer::contracts::allocateStableSceneId<renderer::contracts::StableObjectIdTag>();
             if (!allocated.has_value()) {
                 return false;
             }
-            objectId = m_objectIds.emplace(entityId, *allocated).first;
+            objectId = m_objectIds.emplace(block.objectKey, *allocated).first;
         }
         glm::mat4 model(1.0f);
-        model = glm::translate(model, position);
+        model = glm::translate(model, block.position);
         model = glm::translate(model, glm::vec3(-0.5f));
-        const auto previous = m_previousModelMatrices.find(entityId);
-        m_renderInstances.push_back({stateId, model,
-                                     previous != m_previousModelMatrices.end() ? previous->second : model,
-                                     queryWorldLight(worldView, position), objectId->second});
-        m_currentModelMatrices[entityId] = model;
-        return true;
-    };
-
-    auto fallingView = reg.view<ecs::FallingBlockTag, ecs::FallingBlockComponent, ecs::TransformComponent,
-                                ecs::DropEntityIdComponent>();
-    for (const entt::entity entity : fallingView) {
-        const auto& block = fallingView.get<ecs::FallingBlockComponent>(entity);
-        const auto& transform = fallingView.get<ecs::TransformComponent>(entity);
-        const auto& id = fallingView.get<ecs::DropEntityIdComponent>(entity);
-        if (!appendInstance(BlockStateRegistry::getDefaultState(block.blockId), transform.position, id.dropId)) {
-            return false;
-        }
-    }
-
-    auto movingView =
-        reg.view<ecs::MovingBlockTag, ecs::MovingBlockComponent, ecs::TransformComponent, ecs::DropEntityIdComponent>();
-    for (const entt::entity entity : movingView) {
-        const auto& block = movingView.get<ecs::MovingBlockComponent>(entity);
-        const auto& transform = movingView.get<ecs::TransformComponent>(entity);
-        const auto& id = movingView.get<ecs::DropEntityIdComponent>(entity);
-        if (!appendInstance(block.stateId, transform.position, id.dropId)) {
-            return false;
-        }
+        const auto previous = m_previousModelMatrices.find(block.objectKey);
+        m_renderInstances.push_back({block.stateId, model,
+                                     previous != m_previousModelMatrices.end() ? previous->second : model, block.light,
+                                     objectId->second});
+        m_currentModelMatrices[block.objectKey] = model;
     }
 
     for (auto it = m_objectIds.begin(); it != m_objectIds.end();) {
@@ -235,7 +180,8 @@ bool FallingBlockRenderer::createGBufferRhiResources() {
     if (!vertexSource || !fragmentSource || !shadowVertexSource || !shadowFragmentSource || !forwardVertexSource ||
         !forwardFragmentSource)
         return false;
-    const RhiTextureHandle textures[] = {m_resources->blockTextures.textureArray().texture, m_resources->environmentTextures.getGrassColormap(),
+    const RhiTextureHandle textures[] = {m_resources->blockTextures.textureArray().texture,
+                                         m_resources->environmentTextures.getGrassColormap(),
                                          m_resources->environmentTextures.getFoliageColormap()};
     RhiTextureViewHandle* views[] = {&m_textureArrayView, &m_grassColormapView, &m_foliageColormapView};
     for (uint32_t i = 0; i < 3u; ++i) {

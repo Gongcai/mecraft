@@ -6,7 +6,7 @@
 #include "../rhi/RhiShaderSourceLoader.h"
 
 #include <algorithm>
-#include <cstddef>
+#include <optional>
 #include <utility>
 #include <unordered_set>
 #include <vector>
@@ -14,10 +14,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "../../resource/GameResources.h"
-#include "../../world/DropSystem.h"
-#include "../../world/IWorldView.h"
-#include "../../world/chunk/Chunk.h"
-#include "../../world/chunk/SubChunk.h"
 #include "../../item/Item.h"
 
 namespace {
@@ -58,16 +54,16 @@ void DropRenderer::shutdown() {
     m_rhiDevice = nullptr;
 }
 
-bool DropRenderer::prepareFrame(const IWorldView& worldView, const DropSystem& dropSystem) {
+bool DropRenderer::prepareFrame(const renderer::contracts::GameplayRenderSnapshot& snapshot) {
     m_preparedDrops.clear();
-    const auto& drops = dropSystem.getDrops();
+    const auto& drops = snapshot.drops;
     m_preparedDrops.reserve(drops.size());
     m_currentModelMatrices.clear();
     m_currentModelMatrices.reserve(drops.size());
-    std::unordered_set<std::size_t> currentDropIds;
+    std::unordered_set<renderer::contracts::GameplayRenderObjectKey> currentDropIds;
     currentDropIds.reserve(drops.size());
 
-    for (const DropEntity& drop : drops) {
+    for (const renderer::contracts::DropRenderData& drop : drops) {
         const ItemDef& itemDef = ItemRegistry::get(drop.itemId);
         const int itemTileIndex = m_resources->uiTextures.itemTextureIndex(itemDef.iconTextureName);
         const BlockID renderBlock = ItemRegistry::toRenderBlock(drop.itemId);
@@ -81,15 +77,15 @@ bool DropRenderer::prepareFrame(const IWorldView& worldView, const DropSystem& d
             continue;
         }
 
-        currentDropIds.insert(drop.id);
-        auto objectId = m_dropObjectIds.find(drop.id);
+        currentDropIds.insert(drop.objectKey);
+        auto objectId = m_dropObjectIds.find(drop.objectKey);
         if (objectId == m_dropObjectIds.end()) {
             const std::optional<renderer::contracts::StableObjectId> allocated =
                 renderer::contracts::allocateStableSceneId<renderer::contracts::StableObjectIdTag>();
             if (!allocated.has_value()) {
                 return false;
             }
-            objectId = m_dropObjectIds.emplace(drop.id, *allocated).first;
+            objectId = m_dropObjectIds.emplace(drop.objectKey, *allocated).first;
         }
 
         glm::mat4 model(1.0f);
@@ -97,11 +93,10 @@ bool DropRenderer::prepareFrame(const IWorldView& worldView, const DropSystem& d
         model = glm::rotate(model, drop.yawRadians, glm::vec3(0.0f, 1.0f, 0.0f));
         model = glm::scale(model, glm::vec3(drop.halfExtents * 2.0f));
         model = glm::translate(model, glm::vec3(-0.5f));
-        const auto previous = m_previousModelMatrices.find(drop.id);
+        const auto previous = m_previousModelMatrices.find(drop.objectKey);
         m_preparedDrops.push_back({mesh, model, previous != m_previousModelMatrices.end() ? previous->second : model,
-                                   queryWorldLight(worldView, drop.position), objectId->second, mesh->materialId,
-                                   useItemMesh});
-        m_currentModelMatrices.emplace(drop.id, model);
+                                   drop.light, objectId->second, mesh->materialId, useItemMesh});
+        m_currentModelMatrices.emplace(drop.objectKey, model);
     }
 
     for (auto it = m_dropObjectIds.begin(); it != m_dropObjectIds.end();) {
@@ -225,8 +220,8 @@ DropRenderer::Mesh DropRenderer::buildItemMesh(const ItemID itemId) const {
     }
 
     std::vector<ItemModelVertex> vertices;
-    if (!buildExtrudedItemMesh(m_resources->uiTextures.itemTextureAtlas(), m_resources->uiTextures.itemTexturePixels(), tileIndex,
-                               vertices)) {
+    if (!buildExtrudedItemMesh(m_resources->uiTextures.itemTextureAtlas(), m_resources->uiTextures.itemTexturePixels(),
+                               tileIndex, vertices)) {
         return mesh;
     }
 
@@ -380,7 +375,8 @@ void DropRenderer::createItemGBufferRhiResources() {
     samplerDesc.addressV = RhiAddressMode::Repeat;
     m_blockSampler = m_rhiDevice->createSampler(samplerDesc);
     const RhiTextureHandle blockTextures[] = {m_resources->blockTextures.textureArray().texture,
-                                              m_resources->environmentTextures.getGrassColormap(), m_resources->environmentTextures.getFoliageColormap()};
+                                              m_resources->environmentTextures.getGrassColormap(),
+                                              m_resources->environmentTextures.getFoliageColormap()};
     RhiTextureViewHandle* blockViews[] = {&m_blockTextureArrayView, &m_grassColormapView, &m_foliageColormapView};
     for (uint32_t index = 0u; index < 3u; ++index) {
         RhiTextureViewDesc viewDesc;
@@ -671,28 +667,6 @@ void DropRenderer::destroyItemGBufferRhiResources() {
     m_itemForwardPipelineLayout = {};
     m_itemForwardFragmentShader = {};
     m_itemForwardVertexShader = {};
-}
-
-glm::vec2 DropRenderer::queryWorldLight(const IWorldView& worldView, const glm::vec3& position) {
-    const int bx = static_cast<int>(std::floor(position.x));
-    const int by = static_cast<int>(std::floor(position.y));
-    const int bz = static_cast<int>(std::floor(position.z));
-
-    if (!worldView.isChunkLoadedForBlock(bx, by, bz)) {
-        return {1.0f, 0.0f};
-    }
-
-    const glm::ivec2 cc = worldView.getChunkCoords(bx, bz);
-    const auto& chunks = worldView.getActiveChunks();
-    const auto it = chunks.find(IWorldView::chunkKey(cc.x, cc.y));
-    if (it == chunks.end()) {
-        return {1.0f, 0.0f};
-    }
-
-    const glm::ivec3 local = Chunk::worldToLocal(bx, by, bz);
-    const uint8_t sun = it->second->getSunlight(local.x, local.y, local.z);
-    const uint8_t block = it->second->getBlockLight(local.x, local.y, local.z);
-    return {sun / 15.0f, block / 15.0f};
 }
 
 void DropRenderer::destroyMesh(Mesh& mesh) {

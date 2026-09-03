@@ -8,22 +8,21 @@
 #include <glm/glm.hpp>
 
 #include "../rhi/RhiHandles.h"
+#include "../contracts/GameplayRenderSnapshot.h"
 #include "../contracts/SceneIdentityContract.h"
 #include "../../world/block/Block.h"
 #include "../../item/Item.h"
 
-class IWorldView;
 struct GameResources;
 class RhiCommandList;
 class RhiDevice;
 class World;
-class DropSystem;
 
 class DropRenderer {
 public:
     void init(GameResources& resources, RhiDevice& rhiDevice);
     void shutdown();
-    [[nodiscard]] bool prepareFrame(const IWorldView& worldView, const DropSystem& dropSystem);
+    [[nodiscard]] bool prepareFrame(const renderer::contracts::GameplayRenderSnapshot& snapshot);
     void renderItemsToGBuffer(RhiCommandList& commandList, const glm::mat4& viewProj,
                               const glm::mat4& previousViewProj);
     [[nodiscard]] bool prepareBlockGBuffer(RhiCommandList& commandList, float animationTime);
@@ -58,17 +57,14 @@ private:
     static void destroyMesh(Mesh& mesh);
     void createItemGBufferRhiResources();
     void destroyItemGBufferRhiResources();
-    // Query world light at a block position. Returns (sunlight, blocklight) normalized to [0,1].
-    // Falls back to (1.0, 0.0) if chunk is not loaded.
-    static glm::vec2 queryWorldLight(const IWorldView& worldView, const glm::vec3& position);
-
     GameResources* m_resources = nullptr;
     std::unordered_map<BlockID, Mesh> m_blockMeshes;
     std::unordered_map<ItemID, Mesh> m_itemMeshes;
     // Per-object velocity: stores previous-frame model matrix per drop (by drop ID).
-    std::unordered_map<std::size_t, glm::mat4> m_previousModelMatrices;
-    std::unordered_map<std::size_t, glm::mat4> m_currentModelMatrices;
-    std::unordered_map<std::size_t, renderer::contracts::StableObjectId> m_dropObjectIds;
+    std::unordered_map<renderer::contracts::GameplayRenderObjectKey, glm::mat4> m_previousModelMatrices;
+    std::unordered_map<renderer::contracts::GameplayRenderObjectKey, glm::mat4> m_currentModelMatrices;
+    std::unordered_map<renderer::contracts::GameplayRenderObjectKey, renderer::contracts::StableObjectId>
+        m_dropObjectIds;
     std::vector<PreparedDrop> m_preparedDrops;
     RhiDevice* m_rhiDevice = nullptr;
     RhiTextureViewHandle m_itemAtlasView;

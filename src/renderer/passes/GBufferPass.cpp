@@ -14,7 +14,6 @@
 #include "../renderers/FallingBlockRenderer.h"
 #include "../renderers/FirstPersonHeldItemRenderer.h"
 #include "../../resource/GameResources.h"
-#include "../../ecs/GameplayRegistry.h"
 #include "../../world/IWorldView.h"
 
 #include <algorithm>
@@ -99,11 +98,11 @@ void GBufferPass::init(GameResources& resources) {
 
 void GBufferPass::shutdown() {}
 
-bool GBufferPass::executeEntities(RhiCommandList& commandList, const IWorldView& worldView, const FrameContext& ctx,
-                                  const RenderSettings& settings, DeferredRenderTargets& targets,
-                                  HumanoidRenderer* humanoidRenderer, ecs::GameplayRegistry* gameplayRegistry,
-                                  bool renderLocalPlayerModel) {
-    if (humanoidRenderer == nullptr || gameplayRegistry == nullptr) {
+bool GBufferPass::executeEntities(RhiCommandList& commandList, const FrameContext& ctx, const RenderSettings& settings,
+                                  DeferredRenderTargets& targets, HumanoidRenderer* humanoidRenderer,
+                                  const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot,
+                                  const bool renderLocalPlayerModel) {
+    if (humanoidRenderer == nullptr || gameplaySnapshot == nullptr) {
         return true;
     }
 
@@ -114,7 +113,7 @@ bool GBufferPass::executeEntities(RhiCommandList& commandList, const IWorldView&
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     const HumanoidRenderer::RenderMode mode =
         renderLocalPlayerModel ? HumanoidRenderer::kRenderAll : HumanoidRenderer::kRenderMobsOnly;
-    if (!humanoidRenderer->prepareFrame(worldView, *gameplayRegistry, mode)) {
+    if (!humanoidRenderer->prepareFrame(*gameplaySnapshot, mode)) {
         return false;
     }
     if (!beginObjectGBufferRendering(rhiDevice, commandList, targets, "GBuffer.Entities", false)) {
@@ -269,10 +268,10 @@ bool GBufferPass::executeExternalGeometry(RhiCommandList& commandList, const Fra
     return true;
 }
 
-bool GBufferPass::executeDrops(RhiCommandList& commandList, const IWorldView& worldView, const FrameContext& ctx,
-                               const RenderSettings& settings, DeferredRenderTargets& targets,
-                               DropRenderer* dropRenderer, DropSystem* dropSystem) {
-    if (dropRenderer == nullptr || dropSystem == nullptr) {
+bool GBufferPass::executeDrops(RhiCommandList& commandList, const FrameContext& ctx, const RenderSettings& settings,
+                               DeferredRenderTargets& targets, DropRenderer* dropRenderer,
+                               const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot) {
+    if (dropRenderer == nullptr || gameplaySnapshot == nullptr) {
         return true;
     }
 
@@ -281,7 +280,7 @@ bool GBufferPass::executeDrops(RhiCommandList& commandList, const IWorldView& wo
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-    if (!dropRenderer->prepareFrame(worldView, *dropSystem)) {
+    if (!dropRenderer->prepareFrame(*gameplaySnapshot)) {
         return false;
     }
     if (!dropRenderer->prepareBlockGBuffer(commandList, ctx.animationTime)) {
@@ -311,11 +310,11 @@ bool GBufferPass::executeDrops(RhiCommandList& commandList, const IWorldView& wo
     return true;
 }
 
-bool GBufferPass::executeFallingBlocks(RhiCommandList& commandList, const IWorldView& worldView,
-                                       const FrameContext& ctx, const RenderSettings& settings,
-                                       DeferredRenderTargets& targets, FallingBlockRenderer* fallingBlockRenderer,
-                                       ecs::GameplayRegistry* gameplayRegistry) {
-    if (fallingBlockRenderer == nullptr || gameplayRegistry == nullptr) {
+bool GBufferPass::executeFallingBlocks(RhiCommandList& commandList, const FrameContext& ctx,
+                                       const RenderSettings& settings, DeferredRenderTargets& targets,
+                                       FallingBlockRenderer* fallingBlockRenderer,
+                                       const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot) {
+    if (fallingBlockRenderer == nullptr || gameplaySnapshot == nullptr) {
         return true;
     }
 
@@ -323,7 +322,7 @@ bool GBufferPass::executeFallingBlocks(RhiCommandList& commandList, const IWorld
         return false;
     }
 
-    if (!fallingBlockRenderer->prepareFrame(worldView, *gameplayRegistry)) {
+    if (!fallingBlockRenderer->prepareFrame(*gameplaySnapshot)) {
         return false;
     }
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;

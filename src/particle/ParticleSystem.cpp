@@ -1,13 +1,9 @@
 #include "ParticleSystem.h"
 
-#include <optional>
 #include <vector>
 
 #include <glm/common.hpp>
 
-#include "../ecs/components/Components.h"
-#include "../ecs/GameplayRegistry.h"
-#include "../ecs/util/ParticleEventBuffer.h"
 #include "../resource/GameResources.h"
 #include "../renderer/rhi/RhiCommandList.h"
 #include "../renderer/rhi/RhiDevice.h"
@@ -25,10 +21,6 @@ struct ParticlePushConstants {
 }
 } // namespace
 
-void ParticleSystem::bindRegistry(ecs::GameplayRegistry& registry) {
-    m_registry = &registry;
-}
-
 bool ParticleSystem::init(GameResources& resources, RhiDevice& rhiDevice) {
     m_rhiDevice = &rhiDevice;
     m_texArray = &resources.blockTextures.textureArray();
@@ -44,25 +36,14 @@ void ParticleSystem::shutdown() {
     m_texArray = nullptr;
 }
 
-void ParticleSystem::emit(const glm::ivec3& blockPos, const BlockID blockType) {
-    if (m_registry == nullptr || blockType == 0) {
-        return;
-    }
-
-    auto& bus = ecs::ensureParticleEventBus(*m_registry);
-    bus.push({blockPos, blockType});
-}
-
-void ParticleSystem::update(const float dt) {
-    static_cast<void>(dt);
-}
-
-void ParticleSystem::prepareFrame(const glm::mat4& view, RhiCommandList& commandList) {
+void ParticleSystem::prepareFrame(const glm::mat4& view,
+                                  const std::vector<renderer::contracts::ParticleRenderData>& particles,
+                                  RhiCommandList& commandList) {
     m_preparedVertexCount = 0u;
-    if (m_registry == nullptr || !m_rhiVertexBuffer.isValid()) {
+    if (!m_rhiVertexBuffer.isValid()) {
         return;
     }
-    if (buildVertices(view, m_vertexBuffer) == 0) {
+    if (buildVertices(view, particles, m_vertexBuffer) == 0) {
         return;
     }
     commandList.bufferBarrier({m_rhiVertexBuffer, RhiResourceState::VertexBuffer, RhiResourceState::TransferDst});
@@ -71,9 +52,10 @@ void ParticleSystem::prepareFrame(const glm::mat4& view, RhiCommandList& command
     m_preparedVertexCount = static_cast<uint32_t>(m_vertexBuffer.size() / 8u);
 }
 
-int ParticleSystem::buildVertices(const glm::mat4& view, std::vector<float>& vertices) {
-    auto particleView = m_registry->view<ecs::ParticleTag, ecs::TransformComponent, ecs::ParticleComponent>();
-    if (particleView.begin() == particleView.end()) {
+int ParticleSystem::buildVertices(const glm::mat4& view,
+                                  const std::vector<renderer::contracts::ParticleRenderData>& particles,
+                                  std::vector<float>& vertices) {
+    if (particles.empty()) {
         return 0;
     }
 
@@ -84,9 +66,7 @@ int ParticleSystem::buildVertices(const glm::mat4& view, std::vector<float>& ver
     vertices.reserve(static_cast<size_t>(MAX_PARTICLES) * 48u);
 
     int count = 0;
-    for (const entt::entity e : particleView) {
-        const auto& transform = particleView.get<ecs::TransformComponent>(e);
-        const auto& particle = particleView.get<ecs::ParticleComponent>(e);
+    for (const renderer::contracts::ParticleRenderData& particle : particles) {
         if (particle.life <= 0.0f || particle.maxLife <= 0.0f) {
             continue;
         }
@@ -98,10 +78,10 @@ int ParticleSystem::buildVertices(const glm::mat4& view, std::vector<float>& ver
         const float alpha = lifeRatio < 0.25f ? glm::smoothstep(0.0f, 0.25f, lifeRatio) : 1.0f;
         const float halfSize = particle.size * 0.5f;
 
-        glm::vec3 c0 = transform.position - right * halfSize - up * halfSize;
-        glm::vec3 c1 = transform.position + right * halfSize - up * halfSize;
-        glm::vec3 c2 = transform.position + right * halfSize + up * halfSize;
-        glm::vec3 c3 = transform.position - right * halfSize + up * halfSize;
+        glm::vec3 c0 = particle.position - right * halfSize - up * halfSize;
+        glm::vec3 c1 = particle.position + right * halfSize - up * halfSize;
+        glm::vec3 c2 = particle.position + right * halfSize + up * halfSize;
+        glm::vec3 c3 = particle.position - right * halfSize + up * halfSize;
 
         const float uvMinX = particle.uvMin.x, uvMinY = particle.uvMin.y;
         const float uvMaxX = particle.uvMax.x, uvMaxY = particle.uvMax.y;

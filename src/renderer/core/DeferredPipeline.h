@@ -62,7 +62,8 @@ public:
     // RenderPipeline interface
     void init(SharedRenderResources& shared) override;
     void shutdown() override;
-    FrameOutput renderFrame(const FrameContext& ctx, const RenderSettings& settings) override;
+    FrameOutput renderFrame(const FrameContext& ctx, const RenderSettings& settings,
+                            const renderer::contracts::GameplayRenderSnapshot* gameplaySnapshot) override;
     const char* name() const override { return "Deferred (Shader Effects)"; }
     bool supportsDeferred() const override { return true; }
     bool supportsDebugView() const override { return true; }
@@ -157,6 +158,7 @@ private:
     GameResources* m_resources = nullptr;
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
     SharedRenderResources* m_shared = nullptr;
+    const renderer::contracts::GameplayRenderSnapshot* m_gameplaySnapshot = nullptr;
 
     // Orchestration state (migrated from Renderer)
     bool m_deferredFrameActive = false;

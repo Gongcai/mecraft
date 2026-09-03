@@ -8,20 +8,16 @@
 #include <glm/glm.hpp>
 
 #include "../mesh/BlockMeshBuilder.h"
+#include "../contracts/GameplayRenderSnapshot.h"
 #include "../contracts/SceneIdentityContract.h"
 #include "../../world/block/Block.h"
 #include "../../world/block/BlockStateRegistry.h"
 
 class Camera;
-class IWorldView;
 struct GameResources;
 class RhiCommandList;
 class RhiDevice;
 class Window;
-
-namespace ecs {
-class GameplayRegistry;
-}
 
 /// Renders falling-block entities (FallingBlockTag) as full-cube block meshes
 /// translated to the entity's interpolated render position.
@@ -33,7 +29,7 @@ class FallingBlockRenderer {
 public:
     [[nodiscard]] bool init(GameResources& resources, RhiDevice& rhiDevice);
     void shutdown();
-    [[nodiscard]] bool prepareFrame(const IWorldView& worldView, const ecs::GameplayRegistry& registry);
+    [[nodiscard]] bool prepareFrame(const renderer::contracts::GameplayRenderSnapshot& snapshot);
 
     // GBuffer path: renders falling blocks into the deferred GBuffer.
     // The caller must provide an active GBuffer rendering scope with terrain and entity depth.
@@ -66,9 +62,9 @@ private:
     RhiDevice* m_rhiDevice = nullptr;
     std::unordered_map<BlockStateId, renderer::BlockCubeMesh> m_meshes;
     // Per-object velocity: previous-frame model matrix per entity (by drop ID).
-    std::unordered_map<std::size_t, glm::mat4> m_previousModelMatrices;
-    std::unordered_map<std::size_t, glm::mat4> m_currentModelMatrices;
-    std::unordered_map<std::size_t, renderer::contracts::StableObjectId> m_objectIds;
+    std::unordered_map<renderer::contracts::GameplayRenderObjectKey, glm::mat4> m_previousModelMatrices;
+    std::unordered_map<renderer::contracts::GameplayRenderObjectKey, glm::mat4> m_currentModelMatrices;
+    std::unordered_map<renderer::contracts::GameplayRenderObjectKey, renderer::contracts::StableObjectId> m_objectIds;
     std::vector<RenderInstance> m_renderInstances;
     RhiTextureViewHandle m_textureArrayView;
     RhiTextureViewHandle m_grassColormapView;
