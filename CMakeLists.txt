@@ -1070,6 +1070,7 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(sleeping_state_test tests/sleeping_state_test.cpp)
     add_mecraft_test(gameplay_sky_renderer_test tests/gameplay_sky_renderer_test.cpp)
     add_mecraft_test(rhi_shader_compiler_test tests/rhi_shader_compiler_test.cpp)
+    add_mecraft_test(hiz_occlusion_test tests/hiz_occlusion_test.cpp)
     add_test(
         NAME renderer_removed_feature_test
         COMMAND ${CMAKE_COMMAND}

@@ -13,10 +13,7 @@ struct TerrainVertexDecoded {
     uint objectId;
 };
 
-struct TerrainSubChunkMetadata {
-    vec4 originAndFlags;
-    uvec4 identity;
-};
+#include "terrain_draw_metadata.glsl"
 
 layout(std430, set = 0, binding = 0) readonly buffer TerrainSubChunkMetadataBuffer {
     TerrainSubChunkMetadata terrainSubChunkMetadata[];

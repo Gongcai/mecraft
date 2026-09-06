@@ -467,24 +467,29 @@ WorldGpuMesh WorldRenderBuffer::uploadSubChunk(RhiCommandList& commandList, cons
         return result;
     }
 
-    glm::vec3 origin(0.0f);
-    if (hasBounds) {
-        origin = glm::floor(boundsMin);
-    } else {
-        bool originSet = false;
-        auto consumeOrigin = [&](const std::vector<BlockVertex>& vertices) {
-            if (!vertices.empty() && !originSet) {
-                origin = glm::floor(glm::vec3(vertices.front().x, vertices.front().y, vertices.front().z));
-                originSet = true;
+    glm::vec3 meshMin = boundsMin;
+    glm::vec3 meshMax = boundsMax;
+    if (!hasBounds) {
+        meshMin = glm::vec3(std::numeric_limits<float>::max());
+        meshMax = glm::vec3(std::numeric_limits<float>::lowest());
+        auto consumeBounds = [&](const std::vector<BlockVertex>& vertices) {
+            for (const BlockVertex& vertex : vertices) {
+                const glm::vec3 position(vertex.x, vertex.y, vertex.z);
+                meshMin = glm::min(meshMin, position);
+                meshMax = glm::max(meshMax, position);
             }
         };
-        consumeOrigin(opaque);
-        consumeOrigin(cutout);
-        consumeOrigin(cutoutDistance);
-        consumeOrigin(transparent);
-        consumeOrigin(water);
+        consumeBounds(opaque);
+        consumeBounds(cutout);
+        consumeBounds(cutoutDistance);
+        consumeBounds(transparent);
+        consumeBounds(water);
     }
-    result.metadataIndex = uploadSubChunkMetadata(commandList, origin);
+    const glm::vec3 origin = glm::floor(meshMin);
+    const glm::vec3 extent = meshMax - origin;
+    // Round outward to the packed vertex grid so quantization stays inside the box.
+    const float boundsExtent = std::ceil(std::max({extent.x, extent.y, extent.z}) * 128.0f) / 128.0f;
+    result.metadataIndex = uploadSubChunkMetadata(commandList, origin, boundsExtent);
     if (result.metadataIndex == kInvalidMetadataIndex) {
         return {};
     }
@@ -573,7 +578,8 @@ void WorldRenderBuffer::free(const WorldGpuMesh& mesh) {
     m_transparentPool.free(mesh.water);
 }
 
-uint32_t WorldRenderBuffer::uploadSubChunkMetadata(RhiCommandList& commandList, const glm::vec3& origin) {
+uint32_t WorldRenderBuffer::uploadSubChunkMetadata(RhiCommandList& commandList, const glm::vec3& origin,
+                                                   const float boundsExtent) {
     if (m_subChunkMetadata.size() >= static_cast<size_t>(std::numeric_limits<uint32_t>::max())) {
         return kInvalidMetadataIndex;
     }
@@ -584,7 +590,7 @@ uint32_t WorldRenderBuffer::uploadSubChunkMetadata(RhiCommandList& commandList, 
         return kInvalidMetadataIndex;
     }
 
-    const SubChunkDrawMetadata metadata{glm::vec4(origin, 0.0f), glm::uvec4(objectId->value, 0u, 0u, 0u)};
+    const SubChunkDrawMetadata metadata{glm::vec4(origin, boundsExtent), glm::uvec4(objectId->value, 0u, 0u, 0u)};
     uint32_t index = kInvalidMetadataIndex;
     if (!m_freeSubChunkMetadataIndices.empty()) {
         index = m_freeSubChunkMetadataIndices.back();

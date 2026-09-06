@@ -105,9 +105,11 @@ public:
     }
     [[nodiscard]] uint64_t metadataBufferCapacity() const { return m_rhiMetadataBuffer.capacity(); }
     struct SubChunkDrawMetadata {
+        // xyz is the packed vertex origin; w is the conservative local cube extent.
         glm::vec4 originAndFlags = glm::vec4(0.0f);
         glm::uvec4 identity = glm::uvec4(0u);
     };
+    static_assert(sizeof(SubChunkDrawMetadata) == 32u, "Terrain metadata must match the GLSL std430 stride");
 
     struct FrameStatsSnapshot {
         int rhiSubmitCount = 0;
@@ -206,7 +208,7 @@ public:
     size_t transparentUploadedBytes() const { return m_transparentPool.uploadedBytesThisFrame(); }
 
 private:
-    uint32_t uploadSubChunkMetadata(RhiCommandList& commandList, const glm::vec3& origin);
+    uint32_t uploadSubChunkMetadata(RhiCommandList& commandList, const glm::vec3& origin, float boundsExtent);
     bool ensureRhiMetadataBindGroup(RhiBindGroupLayoutHandle metadataLayout);
 
     RhiVertexPoolAllocator m_opaquePool;

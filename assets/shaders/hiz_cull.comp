@@ -1,11 +1,10 @@
 #version 450 core
 
-// Hi-Z occlusion culling: one thread per indirect draw command. The
-// command's baseInstance indexes the sub-chunk metadata (world origin of a
-// 16^3 box); if the box's nearest depth lies behind the farthest depth the
-// Hi-Z pyramid recorded over its screen rect, the draw cannot contribute
-// any pixel and its vertex count is zeroed in place.
+// Hi-Z occlusion culling: one thread per indirect draw command.
+// History classifies draws for the first GBuffer pass. Rejected draws are
+// tested again against current-frame depth before the second GBuffer pass.
 #include "rhi_screen_coordinates.glsl"
+#include "terrain_draw_metadata.glsl"
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
@@ -17,23 +16,73 @@ struct DrawCommand {
 };
 
 layout(binding = 0, std430) buffer CommandBuffer { DrawCommand uCommands[]; };
-layout(binding = 1, std430) readonly buffer MetadataBuffer { vec4 uOrigins[]; };
+layout(binding = 1, std430) readonly buffer MetadataBuffer { TerrainSubChunkMetadata uMetadata[]; };
 layout(binding = 2) uniform sampler2D uHiZTex;
 // Two counters (opaque, cutout); the dispatch's slot comes in uParams1.y.
 layout(binding = 3, std430) buffer CullStatsBuffer { uint uCulledCounts[]; };
 
 layout(push_constant) uniform RhiPushConstants {
-    // Raster view-projection of the PREVIOUS frame (jittered when the raster
-    // itself is jittered). The pyramid holds the previous frame's depth, so
-    // projecting with the matching matrix keeps matrix and depth consistent
-    // for static geometry regardless of camera motion.
+    // Raster view-projection matching the depth used to build this pyramid.
     mat4 uViewProj;
     // x, y: Hi-Z mip 0 extent; z: highest mip index; w: command count.
     vec4 uParams0;
-    // x: depth slack compensating the pyramid's one-frame latency;
-    // y: stats slot written by this dispatch.
+    // x: numerical depth slack; y: stats slot; z: 1 for current-frame retest.
     vec4 uParams1;
 };
+
+// Returns true only when the complete projected box is behind the pyramid.
+bool isOccluded(vec4 bounds) {
+    vec3 ndcMin = vec3(1.0e9);
+    vec3 ndcMax = vec3(-1.0e9);
+    for (int corner = 0; corner < 8; ++corner) {
+        const vec3 world = bounds.xyz + vec3((corner & 1) != 0 ? bounds.w : 0.0,
+                                             (corner & 2) != 0 ? bounds.w : 0.0,
+                                             (corner & 4) != 0 ? bounds.w : 0.0);
+        const vec4 clip = uViewProj * vec4(world, 1.0);
+        if (clip.w <= 1.0e-4 || clip.z <= -clip.w) {
+            // Near-plane intersections cannot be bounded by projected corners.
+            return false;
+        }
+        const vec3 ndc = clip.xyz / clip.w;
+        ndcMin = min(ndcMin, ndc);
+        ndcMax = max(ndcMax, ndc);
+    }
+
+    // The pyramid cannot judge a rect that reaches beyond its source
+    // frame's screen (typical for draws newly rotated into view); keep the
+    // draw instead of sampling clamped edge texels that belong to other
+    // geometry.
+    if (ndcMin.x < -1.0 || ndcMax.x > 1.0 || ndcMin.y < -1.0 || ndcMax.y > 1.0) {
+        return false;
+    }
+    const vec2 clipUvMin = ndcMin.xy * 0.5 + 0.5;
+    const vec2 clipUvMax = ndcMax.xy * 0.5 + 0.5;
+    // Clip UVs are bottom-left; the pyramid lives in native texture rows.
+    const vec2 uvA = rhiScreenUvToTextureUv(rhiScreenUvToClipUv(clipUvMin));
+    const vec2 uvB = rhiScreenUvToTextureUv(rhiScreenUvToClipUv(clipUvMax));
+    const vec2 uvMin = min(uvA, uvB);
+    const vec2 uvMax = max(uvA, uvB);
+
+    // Address the same integer footprints as hiz_build.comp. Normalized UV
+    // sampling scales by the floor-halved mip extent and shifts footprints
+    // on non-power-of-two targets, potentially omitting a visible depth sample.
+    const ivec2 baseMin = ivec2(floor(uvMin * uParams0.xy));
+    const ivec2 baseMax = ivec2(floor(uvMax * uParams0.xy));
+    const ivec2 rectTexels = baseMax - baseMin + 1;
+    const int mip = int(clamp(ceil(log2(float(max(rectTexels.x, rectTexels.y)))),
+                              0.0, uParams0.z));
+    const ivec2 mipMax = textureSize(uHiZTex, mip) - 1;
+    const ivec2 sampleMin = min(baseMin >> mip, mipMax);
+    const ivec2 sampleMax = min(baseMax >> mip, mipMax);
+    const float far0 = texelFetch(uHiZTex, sampleMin, mip).r;
+    const float far1 = texelFetch(uHiZTex, ivec2(sampleMax.x, sampleMin.y), mip).r;
+    const float far2 = texelFetch(uHiZTex, ivec2(sampleMin.x, sampleMax.y), mip).r;
+    const float far3 = texelFetch(uHiZTex, sampleMax, mip).r;
+    const float sceneFarthest = max(max(far0, far1), max(far2, far3));
+
+    const float boxNearest = ndcMin.z * 0.5 + 0.5;
+    return boxNearest > sceneFarthest + uParams1.x;
+}
 
 void main() {
     const uint index = gl_GlobalInvocationID.x;
@@ -44,52 +93,16 @@ void main() {
     if (command.count == 0u) {
         return;
     }
-    const vec3 origin = uOrigins[command.baseInstance].xyz;
-
-    vec3 ndcMin = vec3(1.0e9);
-    vec3 ndcMax = vec3(-1.0e9);
-    for (int corner = 0; corner < 8; ++corner) {
-        const vec3 world = origin + vec3((corner & 1) != 0 ? 16.0 : 0.0,
-                                         (corner & 2) != 0 ? 16.0 : 0.0,
-                                         (corner & 4) != 0 ? 16.0 : 0.0);
-        const vec4 clip = uViewProj * vec4(world, 1.0);
-        if (clip.w <= 1.0e-4) {
-            // A corner behind the near plane makes the projection unreliable;
-            // keep the draw.
-            return;
-        }
-        const vec3 ndc = clip.xyz / clip.w;
-        ndcMin = min(ndcMin, ndc);
-        ndcMax = max(ndcMax, ndc);
-    }
-
-    // The pyramid cannot judge a rect that reaches beyond the previous
-    // frame's screen (typical for draws newly rotated into view); keep the
-    // draw instead of sampling clamped edge texels that belong to other
-    // geometry.
-    if (ndcMin.x < -1.0 || ndcMax.x > 1.0 || ndcMin.y < -1.0 || ndcMax.y > 1.0) {
+    const bool retest = uParams1.z != 0.0;
+    if (retest && command.instanceCount != 0u) {
+        // Already rendered in the first pass; exclude it from the second pass.
+        uCommands[index].instanceCount = 0u;
         return;
     }
-    const vec2 clipUvMin = ndcMin.xy * 0.5 + 0.5;
-    const vec2 clipUvMax = ndcMax.xy * 0.5 + 0.5;
-    // Clip UVs are bottom-left; the pyramid lives in native texture rows.
-    const vec2 uvA = rhiScreenUvToTextureUv(rhiScreenUvToClipUv(clipUvMin));
-    const vec2 uvB = rhiScreenUvToTextureUv(rhiScreenUvToClipUv(clipUvMax));
-    const vec2 uvMin = min(uvA, uvB);
-    const vec2 uvMax = max(uvA, uvB);
-
-    const vec2 rectTexels = (uvMax - uvMin) * uParams0.xy;
-    const float mip = clamp(ceil(log2(max(max(rectTexels.x, rectTexels.y), 1.0))),
-                            0.0, uParams0.z);
-    const float far0 = textureLod(uHiZTex, uvMin, mip).r;
-    const float far1 = textureLod(uHiZTex, vec2(uvMax.x, uvMin.y), mip).r;
-    const float far2 = textureLod(uHiZTex, vec2(uvMin.x, uvMax.y), mip).r;
-    const float far3 = textureLod(uHiZTex, uvMax, mip).r;
-    const float sceneFarthest = max(max(far0, far1), max(far2, far3));
-
-    const float boxNearest = ndcMin.z * 0.5 + 0.5;
-    if (boxNearest > sceneFarthest + uParams1.x) {
-        uCommands[index].count = 0u;
+    const bool occluded = isOccluded(uMetadata[command.baseInstance].originAndFlags);
+    // Preserve vertex counts so history rejects can be restored in this frame.
+    uCommands[index].instanceCount = occluded ? 0u : 1u;
+    if (retest && occluded) {
         atomicAdd(uCulledCounts[uint(uParams1.y)], 1u);
     }
 }

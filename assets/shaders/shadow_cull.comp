@@ -2,7 +2,7 @@
 
 // Shadow cascade command culling: one thread per indirect draw command of
 // the cascade being rendered. The command's baseInstance indexes the
-// sub-chunk metadata (world origin of a 16^3 box). The box is projected
+// sub-chunk metadata (world origin and conservative mesh extent). The box is projected
 // with the cascade's orthographic view-projection and rejected when it
 // falls outside the padded light-space clip volume; rejected draws have
 // their vertex count zeroed in place before the multi-draw executes.
@@ -14,6 +14,8 @@
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
+#include "terrain_draw_metadata.glsl"
+
 struct DrawCommand {
     uint count;
     uint instanceCount;
@@ -22,7 +24,7 @@ struct DrawCommand {
 };
 
 layout(binding = 0, std430) buffer CommandBuffer { DrawCommand uCommands[]; };
-layout(binding = 1, std430) readonly buffer MetadataBuffer { vec4 uOrigins[]; };
+layout(binding = 1, std430) readonly buffer MetadataBuffer { TerrainSubChunkMetadata uMetadata[]; };
 // One counter per cascade; the dispatch's slot comes in uParams0.w.
 layout(binding = 2, std430) buffer CullStatsBuffer { uint uCulledCounts[]; };
 
@@ -45,14 +47,15 @@ void main() {
     if (command.count == 0u) {
         return;
     }
-    const vec3 origin = uOrigins[command.baseInstance].xyz;
+    const vec4 bounds = uMetadata[command.baseInstance].originAndFlags;
+    const vec3 origin = bounds.xyz;
 
     vec3 ndcMin = vec3(1.0e9);
     vec3 ndcMax = vec3(-1.0e9);
     for (int corner = 0; corner < 8; ++corner) {
-        const vec3 world = origin + vec3((corner & 1) != 0 ? 16.0 : 0.0,
-                                         (corner & 2) != 0 ? 16.0 : 0.0,
-                                         (corner & 4) != 0 ? 16.0 : 0.0);
+        const vec3 world = origin + vec3((corner & 1) != 0 ? bounds.w : 0.0,
+                                         (corner & 2) != 0 ? bounds.w : 0.0,
+                                         (corner & 4) != 0 ? bounds.w : 0.0);
         const vec4 clip = uViewProj * vec4(world, 1.0);
         if (abs(clip.w) <= 1.0e-4) {
             // Degenerate projection; keep the draw.

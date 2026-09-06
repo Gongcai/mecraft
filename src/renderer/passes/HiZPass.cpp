@@ -30,19 +30,19 @@ void HiZPass::shutdown() {
 RgPassHandle HiZPass::addGraphPasses(RenderGraph& graph, const FrameContext& ctx, DeferredRenderTargets& targets,
                                      const GraphResources& resources, const RgPassHandle dependency) {
     const uint32_t mipCount = targets.hiZMipCount();
-    if (!dependency.isValid() || !resources.historyDepthPrevious.isValid() || !resources.hiZ.isValid() ||
-        mipCount == 0u) {
+    if (!dependency.isValid() || !resources.sourceDepth.isValid() || !resources.hiZ.isValid() || mipCount == 0u) {
         return {};
     }
 
     const FrameContext* frame = &ctx;
     DeferredRenderTargets* frameTargets = &targets;
+    const bool currentFrame = resources.currentFrame;
     RgPassHandle previous = dependency;
     for (uint32_t mip = 0u; mip < mipCount; ++mip) {
         char passName[32];
-        std::snprintf(passName, sizeof(passName), "HiZ.Mip%u", mip);
-        RenderGraphPassBuilder pass = graph.addPass({passName, RgPassType::Compute, RhiQueueType::Graphics,
-                                                     /*threadSafeRecord=*/true});
+        std::snprintf(passName, sizeof(passName), currentFrame ? "HiZ.Current.Mip%u" : "HiZ.Mip%u", mip);
+        // Recording updates the shared pipeline and mip binding cache.
+        RenderGraphPassBuilder pass = graph.addPass({passName, RgPassType::Compute, RhiQueueType::Graphics});
         RgTextureSubresourceRange destRange;
         destRange.baseMip = mip;
         destRange.mipCount = 1u;
@@ -52,14 +52,14 @@ RgPassHandle HiZPass::addGraphPasses(RenderGraph& graph, const FrameContext& ctx
         if (mip == 0u) {
             // Depth-format textures are sampled through the DepthRead state
             // on the graphics queue per the RHI's tracking convention.
-            pass.readTexture(resources.historyDepthPrevious, RhiResourceState::DepthRead);
+            pass.readTexture(resources.sourceDepth, RhiResourceState::DepthRead);
         } else {
             RgTextureSubresourceRange sourceRange = destRange;
             sourceRange.baseMip = mip - 1u;
             pass.readTexture(resources.hiZ, RhiResourceState::ShaderRead, sourceRange);
         }
-        pass.setExecute([this, frame, frameTargets, mip](RgPassContext& p) {
-            return recordMip(p.commandList(), *frame, *frameTargets, mip);
+        pass.setExecute([this, frame, frameTargets, mip, currentFrame](RgPassContext& p) {
+            return recordMip(p.commandList(), *frame, *frameTargets, mip, currentFrame);
         });
         previous = pass.handle();
     }
@@ -67,19 +67,22 @@ RgPassHandle HiZPass::addGraphPasses(RenderGraph& graph, const FrameContext& ctx
 }
 
 bool HiZPass::recordMip(RhiCommandList& commandList, const FrameContext& ctx, DeferredRenderTargets& targets,
-                        const uint32_t mip) {
+                        const uint32_t mip, const bool currentFrame) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
         return false;
     }
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     if (!targets.ensureHiZTextureViews(rhiDevice) || !targets.ensureHistoryDepthTextureViews(rhiDevice) ||
-        !ensurePipeline(rhiDevice)) {
+        !targets.ensureGBufferTextureViews(rhiDevice) || !ensurePipeline(rhiDevice)) {
         return false;
     }
-    const RhiTextureViewHandle sourceView =
-        mip == 0u ? targets.historyDepthTexturePrevViewHandle() : targets.hiZMipTextureViewHandle(mip - 1u);
+    const RhiTextureViewHandle depthView =
+        currentFrame ? targets.depthTextureViewHandle() : targets.historyDepthTexturePrevViewHandle();
+    const RhiTextureViewHandle sourceView = mip == 0u ? depthView : targets.hiZMipTextureViewHandle(mip - 1u);
     const RhiTextureViewHandle destView = targets.hiZMipTextureViewHandle(mip);
-    if (!ensureMipBindGroup(rhiDevice, mip, sourceView, destView)) {
+    // Keep both depth bindings alive while the two pyramid builds are recorded.
+    const uint32_t bindingIndex = currentFrame && mip == 0u ? targets.hiZMipCount() : mip;
+    if (!ensureMipBindGroup(rhiDevice, bindingIndex, sourceView, destView)) {
         return false;
     }
 
@@ -87,7 +90,7 @@ bool HiZPass::recordMip(RhiCommandList& commandList, const FrameContext& ctx, De
     const uint32_t destHeight = std::max(1u, static_cast<uint32_t>(std::max(1, targets.height())) >> mip);
     const glm::ivec4 pushConstants(static_cast<int>(destWidth), static_cast<int>(destHeight), mip == 0u ? 1 : 0, 0);
     commandList.setComputePipeline(m_pipeline);
-    commandList.setBindGroup(0u, m_mipBindings[mip].bindGroup);
+    commandList.setBindGroup(0u, m_mipBindings[bindingIndex].bindGroup);
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Compute));
     commandList.dispatch((destWidth + 7u) / 8u, (destHeight + 7u) / 8u, 1u);
     return true;
@@ -212,24 +215,25 @@ struct HiZCullPushConstants {
 
 RgPassHandle HiZPass::addCullPass(RenderGraph& graph, const FrameContext& ctx, const RenderSettings& settings,
                                   DeferredRenderTargets& targets, WorldRenderBuffer& worldBuffer,
-                                  const RgTextureHandle hiZ, const RgPassHandle dependency) {
+                                  const RgTextureHandle hiZ, const RgPassHandle dependency, const bool retest) {
     if (!dependency.isValid() || !hiZ.isValid()) {
         return {};
     }
     const FrameContext* frame = &ctx;
     DeferredRenderTargets* frameTargets = &targets;
     WorldRenderBuffer* frameWorldBuffer = &worldBuffer;
-    RenderGraphPassBuilder cull = graph.addPass({"HiZ.Cull", RgPassType::Compute, RhiQueueType::Graphics});
+    RenderGraphPassBuilder cull =
+        graph.addPass({retest ? "HiZ.Retest" : "HiZ.Cull", RgPassType::Compute, RhiQueueType::Graphics});
     cull.dependsOn(dependency)
         .readTexture(hiZ, RhiResourceState::ShaderRead)
-        .setExecute([this, frame, frameTargets, frameWorldBuffer, settings](RgPassContext& pass) {
-            return recordCull(pass.commandList(), *frame, settings, *frameTargets, *frameWorldBuffer);
+        .setExecute([this, frame, frameTargets, frameWorldBuffer, settings, retest](RgPassContext& pass) {
+            return recordCull(pass.commandList(), *frame, settings, *frameTargets, *frameWorldBuffer, retest);
         });
     return cull.handle();
 }
 
 bool HiZPass::recordCull(RhiCommandList& commandList, const FrameContext& ctx, const RenderSettings& settings,
-                         DeferredRenderTargets& targets, WorldRenderBuffer& worldBuffer) {
+                         DeferredRenderTargets& targets, WorldRenderBuffer& worldBuffer, const bool retest) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
         return false;
     }
@@ -245,24 +249,21 @@ bool HiZPass::recordCull(RhiCommandList& commandList, const FrameContext& ctx, c
     const uint32_t commandCounts[2] = {static_cast<uint32_t>(worldBuffer.opaqueCommandCount()),
                                        static_cast<uint32_t>(worldBuffer.cutoutCommandCount())};
 
-    // The pyramid holds the PREVIOUS frame's depth, so the test projects
-    // with the previous frame's raster matrix (jittered when the raster
-    // itself is jittered): matrix and depth from the same frame make the
-    // test exact for static geometry under any camera motion.
+    // Each phase projects with the raster matrix that produced its depth.
     const bool projectionJitter = usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled);
     HiZCullPushConstants pushConstants{};
-    pushConstants.viewProj = projectionJitter ? ctx.previousJitteredViewProj : ctx.previousViewProj;
+    pushConstants.viewProj = retest ? (projectionJitter ? ctx.camera.jitteredViewProj : ctx.camera.viewProj)
+                                    : (projectionJitter ? ctx.previousJitteredViewProj : ctx.previousViewProj);
     pushConstants.params0 =
         glm::vec4(static_cast<float>(std::max(1, targets.width())), static_cast<float>(std::max(1, targets.height())),
                   static_cast<float>(targets.hiZMipCount() - 1u), 0.0f);
-    // Depth slack covers the pyramid's one-frame latency plus small vertex
-    // animation; expressed in post-projection 0-1 depth.
-    pushConstants.params1 = glm::vec4(5.0e-4f, 0.0f, 0.0f, 0.0f);
+    // Numerical slack in 0-1 depth; temporal disocclusion is handled by retesting.
+    pushConstants.params1 = glm::vec4(5.0e-4f, 0.0f, retest ? 1.0f : 0.0f, 0.0f);
 
     // Consume the oldest readback slot before overwriting it; the ring is
     // deep enough that its copy completed frames ago.
     const uint32_t ringIndex = m_cullRingWriteIndex;
-    if (m_cullRingWritten[ringIndex]) {
+    if (retest && m_cullRingWritten[ringIndex]) {
         const void* mapped = rhiDevice.mapBuffer(m_cullReadbackBuffers[ringIndex], 0u, sizeof(uint32_t) * 2u);
         if (mapped != nullptr) {
             uint32_t counts[2];
@@ -302,7 +303,10 @@ bool HiZPass::recordCull(RhiCommandList& commandList, const FrameContext& ctx, c
             {commandBuffers[slot], RhiResourceState::StorageBuffer, RhiResourceState::IndirectArgument});
     }
 
-    // Ship this frame's counters into the readback ring.
+    if (!retest) {
+        return true;
+    }
+    // Ship only final current-frame rejections into the readback ring.
     commandList.bufferBarrier({m_cullCounterBuffer, RhiResourceState::StorageBuffer, RhiResourceState::TransferSrc});
     if (m_cullRingWritten[ringIndex]) {
         commandList.bufferBarrier(

@@ -1916,15 +1916,15 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
     }
     // Hi-Z occlusion culling: reduce the previous frame's depth into a
     // max-depth pyramid, upload this frame's indirect terrain commands in a
-    // dedicated pass, and zero occluded commands before the GBuffer draws
-    // consume them. Skipped on temporal resets when no valid history exists.
+    // dedicated pass, and defer predicted occlusions until a current-depth
+    // retest. Temporal resets render all terrain without history prediction.
     m_terrainDrawsPrepared = false;
     const bool hiZCullActive = !externalGeometry && settings.occlusion.hiZEnabled && m_hiZPass != nullptr &&
                                m_hasPreviousFrameData &&
                                !ownerRequiresTemporalReset(TemporalHistoryOwner::ScreenSpace, ctx.temporalResetReasons);
-    if (!externalGeometry && settings.occlusion.hiZEnabled && m_hiZPass != nullptr) {
+    if (hiZCullActive) {
         HiZPass::GraphResources hiZResources;
-        hiZResources.historyDepthPrevious = historyDepthPrevious;
+        hiZResources.sourceDepth = historyDepthPrevious;
         hiZResources.hiZ = hiZ;
         const RgPassHandle hiZHandle = m_hiZPass->addGraphPasses(m_renderGraph, ctx, targets, hiZResources, graphTail);
         if (!hiZHandle.isValid()) {
@@ -1947,6 +1947,25 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         graphTail = cullHandle;
     }
 
+    // Terrain recovery must finish before objects write their motion vectors.
+    // Otherwise newly exposed terrain can overwrite object depth while leaving
+    // the object's velocity in a pixel that now belongs to static terrain.
+    const auto renderGBufferObjects = [&](RhiCommandList& commandList) {
+        if (m_gbufferPass == nullptr) {
+            return true;
+        }
+        return m_gbufferPass->executeEntities(commandList, ctx, settings, targets, m_shared->humanoidRenderer,
+                                              m_gameplaySnapshot, ctx.renderLocalPlayerModel) &&
+               m_gbufferPass->executeBlockEntities(commandList, *ctx.worldView, ctx, settings, targets,
+                                                   m_shared->blockEntityRenderer) &&
+               m_gbufferPass->executeStaticMeshes(commandList, ctx, settings, targets, m_shared->staticMeshRenderer) &&
+               m_gbufferPass->executeDrops(commandList, ctx, settings, targets, m_shared->dropRenderer,
+                                           m_gameplaySnapshot) &&
+               m_gbufferPass->executeFallingBlocks(commandList, ctx, settings, targets, m_shared->fallingBlockRenderer,
+                                                   m_gameplaySnapshot) &&
+               m_gbufferPass->executeFirstPersonHeldItem(commandList, ctx, settings, targets,
+                                                         m_shared->firstPersonHeldItemRenderer);
+    };
     RenderGraphPassBuilder gbuffer =
         m_renderGraph.addPass({"Deferred.GBuffer", RgPassType::Graphics, RhiQueueType::Graphics});
     gbuffer.dependsOn(graphTail)
@@ -1971,26 +1990,56 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             setClearAttachment(velocityClear, targets.perObjectVelocityTextureViewHandle(), 0.0f, 0.0f, 0.0f, 0.0f);
             clearColorAttachments(pass.commandList(), "GBuffer.VelocityClear", targets.width(), targets.height(),
                                   &velocityClear, 1u);
-            if (!renderGBufferTerrain(pass.commandList(), ctx, settings)) {
+            if (!renderGBufferTerrain(pass.commandList(), ctx)) {
                 return false;
             }
-            if (m_gbufferPass == nullptr)
-                return true;
-            return m_gbufferPass->executeEntities(pass.commandList(), ctx, settings, targets,
-                                                  m_shared->humanoidRenderer, m_gameplaySnapshot,
-                                                  ctx.renderLocalPlayerModel) &&
-                   m_gbufferPass->executeBlockEntities(pass.commandList(), *ctx.worldView, ctx, settings, targets,
-                                                       m_shared->blockEntityRenderer) &&
-                   m_gbufferPass->executeStaticMeshes(pass.commandList(), ctx, settings, targets,
-                                                      m_shared->staticMeshRenderer) &&
-                   m_gbufferPass->executeDrops(pass.commandList(), ctx, settings, targets, m_shared->dropRenderer,
-                                               m_gameplaySnapshot) &&
-                   m_gbufferPass->executeFallingBlocks(pass.commandList(), ctx, settings, targets,
-                                                       m_shared->fallingBlockRenderer, m_gameplaySnapshot) &&
-                   m_gbufferPass->executeFirstPersonHeldItem(pass.commandList(), ctx, settings, targets,
-                                                             m_shared->firstPersonHeldItemRenderer);
+            return hiZCullActive || renderGBufferObjects(pass.commandList());
         });
     graphTail = gbuffer.handle();
+
+    if (hiZCullActive) {
+        HiZPass::GraphResources currentHiZResources;
+        currentHiZResources.sourceDepth = depth;
+        currentHiZResources.hiZ = hiZ;
+        currentHiZResources.currentFrame = true;
+        graphTail = m_hiZPass->addGraphPasses(m_renderGraph, ctx, targets, currentHiZResources, graphTail);
+        if (!graphTail.isValid()) {
+            return failGraphSetup(__LINE__);
+        }
+        graphTail = m_hiZPass->addCullPass(m_renderGraph, ctx, settings, targets, *m_shared->worldRenderBuffer, hiZ,
+                                           graphTail, true);
+        if (!graphTail.isValid()) {
+            return failGraphSetup(__LINE__);
+        }
+        RenderGraphPassBuilder recovery =
+            m_renderGraph.addPass({"Deferred.GBufferRecovery", RgPassType::Graphics, RhiQueueType::Graphics});
+        recovery.dependsOn(graphTail)
+            .readWriteTexture(albedo, RhiResourceState::RenderTarget)
+            .readWriteTexture(normalAo, RhiResourceState::RenderTarget)
+            .readWriteTexture(voxelLight, RhiResourceState::RenderTarget)
+            .readWriteTexture(material, RhiResourceState::RenderTarget)
+            .readWriteTexture(materialAux, RhiResourceState::RenderTarget)
+            .readWriteTexture(f0Metallic, RhiResourceState::RenderTarget)
+            .readWriteTexture(objectMaterialId, RhiResourceState::RenderTarget)
+            .readWriteTexture(depth, RhiResourceState::DepthWrite)
+            .setExecute([&](RgPassContext& pass) { return renderGBufferTerrain(pass.commandList(), ctx, true); });
+        graphTail = recovery.handle();
+
+        RenderGraphPassBuilder objects =
+            m_renderGraph.addPass({"Deferred.GBufferObjects", RgPassType::Graphics, RhiQueueType::Graphics});
+        objects.dependsOn(graphTail)
+            .readWriteTexture(albedo, RhiResourceState::RenderTarget)
+            .readWriteTexture(normalAo, RhiResourceState::RenderTarget)
+            .readWriteTexture(voxelLight, RhiResourceState::RenderTarget)
+            .readWriteTexture(material, RhiResourceState::RenderTarget)
+            .readWriteTexture(materialAux, RhiResourceState::RenderTarget)
+            .readWriteTexture(f0Metallic, RhiResourceState::RenderTarget)
+            .readWriteTexture(objectMaterialId, RhiResourceState::RenderTarget)
+            .readWriteTexture(depth, RhiResourceState::DepthWrite)
+            .readWriteTexture(perObjectVelocity, RhiResourceState::RenderTarget)
+            .setExecute([&](RgPassContext& pass) { return renderGBufferObjects(pass.commandList()); });
+        graphTail = objects.handle();
+    }
 
     if (m_velocityPass != nullptr) {
         RenderGraphPassBuilder velocityPass =
@@ -3707,14 +3756,13 @@ bool DeferredPipeline::recordTerrainDrawPreparation(RhiCommandList& commandList,
 }
 
 bool DeferredPipeline::renderGBufferTerrain(RhiCommandList& commandList, const FrameContext& ctx,
-                                            const RenderSettings& settings) {
+                                            const bool loadExisting) {
     if (!m_shared || !m_shared->deferredTargets || !m_shared->terrain || !m_shared->worldRenderBuffer ||
         !m_shared->resources || !m_shared->rhiDevice) {
         return false;
     }
 
     auto& targets = *m_shared->deferredTargets;
-    auto& terrain = *m_shared->terrain;
     auto& worldBuffer = *m_shared->worldRenderBuffer;
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
 
@@ -3730,15 +3778,20 @@ bool DeferredPipeline::renderGBufferTerrain(RhiCommandList& commandList, const F
     setClearAttachment(gbufferAttachments[4], targets.materialAuxTextureViewHandle(), 0.0f, 0.0f, 0.65f, 0.0f);
     setClearAttachment(gbufferAttachments[5], targets.f0MetallicTextureViewHandle(), 0.0f, 0.0f, 0.0f, 0.0f);
     setClearAttachmentUint(gbufferAttachments[6], targets.objectMaterialIdTextureViewHandle(), 0u, 0u);
+    if (loadExisting) {
+        for (RhiColorAttachment& attachment : gbufferAttachments) {
+            attachment.loadOp = RhiLoadOp::Load;
+        }
+    }
 
     RhiDepthStencilAttachment depthAttachment;
     depthAttachment.view = targets.depthTextureViewHandle();
-    depthAttachment.depthLoadOp = RhiLoadOp::Clear;
+    depthAttachment.depthLoadOp = loadExisting ? RhiLoadOp::Load : RhiLoadOp::Clear;
     depthAttachment.depthStoreOp = RhiStoreOp::Store;
     depthAttachment.clearDepth = 1.0f;
 
     RhiRenderingInfo renderingInfo;
-    renderingInfo.debugName = "GBufferInitialClear";
+    renderingInfo.debugName = loadExisting ? "GBufferRecovery" : "GBufferInitialClear";
     renderingInfo.renderArea = {0, 0, static_cast<uint32_t>(std::max(1, targets.width())),
                                 static_cast<uint32_t>(std::max(1, targets.height()))};
     renderingInfo.colorAttachments = gbufferAttachments;
@@ -3764,7 +3817,9 @@ bool DeferredPipeline::renderGBufferTerrain(RhiCommandList& commandList, const F
                                 m_shared->terrainRhiPipelines->gbufferOpaqueBindGroup());
     worldBuffer.recordRhiCutout(commandList, m_shared->terrainRhiPipelines->gbufferCutoutPipeline(),
                                 m_shared->terrainRhiPipelines->gbufferCutoutBindGroup());
-    worldBuffer.captureSceneFrameStats();
+    if (!loadExisting) {
+        worldBuffer.captureSceneFrameStats();
+    }
 
     commandList.endRendering();
     if (ctx.debugService != nullptr) {

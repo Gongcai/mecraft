@@ -16,17 +16,17 @@ class RhiCommandList;
 class RhiDevice;
 
 /// Builds the Hi-Z occlusion pyramid: an R32Float mip chain holding the
-/// FARTHEST depth of each footprint, reduced from the previous frame's depth
-/// buffer. GPU occlusion culling samples it to conservatively reject
-/// indirect draws whose bounds sit behind everything in their screen rect.
+/// FARTHEST depth of each footprint. History predicts the first terrain batch;
+/// current depth conservatively retests history rejects in the same frame.
 class HiZPass : public RenderPass {
 public:
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "HiZ"; }
 
     struct GraphResources {
-        RgTextureHandle historyDepthPrevious;
+        RgTextureHandle sourceDepth;
         RgTextureHandle hiZ;
+        bool currentFrame = false;
     };
 
     /// Adds one compute reduction pass per pyramid mip. Each pass declares
@@ -36,7 +36,7 @@ public:
                                               RgPassHandle dependency);
 
     /// Adds the occlusion cull pass: one compute thread per indirect terrain
-    /// draw, zeroing commands whose sub-chunk box is behind the pyramid.
+    /// draw, masking instances whose sub-chunk box is behind the pyramid.
     /// Latest culled/total command counts, delayed by the readback ring.
     [[nodiscard]] const HiZCullFrameStats& cullStats() const { return m_cullStats; }
 
@@ -46,7 +46,7 @@ public:
 
     [[nodiscard]] RgPassHandle addCullPass(RenderGraph& graph, const FrameContext& ctx, const RenderSettings& settings,
                                            DeferredRenderTargets& targets, WorldRenderBuffer& worldBuffer,
-                                           RgTextureHandle hiZ, RgPassHandle dependency);
+                                           RgTextureHandle hiZ, RgPassHandle dependency, bool retest = false);
 
     /// Commits the readback ring position only after graph submission.
     /// @param succeeded True when every graph command list was submitted.
@@ -57,14 +57,14 @@ private:
     bool ensureMipBindGroup(RhiDevice& rhiDevice, uint32_t mip, RhiTextureViewHandle sourceView,
                             RhiTextureViewHandle destView);
     [[nodiscard]] bool recordMip(RhiCommandList& commandList, const FrameContext& ctx, DeferredRenderTargets& targets,
-                                 uint32_t mip);
+                                 uint32_t mip, bool currentFrame);
     void destroyRhiResources();
     bool ensureCullPipeline(RhiDevice& rhiDevice);
     bool ensureCullStatsBuffers(RhiDevice& rhiDevice);
     bool ensureCullBindGroup(RhiDevice& rhiDevice, int slot, RhiBufferHandle commandBuffer, uint64_t commandCapacity,
                              RhiBufferHandle metadataBuffer, uint64_t metadataCapacity, RhiTextureViewHandle hiZView);
     [[nodiscard]] bool recordCull(RhiCommandList& commandList, const FrameContext& ctx, const RenderSettings& settings,
-                                  DeferredRenderTargets& targets, WorldRenderBuffer& worldBuffer);
+                                  DeferredRenderTargets& targets, WorldRenderBuffer& worldBuffer, bool retest);
 
     RhiDevice* m_rhiDevice = nullptr;
     RhiShaderHandle m_shader;

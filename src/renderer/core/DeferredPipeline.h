@@ -230,7 +230,7 @@ private:
     [[nodiscard]] bool configureVoxelReflectionProbe(const FrameContext& ctx);
     [[nodiscard]] bool executeFrameGraph(const FrameContext& ctx, const RenderSettings& settings);
     [[nodiscard]] bool renderGBufferTerrain(RhiCommandList& commandList, const FrameContext& ctx,
-                                            const RenderSettings& settings);
+                                            bool loadExisting = false);
     [[nodiscard]] bool recordGenericTransparentPass(RhiCommandList& commandList, const FrameContext& ctx,
                                                     RhiTextureViewHandle transmissionSourceView);
     [[nodiscard]] bool hasGenericTransparentGeometry() const;
