@@ -124,6 +124,14 @@ bool WaterCompositePass::recordGraphPass(const FrameContext& ctx, const RenderSe
     waterFrame.fogWetness = ctx.weather.fogWetness;
     waterFrame.cloudWetness = ctx.weather.cloudWetness;
     waterFrame.surfaceWetness = ctx.weather.surfaceWetness;
+    waterFrame.waterAbsorption = settings.transparent.waterAbsorption;
+    waterFrame.waterIOR = settings.transparent.waterIOR;
+    waterFrame.waterWaveHeight = settings.transparent.waterWaveHeight;
+    waterFrame.waterWaveSpeed = settings.transparent.waterWaveSpeed;
+    waterFrame.waterFogDensity = settings.transparent.waterFogDensity;
+    waterFrame.waterScatterStrength = settings.transparent.waterScatterStrength;
+    waterFrame.waterScatterAnisotropy = settings.transparent.waterScatterAnisotropy;
+    waterFrame.underwaterFogDensity = settings.transparent.underwaterFogDensity;
     waterFrame.frameIndex = ctx.frameIndex;
     waterFrame.skyCaptureEnabled = deferredFrameActive;
     waterFrame.compositeInputsEnabled = compositeInputsEnabled;

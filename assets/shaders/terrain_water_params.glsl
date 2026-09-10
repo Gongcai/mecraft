@@ -11,6 +11,7 @@ layout(std140, set = 1, binding = 13) uniform TerrainWaterParams {
     vec4 rhiTerrainWaterSkyAmbientWeather;
     vec4 rhiTerrainWaterWetness;
     vec4 rhiTerrainWaterWaveParams;
+    vec4 rhiTerrainWaterOpticalParams;
     vec4 rhiTerrainWaterLayers;
     ivec4 rhiTerrainWaterControlFlags0;
     ivec4 rhiTerrainWaterControlFlags1;
@@ -43,6 +44,10 @@ layout(std140, set = 1, binding = 13) uniform TerrainWaterParams {
 #define uWaterWaveSpeed rhiTerrainWaterWaveParams.y
 #define uWaterIOR rhiTerrainWaterWaveParams.z
 #define uMoonPhaseFlux rhiTerrainWaterWaveParams.w
+#define uWaterFogDensity rhiTerrainWaterOpticalParams.x
+#define uWaterScatterStrength rhiTerrainWaterOpticalParams.y
+#define uWaterScatterAnisotropy rhiTerrainWaterOpticalParams.z
+#define uUnderwaterFogDensity rhiTerrainWaterOpticalParams.w
 #define uWaterStillFirstLayer rhiTerrainWaterLayers.x
 #define uWaterStillLayerCount rhiTerrainWaterLayers.y
 #define uWaterFlowFirstLayer rhiTerrainWaterLayers.z

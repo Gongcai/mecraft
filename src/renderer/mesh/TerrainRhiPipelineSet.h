@@ -48,6 +48,14 @@ struct TerrainWaterFrameData {
     float fogWetness = 0.0f;
     float cloudWetness = 0.0f;
     float surfaceWetness = 0.0f;
+    glm::vec3 waterAbsorption = glm::vec3(0.40f, 0.14f, 0.08f);
+    float waterIOR = 1.33f;
+    float waterWaveHeight = 1.0f;
+    float waterWaveSpeed = 1.0f;
+    float waterFogDensity = 1.0f;
+    float waterScatterStrength = 28.0f;
+    float waterScatterAnisotropy = 0.65f;
+    float underwaterFogDensity = 0.1f;
     uint64_t frameIndex = 0u;
     bool skyCaptureEnabled = false;
     bool compositeInputsEnabled = false;

@@ -878,6 +878,84 @@ void SettingsScreen::buildLightingTab(UIWidget* contentPanel, GameResources& res
         s.transparent.compositeEnabled = v;
         m_renderScene->setSettings(s);
     });
+    addSectionHeader(stack, resources, "Water Optical");
+    addSliderRow(stack, resources, "Water Absorption R", 0.0f, 2.0f, s.transparent.waterAbsorption.r, 0.001f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings();
+                     s.transparent.waterAbsorption.r = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resources, "Water Absorption G", 0.0f, 2.0f, s.transparent.waterAbsorption.g, 0.001f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings();
+                     s.transparent.waterAbsorption.g = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resources, "Water Absorption B", 0.0f, 2.0f, s.transparent.waterAbsorption.b, 0.001f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings();
+                     s.transparent.waterAbsorption.b = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resources, "Water IOR", 1.0f, 2.0f, s.transparent.waterIOR, 0.001f, [this](float v) {
+        auto s = m_renderScene->getSettings();
+        s.transparent.waterIOR = v;
+        m_renderScene->setSettings(s);
+    });
+    addSliderRow(stack, resources, "Water Wave Height", 0.0f, 4.0f, s.transparent.waterWaveHeight, 0.01f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings();
+                     s.transparent.waterWaveHeight = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resources, "Water Wave Speed", 0.0f, 4.0f, s.transparent.waterWaveSpeed, 0.01f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings();
+                     s.transparent.waterWaveSpeed = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resources, "Water Fog Density", 0.0f, 4.0f, s.transparent.waterFogDensity, 0.01f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings();
+                     s.transparent.waterFogDensity = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resources, "Water Scatter Strength", 0.0f, 64.0f, s.transparent.waterScatterStrength, 0.1f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings();
+                     s.transparent.waterScatterStrength = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resources, "Water Scatter Anisotropy", -0.99f, 0.99f,
+                 s.transparent.waterScatterAnisotropy, 0.001f, [this](float v) {
+                     auto s = m_renderScene->getSettings();
+                     s.transparent.waterScatterAnisotropy = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resources, "Underwater Fog Density", 0.001f, 1.0f, s.transparent.underwaterFogDensity, 0.001f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings();
+                     s.transparent.underwaterFogDensity = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resources, "Underwater Scatter Strength", 0.0f, 32.0f,
+                 s.transparent.underwaterScatterStrength, 0.1f, [this](float v) {
+                     auto s = m_renderScene->getSettings();
+                     s.transparent.underwaterScatterStrength = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resources, "Underwater Scatter Anisotropy", -0.99f, 0.99f,
+                 s.transparent.underwaterScatterAnisotropy, 0.001f, [this](float v) {
+                     auto s = m_renderScene->getSettings();
+                     s.transparent.underwaterScatterAnisotropy = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resources, "Underwater Scatter Anisotropy 2", -0.99f, 0.99f,
+                 s.transparent.underwaterScatterAnisotropySecondary, 0.001f, [this](float v) {
+                     auto s = m_renderScene->getSettings();
+                     s.transparent.underwaterScatterAnisotropySecondary = v;
+                     m_renderScene->setSettings(s);
+                 });
 
     addSectionHeader(stack, resources, "Rain Surfaces");
 

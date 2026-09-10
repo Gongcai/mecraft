@@ -1687,8 +1687,8 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub& render, Re
         pipelineChanged |=
             ImGui::SliderFloat("Auto Exp Bias", &settings.postProcess.autoExposureBias, -2.0f, 2.0f, "%.2f EV");
         pipelineChanged |= ImGui::Checkbox("Sun Rays", &settings.postProcess.sunRaysEnabled);
-        pipelineChanged |= ImGui::Checkbox("Water Effects", &settings.transparent.waterEffectsEnabled);
-        pipelineChanged |= ImGui::Checkbox("Transparent Composite", &settings.transparent.compositeEnabled);
+        ImGui::SeparatorText("Water Optical");
+        pipelineChanged |= render_settings_imgui::showWaterSettings(settings);
         pipelineChanged |= ImGui::SliderFloat("Scene Cloud Composite", &settings.cloud.sceneCloudCompositeStrength,
                                               0.0f, 1.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat(

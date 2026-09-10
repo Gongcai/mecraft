@@ -161,6 +161,22 @@ struct ReflectionSettings {
 struct TransparentSettings {
     bool waterEffectsEnabled = true;
     bool compositeEnabled = true;
+    /// RGB Beer-Lambert absorption coefficients used by water fog and volumetric light.
+    glm::vec3 waterAbsorption = glm::vec3(0.40f, 0.14f, 0.08f);
+    /// Refractive index of water used by Fresnel and screen-space refraction.
+    float waterIOR = 1.33f;
+    /// Procedural wave normal displacement and animation speed.
+    float waterWaveHeight = 1.0f;
+    float waterWaveSpeed = 1.0f;
+    /// Surface water fog density multiplier and forward-scattering strength.
+    float waterFogDensity = 1.0f;
+    float waterScatterStrength = 28.0f;
+    float waterScatterAnisotropy = 0.65f;
+    /// Underwater direct-light attenuation and volumetric scattering controls.
+    float underwaterFogDensity = 0.1f;
+    float underwaterScatterStrength = 8.0f;
+    float underwaterScatterAnisotropy = 0.8f;
+    float underwaterScatterAnisotropySecondary = 0.6f;
 };
 
 /// Block material sidecar texture settings.

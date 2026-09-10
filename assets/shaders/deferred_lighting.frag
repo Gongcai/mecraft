@@ -182,6 +182,7 @@ layout(std140, binding = MECRAFT_DEFERRED_LIGHTING_PARAMS_BINDING) uniform Defer
 #define uFogEnd pCloud2.w
 #define uFogDensity pFogParams.x
 #define uMoonPhaseFlux pFogParams.y
+#define uUnderwaterFogDensity pFogParams.z
 #define uRtgiIntensity pRtgi.x
 #define uRtgiEncoding int(pRtgi.y)
 #define uRtgiRadianceScale pRtgi.z
@@ -820,7 +821,7 @@ void main() {
     if (uIsEyeInWater != 0) {
         // DerivativeMain: vec3(0.6, 0.9, 1.2) / max(3.0, opaqueDepth * 0.1 * WATER_FOG_DENSITY)
         // Blue-green attenuation that increases with depth
-        float waterDensity = 0.1; // WATER_FOG_DENSITY default
+        float waterDensity = uUnderwaterFogDensity;
         float attenuation = max(3.0, length(worldPos - uCameraPos) * waterDensity);
         waterTint = vec3(0.6, 0.9, 1.2) / attenuation;
     }

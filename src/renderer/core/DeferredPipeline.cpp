@@ -3732,6 +3732,10 @@ bool DeferredPipeline::recordTerrainDrawPreparation(RhiCommandList& commandList,
     trs.blockSpecularMapsEnabled = m_currentSettings.blockMaterialMaps.specularMapsEnabled;
     trs.blockParallaxMapsEnabled = m_currentSettings.blockMaterialMaps.parallaxMapsEnabled;
     trs.blockParallaxDepth = m_currentSettings.blockMaterialMaps.parallaxDepth;
+    trs.waterAbsorption = m_currentSettings.transparent.waterAbsorption;
+    trs.waterIOR = m_currentSettings.transparent.waterIOR;
+    trs.waterWaveHeight = m_currentSettings.transparent.waterWaveHeight;
+    trs.waterWaveSpeed = m_currentSettings.transparent.waterWaveSpeed;
 
     if (m_shared->terrainRhiPipelines == nullptr ||
         !m_shared->terrainRhiPipelines->prepareGBuffer(commandList, *m_shared->resources, tfd, trs)) {
@@ -3968,6 +3972,10 @@ bool DeferredPipeline::recordGenericTransparentPass(RhiCommandList& commandList,
     trs.blockSpecularMapsEnabled = m_currentSettings.blockMaterialMaps.specularMapsEnabled;
     trs.blockParallaxMapsEnabled = m_currentSettings.blockMaterialMaps.parallaxMapsEnabled;
     trs.blockParallaxDepth = m_currentSettings.blockMaterialMaps.parallaxDepth;
+    trs.waterAbsorption = m_currentSettings.transparent.waterAbsorption;
+    trs.waterIOR = m_currentSettings.transparent.waterIOR;
+    trs.waterWaveHeight = m_currentSettings.transparent.waterWaveHeight;
+    trs.waterWaveSpeed = m_currentSettings.transparent.waterWaveSpeed;
 
     const bool volFogShadersReady = m_volumetricPass && m_volumetricPass->hasShaders();
 

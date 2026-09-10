@@ -25,6 +25,11 @@ namespace render_settings_imgui {
 /// @return True when the user changed at least one volumetric setting.
 [[nodiscard]] bool showVolumetricSettings(RenderSettings& settings);
 
+/// Draws adjustable surface and underwater water-optical controls.
+/// @param settings Renderer settings updated by the controls.
+/// @return True when the user changed at least one water setting.
+[[nodiscard]] bool showWaterSettings(RenderSettings& settings);
+
 /// Draws all screen-space ambient occlusion controls.
 /// @param settings Renderer settings updated by the controls.
 /// @return True when the user changed at least one SSAO setting.

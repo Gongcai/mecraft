@@ -216,6 +216,30 @@ bool showVolumetricSettings(RenderSettings& settings) {
     return changed;
 }
 
+bool showWaterSettings(RenderSettings& settings) {
+    TransparentSettings& water = settings.transparent;
+    bool changed = false;
+    changed |= ImGui::Checkbox("Water Effects", &water.waterEffectsEnabled);
+    changed |= ImGui::Checkbox("Transparent Composite", &water.compositeEnabled);
+    changed |= ImGui::SliderFloat("Water Absorption R", &water.waterAbsorption.r, 0.0f, 2.0f, "%.3f");
+    changed |= ImGui::SliderFloat("Water Absorption G", &water.waterAbsorption.g, 0.0f, 2.0f, "%.3f");
+    changed |= ImGui::SliderFloat("Water Absorption B", &water.waterAbsorption.b, 0.0f, 2.0f, "%.3f");
+    changed |= ImGui::SliderFloat("Water IOR", &water.waterIOR, 1.0f, 2.0f, "%.3f");
+    changed |= ImGui::SliderFloat("Water Wave Height", &water.waterWaveHeight, 0.0f, 4.0f, "%.2f");
+    changed |= ImGui::SliderFloat("Water Wave Speed", &water.waterWaveSpeed, 0.0f, 4.0f, "%.2f");
+    changed |= ImGui::SliderFloat("Water Fog Density", &water.waterFogDensity, 0.0f, 4.0f, "%.2f");
+    changed |= ImGui::SliderFloat("Water Scatter Strength", &water.waterScatterStrength, 0.0f, 64.0f, "%.2f");
+    changed |= ImGui::SliderFloat("Water Scatter Anisotropy", &water.waterScatterAnisotropy, -0.99f, 0.99f, "%.3f");
+    changed |= ImGui::SliderFloat("Underwater Fog Density", &water.underwaterFogDensity, 0.001f, 1.0f, "%.3f");
+    changed |= ImGui::SliderFloat("Underwater Scatter Strength", &water.underwaterScatterStrength, 0.0f, 32.0f,
+                                  "%.2f");
+    changed |= ImGui::SliderFloat("Underwater Scatter Anisotropy", &water.underwaterScatterAnisotropy, -0.99f, 0.99f,
+                                  "%.3f");
+    changed |= ImGui::SliderFloat("Underwater Scatter Anisotropy 2", &water.underwaterScatterAnisotropySecondary,
+                                  -0.99f, 0.99f, "%.3f");
+    return changed;
+}
+
 bool showSsaoSettings(RenderSettings& settings) {
     bool changed = false;
     changed |= ImGui::Checkbox("SSAO", &settings.ssao.enabled);

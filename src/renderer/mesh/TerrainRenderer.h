@@ -71,6 +71,10 @@ struct TerrainRenderSettings {
     bool blockSpecularMapsEnabled = true;
     bool blockParallaxMapsEnabled = true;
     float blockParallaxDepth = 0.075f;
+    glm::vec3 waterAbsorption = glm::vec3(0.40f, 0.14f, 0.08f);
+    float waterIOR = 1.33f;
+    float waterWaveHeight = 1.0f;
+    float waterWaveSpeed = 1.0f;
 };
 
 /// Sky lighting parameters consumed by RHI terrain pipelines.

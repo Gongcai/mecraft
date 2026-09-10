@@ -200,7 +200,22 @@
     },
     "transparent": {
       "compositeEnabled": true,
-      "waterEffectsEnabled": true
+      "waterAbsorption": [
+        0.4,
+        0.14,
+        0.08
+      ],
+      "waterFogDensity": 1.0,
+      "waterIOR": 1.33,
+      "waterScatterAnisotropy": 0.65,
+      "waterScatterStrength": 28.0,
+      "waterWaveHeight": 1.0,
+      "waterWaveSpeed": 1.0,
+      "waterEffectsEnabled": true,
+      "underwaterFogDensity": 0.1,
+      "underwaterScatterAnisotropy": 0.8,
+      "underwaterScatterAnisotropySecondary": 0.6,
+      "underwaterScatterStrength": 8.0
     },
     "upscale": {
       "debugVisualizationEnabled": false,

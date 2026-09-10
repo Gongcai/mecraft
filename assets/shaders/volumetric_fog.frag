@@ -50,6 +50,8 @@ layout(std140, binding = 10) uniform VolumetricFogParams {
     vec4 pCloud1;
     vec4 pCloudDynamicWeather;
     vec4 pWater;
+    vec4 pWaterOptical;
+    vec4 pWaterRefraction;
     vec4 pPreExposure;
     vec4 pVFog0;
     vec4 pVFog1;
@@ -101,6 +103,11 @@ layout(std140, binding = 10) uniform VolumetricFogParams {
 #define uCloudTimeScale pCloudDynamicWeather.w
 #define uWaterAbsorption pWater.xyz
 #define uUnderwaterVolumetricLightStrength pWater.w
+#define uUnderwaterScatterStrength pWaterOptical.x
+#define uUnderwaterScatterAnisotropy pWaterOptical.y
+#define uUnderwaterScatterAnisotropySecondary pWaterOptical.z
+#define uUnderwaterFogDensity pWaterOptical.w
+#define uWaterIOR pWaterRefraction.x
 #define uPreExposure max(pPreExposure.x, 1e-6)
 #define uVFogCenterHeight pVFog0.x
 #define uVFogHeightSpread pVFog0.y
@@ -438,7 +445,7 @@ vec4 UnderwaterVolumetricLight(vec3 worldPos, vec3 worldDir, float dither) {
     float stepLength = rayLength * rSteps;
 
     vec3 shadowLightDir = normalize(uShadowLightDirection);
-    vec3 coeff = uWaterAbsorption + 0.02;
+    vec3 coeff = (uWaterAbsorption + 0.02) * (uUnderwaterFogDensity / 0.1);
     vec3 stepTransmittance = exp(-coeff * stepLength);
     vec3 transmittance = vec3(1.0);
     vec3 scattering = vec3(0.0);
@@ -489,14 +496,15 @@ vec4 UnderwaterVolumetricLight(vec3 worldPos, vec3 worldDir, float dither) {
     }
 
     // DerivativeMain: refracted sun direction through water surface for phase
-    float eta = 1.0 / 1.33; // 1/WATER_REFRACT_IOR
+    float eta = 1.0 / max(uWaterIOR, 1.0);
     vec3 lightVector = refract(normalize(uShadowLightDirection), vec3(0.0, -1.0, 0.0), eta);
     float LdotV = dot(lightVector, worldDir);
-    float phase = atmHenyeyGreensteinPhase(LdotV, 0.8) + atmHenyeyGreensteinPhase(LdotV, 0.6);
+    float phase = atmHenyeyGreensteinPhase(LdotV, uUnderwaterScatterAnisotropy) +
+                  atmHenyeyGreensteinPhase(LdotV, uUnderwaterScatterAnisotropySecondary);
 
     // DerivativeMain: 8.0/coeff * directIlluminance * scattering * phase * STRENGTH
     vec3 env = getLightingEnvironment(uSkyCaptureTex).directIlluminance;
-    vec3 fogColor = 8.0 / coeff * env * oneMinus(0.95 * clamp(uSkyWetness, 0.0, 1.0));
+    vec3 fogColor = uUnderwaterScatterStrength / coeff * env * oneMinus(0.95 * clamp(uSkyWetness, 0.0, 1.0));
     fogColor *= scattering * phase * uUnderwaterVolumetricLightStrength;
 
     return vec4(fogColor, 1.0);

@@ -60,6 +60,8 @@ struct alignas(16) VolumetricFogParams {
     glm::vec4 cloud1;
     glm::vec4 cloudDynamicWeather;
     glm::vec4 water;
+    glm::vec4 waterOptical;
+    glm::vec4 waterRefraction;
     glm::vec4 preExposure;
     glm::vec4 vfog0;
     glm::vec4 vfog1;
@@ -68,7 +70,7 @@ struct alignas(16) VolumetricFogParams {
     glm::ivec4 flags2;
     glm::ivec4 flags3;
 };
-static_assert(sizeof(VolumetricFogParams) == 1056u);
+static_assert(sizeof(VolumetricFogParams) == 1088u);
 } // namespace
 
 void VolumetricPass::init(GameResources& resources) {
@@ -317,7 +319,12 @@ bool VolumetricPass::recordFogPass(RhiCommandList& commandList, const FrameConte
     params.cloud1 = glm::vec4(ctx.weather.cloudWetness, ctx.cloud.planarCoverage, ctx.cloud.planarDensity,
                               ctx.cloud.planarAltitude);
     params.cloudDynamicWeather = glm::vec4(ctx.skyIlluminance.cloudDynamicWeather, ctx.cloud.timeScale);
-    params.water = glm::vec4(0.4f, 0.14f, 0.08f, ctx.volumetric.underwaterLightStrength);
+    params.water = glm::vec4(settings.transparent.waterAbsorption, ctx.volumetric.underwaterLightStrength);
+    params.waterOptical = glm::vec4(settings.transparent.underwaterScatterStrength,
+                                    settings.transparent.underwaterScatterAnisotropy,
+                                    settings.transparent.underwaterScatterAnisotropySecondary,
+                                    settings.transparent.underwaterFogDensity);
+    params.waterRefraction = glm::vec4(settings.transparent.waterIOR, 0.0f, 0.0f, 0.0f);
     params.preExposure = glm::vec4(ctx.preExposure, 0.0f, 0.0f, 0.0f);
     params.vfog0 = glm::vec4(ctx.volumetric.fogCenterHeight, ctx.volumetric.fogHeightSpread,
                              ctx.volumetric.fogNoiseScale, ctx.volumetric.fogLightStrength);

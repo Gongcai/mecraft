@@ -382,12 +382,34 @@ json toJson(const ReflectionSettings& s) {
 void applyTransparentSettings(const json& j, TransparentSettings& s) {
     readBool(j, "waterEffectsEnabled", s.waterEffectsEnabled);
     readBool(j, "compositeEnabled", s.compositeEnabled);
+    readVec3(j, "waterAbsorption", s.waterAbsorption);
+    readFloat(j, "waterIOR", s.waterIOR);
+    readFloat(j, "waterWaveHeight", s.waterWaveHeight);
+    readFloat(j, "waterWaveSpeed", s.waterWaveSpeed);
+    readFloat(j, "waterFogDensity", s.waterFogDensity);
+    readFloat(j, "waterScatterStrength", s.waterScatterStrength);
+    readFloat(j, "waterScatterAnisotropy", s.waterScatterAnisotropy);
+    readFloat(j, "underwaterFogDensity", s.underwaterFogDensity);
+    readFloat(j, "underwaterScatterStrength", s.underwaterScatterStrength);
+    readFloat(j, "underwaterScatterAnisotropy", s.underwaterScatterAnisotropy);
+    readFloat(j, "underwaterScatterAnisotropySecondary", s.underwaterScatterAnisotropySecondary);
 }
 
 json toJson(const TransparentSettings& s) {
     return {
         {"waterEffectsEnabled", s.waterEffectsEnabled},
         {"compositeEnabled", s.compositeEnabled},
+        {"waterAbsorption", toJson(s.waterAbsorption)},
+        {"waterIOR", s.waterIOR},
+        {"waterWaveHeight", s.waterWaveHeight},
+        {"waterWaveSpeed", s.waterWaveSpeed},
+        {"waterFogDensity", s.waterFogDensity},
+        {"waterScatterStrength", s.waterScatterStrength},
+        {"waterScatterAnisotropy", s.waterScatterAnisotropy},
+        {"underwaterFogDensity", s.underwaterFogDensity},
+        {"underwaterScatterStrength", s.underwaterScatterStrength},
+        {"underwaterScatterAnisotropy", s.underwaterScatterAnisotropy},
+        {"underwaterScatterAnisotropySecondary", s.underwaterScatterAnisotropySecondary},
     };
 }
 
