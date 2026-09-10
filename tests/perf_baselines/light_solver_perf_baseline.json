@@ -1,57 +1,57 @@
 {
   "benchmark": "light_solver_perf_test",
   "build": {
-    "config": "Release"
+    "config": "RelWithDebInfo"
   },
-  "captured_at": "2026-08-16",
+  "captured_at": "2026-09-03",
   "cases": [
     {
-      "avg_ms": 10.366865400000002,
+      "avg_ms": 116.55652180000001,
       "avg_nodes_visited": 49497.916666666664,
       "avg_outgoing_nodes": 0.0,
-      "avg_worker_ms": 0.863747010131677,
-      "calls_per_sec": 1160.6094379502167,
+      "avg_worker_ms": 9.70877677599589,
+      "calls_per_sec": 104.63996859545263,
       "checksum": 11,
       "focus": "Full rebuild path dominated by sky/block add propagation",
       "jobs": 12,
-      "max_ms": 10.489225,
-      "median_ms": 10.3393955,
-      "min_ms": 10.320218,
+      "max_ms": 122.268493,
+      "median_ms": 114.6789335,
+      "min_ms": 112.785201,
       "name": "chunk_loaded_rebuild",
-      "ns_per_call": 861616.2916666666,
-      "p95_ms": 10.416948
+      "ns_per_call": 9556577.791666666,
+      "p95_ms": 121.461545
     },
     {
-      "avg_ms": 3.137008,
+      "avg_ms": 51.305846499999994,
       "avg_nodes_visited": 4676.333333333333,
       "avg_outgoing_nodes": 0.0,
-      "avg_worker_ms": 0.261271733045578,
-      "calls_per_sec": 3824.8682093847606,
+      "avg_worker_ms": 4.274558560053507,
+      "calls_per_sec": 234.1536036517659,
       "checksum": 11,
       "focus": "Local block updates with remove/add passes and dirty sky columns",
       "jobs": 12,
-      "max_ms": 3.172549,
-      "median_ms": 3.1373629999999997,
-      "min_ms": 3.087152,
+      "max_ms": 52.083339,
+      "median_ms": 51.248410500000006,
+      "min_ms": 50.328216,
       "name": "block_changed_mixed",
-      "ns_per_call": 261446.91666666663,
-      "p95_ms": 3.170134
+      "ns_per_call": 4270700.875000001,
+      "p95_ms": 52.081149
     },
     {
-      "avg_ms": 11.209441199999997,
+      "avg_ms": 124.8022116,
       "avg_nodes_visited": 55040.0,
       "avg_outgoing_nodes": 0.0,
-      "avg_worker_ms": 0.9339072669545809,
-      "calls_per_sec": 1069.5436916619622,
+      "avg_worker_ms": 10.39843434492747,
+      "calls_per_sec": 96.10567241547038,
       "checksum": 11,
       "focus": "Cross-chunk boundary diff with propagated light removal",
       "jobs": 12,
-      "max_ms": 11.25186,
-      "median_ms": 11.219738,
-      "min_ms": 11.131465,
+      "max_ms": 127.495736,
+      "median_ms": 124.86255700000001,
+      "min_ms": 123.253589,
       "name": "neighbor_boundary_removal",
-      "ns_per_call": 934978.1666666666,
-      "p95_ms": 11.242145
+      "ns_per_call": 10405213.083333334,
+      "p95_ms": 125.564393
     }
   ],
   "focus": "LightSolver solve()/propagateLevel()/getOpacity() baseline",
