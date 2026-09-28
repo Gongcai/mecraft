@@ -529,6 +529,53 @@ bool ItemRegistry::init() {
         s_itemToRenderBlock[id] = def.renderBlock;
     }
 
+    // Wire blocks are connection states, not player items. Keep their legacy
+    // runtime slots reserved, but resolve their names to the matching dust item.
+    for (size_t i = 1; i < BlockRegistry::getBlockCount(); ++i) {
+        const BlockID blockId = static_cast<BlockID>(i);
+        const BlockDef& blockDef = BlockRegistry::getFast(blockId);
+        if (blockDef.redstoneBehavior != "wire" && !blockDef.isWireContainer) {
+            continue;
+        }
+
+        const ItemID legacyItemId = ItemRegistry::fromBlock(blockId);
+        if (legacyItemId == RUNTIME_ID_NULL || legacyItemId >= s_items.size()) {
+            std::cerr << "Redstone wire block has no reserved legacy item slot: "
+                      << BlockRegistry::getNamespacedId(blockId).full() << '\n';
+            s_initializing = false;
+            return false;
+        }
+
+        ItemDef& legacyItem = s_items[legacyItemId];
+        legacyItem.maxStack = 0;
+        legacyItem.placeBlock = RUNTIME_ID_NULL;
+        legacyItem.renderBlock = RUNTIME_ID_NULL;
+        s_itemToPlaceBlock[legacyItemId] = RUNTIME_ID_NULL;
+        s_itemToRenderBlock[legacyItemId] = RUNTIME_ID_NULL;
+
+        const NamespacedId& blockNsId = BlockRegistry::getNamespacedId(blockId);
+        if (blockDef.isWireContainer) {
+            s_idLookup[blockNsId] = RUNTIME_ID_NULL;
+            s_blockToItem[blockId] = RUNTIME_ID_NULL;
+            continue;
+        }
+
+        const NamespacedId& dropItemNsId = BlockRegistry::getBlockDropId(blockId);
+        const auto dropItemIt = s_idLookup.find(dropItemNsId);
+        if (dropItemIt == s_idLookup.end() || dropItemIt->second == RUNTIME_ID_NULL ||
+            dropItemIt->second >= s_items.size() || dropItemIt->second == legacyItemId) {
+            std::cerr << "Redstone wire block must drop a registered dust item: " << blockNsId.full() << '\n';
+            s_initializing = false;
+            return false;
+        }
+
+        const ItemID dustItemId = dropItemIt->second;
+        s_itemIconTextureNames[legacyItemId] = s_itemIconTextureNames[dustItemId];
+        legacyItem.iconItemId = dustItemId;
+        s_idLookup[blockNsId] = dustItemId;
+        s_blockToItem[blockId] = dustItemId;
+    }
+
     // Fix iconTextureName pointers — vector resizes during registerItem()
     // may have invalidated c_str() pointers stored in s_items[].iconTextureName.
     for (size_t i = 0; i < s_items.size(); ++i) {
