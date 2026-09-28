@@ -36,7 +36,7 @@ class ContextAwareWidget final : public UIWidget {
 public:
     UIEventResult onInput(const UIInputEvent&, const UIRenderContext& ctx) override {
         ++m_callCount;
-        return (ctx.screenWidth > 0 && ctx.screenHeight > 0) ? UIEventResult::Handled : UIEventResult::Ignored;
+        return (ctx.uiWidth > 0 && ctx.uiHeight > 0) ? UIEventResult::Handled : UIEventResult::Ignored;
     }
 
     [[nodiscard]] int callCount() const { return m_callCount; }
@@ -71,8 +71,8 @@ class TestScene final : public UIScene {};
 
 int main() {
     UIRenderContext context;
-    context.screenWidth = 300;
-    context.screenHeight = 200;
+    context.uiWidth = 300;
+    context.uiHeight = 200;
 
     UIWidget parent;
     parent.anchor = Anchor::BottomLeft;

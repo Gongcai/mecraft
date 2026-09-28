@@ -25,7 +25,7 @@ public:
     void shutdown();
 
     // Starts the CPU collection phase for one UI pass.
-    void beginFrameCollection(float screenWidth, float screenHeight);
+    void beginFrameCollection(float uiWidth, float uiHeight);
 
     // Collects a text request or records its prepared draw according to context.phase.
     void draw(const UIRenderContext& context, const std::string& text, float x, float y, float scale,
@@ -84,8 +84,8 @@ private:
     RhiBufferHandle m_vertexBuffer;
     uint64_t m_vertexCapacity = 0;
     RhiResourceState m_vertexBufferState = RhiResourceState::VertexBuffer;
-    float m_screenWidth = 1.0f;
-    float m_screenHeight = 1.0f;
+    float m_uiWidth = 1.0f;
+    float m_uiHeight = 1.0f;
     mutable std::vector<DrawRequest> m_requests;
     std::vector<Vertex> m_vertices;
     mutable size_t m_recordIndex = 0;

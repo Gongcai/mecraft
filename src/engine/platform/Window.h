@@ -11,6 +11,11 @@ struct GLFWwindow;
 
 class Window {
 public:
+    struct WindowSize {
+        int width = 0;
+        int height = 0;
+    };
+
     struct FramebufferSize {
         int width = 0;
         int height = 0;
@@ -23,6 +28,7 @@ public:
     [[nodiscard]] bool shouldClose() const;
     void pollEvents();
 
+    [[nodiscard]] WindowSize getWindowSize() const;
     [[nodiscard]] FramebufferSize getFramebufferSize() const;
     [[nodiscard]] int getWidth() const;
     [[nodiscard]] int getHeight() const;

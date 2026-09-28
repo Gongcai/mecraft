@@ -25,8 +25,8 @@ struct UIScaleConfig {
     float autoScale = 1.0f; // Auto-calculated base scale from resolution
     float guiScale = 1.0f; // User-selected GUI scale multiplier
     float effectiveScale = 1.0f; // Final scale = autoScale * guiScale
-    int virtualWidth = 0; // Virtual screen width for layout
-    int virtualHeight = 0; // Virtual screen height for layout
+    int uiWidth = 0; // UI reference width derived from the logical window size.
+    int uiHeight = 0; // UI reference height derived from the logical window size.
 
     // Helper: Get scale for a specific strategy
     [[nodiscard]] float getScaleForStrategy(UIScaleStrategy strategy) const {
@@ -39,9 +39,9 @@ struct UIScaleConfig {
         return effectiveScale;
     }
 
-    // Compute auto scale from screen dimensions (Minecraft-style tiers)
-    [[nodiscard]] static float computeAutoScale(float actualW, float actualH) {
-        const float minDim = std::min(actualW, actualH);
+    // Compute auto scale from logical window dimensions (Minecraft-style tiers).
+    [[nodiscard]] static float computeAutoScale(float windowW, float windowH) {
+        const float minDim = std::min(windowW, windowH);
 
         // Resolution-based auto scaling tiers
         if (minDim >= 2160.0f)
@@ -65,10 +65,10 @@ struct UIScaleConfig {
         return 1.0f;
     }
 
-    // Create config from screen dimensions
-    [[nodiscard]] static UIScaleConfig create(float actualW, float actualH, GUIScale userScale) {
+    // Create config from logical window dimensions.
+    [[nodiscard]] static UIScaleConfig create(float windowW, float windowH, GUIScale userScale) {
         UIScaleConfig config;
-        config.autoScale = computeAutoScale(actualW, actualH);
+        config.autoScale = computeAutoScale(windowW, windowH);
 
         // Resolve user GUI scale
         if (userScale == GUIScale::Auto) {
@@ -78,8 +78,8 @@ struct UIScaleConfig {
         }
 
         config.effectiveScale = config.guiScale;
-        config.virtualWidth = static_cast<int>(std::round(actualW / config.effectiveScale));
-        config.virtualHeight = static_cast<int>(std::round(actualH / config.effectiveScale));
+        config.uiWidth = static_cast<int>(std::round(windowW / config.effectiveScale));
+        config.uiHeight = static_cast<int>(std::round(windowH / config.effectiveScale));
 
         return config;
     }

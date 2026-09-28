@@ -34,7 +34,7 @@ public:
     /// Render gameplay UI overlay.
     void render(const GameplayPresentationSnapshot& snap, RhiDevice& rhiDevice, GameStateMachine& stateMachine);
     UIRenderContext prepareRenderContext(const GameplayPresentationSnapshot& snap, RhiDevice& rhiDevice,
-                                         int surfaceWidth, int surfaceHeight);
+                                         int framebufferWidth, int framebufferHeight);
     bool prepareTextFrame(RhiCommandList& commandList);
     void renderPrepared(const UIRenderContext& context, GameStateMachine& stateMachine);
 

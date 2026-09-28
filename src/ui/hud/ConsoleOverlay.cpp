@@ -139,7 +139,7 @@ void ConsoleOverlay::drawOverlayRect(const UIRenderContext& context, int rectX, 
         glm::vec4 rectRadius;
         glm::vec4 color;
     };
-    const PushConstants push{glm::vec4(context.screenWidth, context.screenHeight, rectX, rectY),
+    const PushConstants push{glm::vec4(context.uiWidth, context.uiHeight, rectX, rectY),
                              glm::vec4(rectW, rectH, 0.0f, 0.0f),
                              glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3])};
     context.commandList->pushConstants(&push, sizeof(push),
@@ -157,15 +157,15 @@ void ConsoleOverlay::renderMessages(double nowSec, const TextRenderer& textRende
         return;
     }
 
-    const int screenW = context.screenWidth;
-    const int screenH = context.screenHeight;
-    if (screenW <= 0 || screenH <= 0) {
+    const int uiW = context.uiWidth;
+    const int uiH = context.uiHeight;
+    if (uiW <= 0 || uiH <= 0) {
         return;
     }
 
     ConsoleDisplayBox::RenderParams params;
-    params.screenW = screenW;
-    params.screenH = screenH;
+    params.uiW = uiW;
+    params.uiH = uiH;
     params.visibleBoxes = m_visibleBoxes;
     params.holdSeconds = m_holdSeconds;
     params.fadeEndSeconds = m_fadeEndSeconds;
@@ -189,30 +189,15 @@ void ConsoleOverlay::renderMessages(double nowSec, const TextRenderer& textRende
     params.successTextColor = style.textSuccess;
 
     m_display.setMaxLines(m_maxLines);
-    const float uiScale = context.pixelScale();
-    RhiRect2D textScissor = context.hasScissor ? context.scissor
-                                               : RhiRect2D{0, 0, static_cast<uint32_t>(screenW * uiScale),
-                                                           static_cast<uint32_t>(screenH * uiScale)};
+    RhiRect2D textScissor = context.fullFramebufferScissor();
     m_display.render(
         nowSec, params,
         [this, &context](int rectX, int rectY, int rectW, int rectH, const std::array<float, 4>& rectColor) {
             drawOverlayRect(context, rectX, rectY, rectW, rectH, rectColor);
         },
-        [&context, record, &textScissor, uiScale](int clipX, int clipY, int clipW, int clipH) {
-            RhiRect2D clip{static_cast<int32_t>(std::floor(static_cast<float>(clipX) * uiScale)),
-                           static_cast<int32_t>(std::floor(static_cast<float>(clipY) * uiScale)),
-                           static_cast<uint32_t>(std::max(0.0f, std::ceil(static_cast<float>(clipW) * uiScale))),
-                           static_cast<uint32_t>(std::max(0.0f, std::ceil(static_cast<float>(clipH) * uiScale)))};
-            if (context.hasScissor) {
-                const int32_t x0 = std::max(clip.x, context.scissor.x);
-                const int32_t y0 = std::max(clip.y, context.scissor.y);
-                const int32_t x1 = std::min(clip.x + static_cast<int32_t>(clip.width),
-                                            context.scissor.x + static_cast<int32_t>(context.scissor.width));
-                const int32_t y1 = std::min(clip.y + static_cast<int32_t>(clip.height),
-                                            context.scissor.y + static_cast<int32_t>(context.scissor.height));
-                clip = {x0, y0, static_cast<uint32_t>(std::max(0, x1 - x0)),
-                        static_cast<uint32_t>(std::max(0, y1 - y0))};
-            }
+        [&context, record, &textScissor](int clipX, int clipY, int clipW, int clipH) {
+            RhiRect2D clip = context.uiRectToFramebufferScissor(static_cast<float>(clipX), static_cast<float>(clipY),
+                                                               static_cast<float>(clipW), static_cast<float>(clipH));
             textScissor = clip;
             if (record) {
                 context.commandList->setScissor(clip);
@@ -231,9 +216,6 @@ void ConsoleOverlay::renderMessages(double nowSec, const TextRenderer& textRende
         });
 
     if (record) {
-        const RhiRect2D parentScissor = context.hasScissor ? context.scissor
-                                                           : RhiRect2D{0, 0, static_cast<uint32_t>(screenW * uiScale),
-                                                                       static_cast<uint32_t>(screenH * uiScale)};
-        context.commandList->setScissor(parentScissor);
+        context.commandList->setScissor(context.fullFramebufferScissor());
     }
 }

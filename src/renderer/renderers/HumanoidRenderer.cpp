@@ -633,16 +633,17 @@ void HumanoidRenderer::renderPreparedForward(RhiCommandList& commandList, const 
 }
 
 void HumanoidRenderer::renderInventoryPreview(RhiCommandList& commandList, const float x, const float y,
-                                              const float width, const float height, const float uiScale,
+                                              const float width, const float height, const float framebufferScaleX,
+                                              const float framebufferScaleY,
                                               const float pointerX, const float pointerY, const float timeSeconds,
-                                              const int screenWidth, const int screenHeight) {
-    if (uiScale <= 0.0f || width <= 0.0f || height <= 0.0f) {
+                                              const int framebufferWidth, const int framebufferHeight) {
+    if (framebufferScaleX <= 0.0f || framebufferScaleY <= 0.0f || width <= 0.0f || height <= 0.0f) {
         return;
     }
-    const int32_t viewportX = static_cast<int32_t>(std::lround(x * uiScale));
-    const int32_t viewportY = static_cast<int32_t>(std::lround(y * uiScale));
-    const uint32_t viewportW = static_cast<uint32_t>(std::max(1l, std::lround(width * uiScale)));
-    const uint32_t viewportH = static_cast<uint32_t>(std::max(1l, std::lround(height * uiScale)));
+    const int32_t viewportX = static_cast<int32_t>(std::lround(x * framebufferScaleX));
+    const int32_t viewportY = static_cast<int32_t>(std::lround(y * framebufferScaleY));
+    const uint32_t viewportW = static_cast<uint32_t>(std::max(1l, std::lround(width * framebufferScaleX)));
+    const uint32_t viewportH = static_cast<uint32_t>(std::max(1l, std::lround(height * framebufferScaleY)));
     const RhiRect2D previewRect{viewportX, viewportY, viewportW, viewportH};
     commandList.clearDepthAttachment(1.0f, previewRect);
     commandList.setViewport({static_cast<float>(viewportX), static_cast<float>(viewportY),
@@ -714,8 +715,8 @@ void HumanoidRenderer::renderInventoryPreview(RhiCommandList& commandList, const
     drawPart(HumanoidBodyPart::RightLeg, torso * glm::translate(glm::mat4(1.0f), glm::vec3(-0.125f, -0.375f, 0.0f)));
     drawPart(HumanoidBodyPart::LeftLeg, torso * glm::translate(glm::mat4(1.0f), glm::vec3(0.125f, -0.375f, 0.0f)));
 
-    const uint32_t fullWidth = static_cast<uint32_t>(std::max(1l, std::lround(screenWidth * uiScale)));
-    const uint32_t fullHeight = static_cast<uint32_t>(std::max(1l, std::lround(screenHeight * uiScale)));
+    const uint32_t fullWidth = static_cast<uint32_t>(std::max(1, framebufferWidth));
+    const uint32_t fullHeight = static_cast<uint32_t>(std::max(1, framebufferHeight));
     commandList.setViewport({0.0f, 0.0f, static_cast<float>(fullWidth), static_cast<float>(fullHeight), 0.0f, 1.0f});
     commandList.setScissor({0, 0, fullWidth, fullHeight});
 }

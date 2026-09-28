@@ -22,8 +22,8 @@ void CraftingGridControl::renderSelf(const UIRenderContext& context) const {
     }
 
     auto* self = const_cast<CraftingGridControl*>(this);
-    self->m_cachedScreenWidth = context.screenWidth;
-    self->m_cachedScreenHeight = context.screenHeight;
+    self->m_cachedUiWidth = context.uiWidth;
+    self->m_cachedUiHeight = context.uiHeight;
     self->syncSlotPositions();
     m_itemGrid.render(context);
 }
@@ -165,17 +165,18 @@ void CraftingGridControl::clearActivation() {
     m_itemGrid.clearLastActivatedIndex();
 }
 
-void CraftingGridControl::setPanelOrigin(float panelX, float panelY, float scale) {
+void CraftingGridControl::setPanelOrigin(float panelX, float panelY, float panelHeight, float scale) {
     m_panelX = panelX;
     m_panelY = panelY;
+    m_panelHeight = panelHeight;
     m_panelScale = scale;
 }
 
 void CraftingGridControl::syncSlotPositions() {
     const float scale = m_panelScale;
     const int baseX = static_cast<int>(std::lround(m_panelX + m_layout.offsetX * scale));
-    const int baseY = static_cast<int>(std::lround(m_panelY + m_layout.offsetY * scale));
     const int slotSize = std::max(1, static_cast<int>(std::lround(m_layout.slotSize * scale)));
+    const int baseY = static_cast<int>(std::lround(m_panelY + m_panelHeight - m_layout.offsetY * scale)) - slotSize;
     const int colStep = std::max(1, static_cast<int>(std::lround((m_layout.slotSize + m_layout.columnGap) * scale)));
     const int rowStep = std::max(1, static_cast<int>(std::lround((m_layout.slotSize + m_layout.rowGap) * scale)));
 
@@ -185,7 +186,7 @@ void CraftingGridControl::syncSlotPositions() {
     for (int row = 0; row < gridSize; ++row) {
         for (int col = 0; col < gridSize; ++col) {
             const int idx = row * gridSize + col;
-            slots[static_cast<size_t>(idx)] = {baseX + col * colStep, baseY + row * rowStep, slotSize,
+            slots[static_cast<size_t>(idx)] = {baseX + col * colStep, baseY - row * rowStep, slotSize,
                                                static_cast<int>(m_slots[static_cast<size_t>(idx)].itemId),
                                                static_cast<int>(m_slots[static_cast<size_t>(idx)].count)};
         }
@@ -193,8 +194,9 @@ void CraftingGridControl::syncSlotPositions() {
 
     const int resultIndex = getResultSlotIndex();
     const int resultX = static_cast<int>(std::lround(m_panelX + m_layout.resultOffsetX * scale));
-    const int resultY = static_cast<int>(std::lround(m_panelY + m_layout.resultOffsetY * scale));
     const int resultSize = std::max(1, static_cast<int>(std::lround(m_layout.resultSlotSize * scale)));
+    const int resultY =
+        static_cast<int>(std::lround(m_panelY + m_panelHeight - m_layout.resultOffsetY * scale)) - resultSize;
     slots[static_cast<size_t>(resultIndex)] = {resultX, resultY, resultSize,
                                                static_cast<int>(m_slots[static_cast<size_t>(resultIndex)].itemId),
                                                static_cast<int>(m_slots[static_cast<size_t>(resultIndex)].count)};

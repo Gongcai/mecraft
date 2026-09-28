@@ -86,6 +86,16 @@ void Window::pollEvents() {
     glfwPollEvents();
 }
 
+Window::WindowSize Window::getWindowSize() const {
+    if (m_window == nullptr) {
+        return {m_windowedWidth, m_windowedHeight};
+    }
+    int windowWidth = m_windowedWidth;
+    int windowHeight = m_windowedHeight;
+    glfwGetWindowSize(m_window, &windowWidth, &windowHeight);
+    return {windowWidth, windowHeight};
+}
+
 Window::FramebufferSize Window::getFramebufferSize() const {
     if (m_window == nullptr) {
         return {m_width, m_height};

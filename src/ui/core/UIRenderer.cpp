@@ -215,6 +215,11 @@ float UIRenderer::getInventoryCountTextScale() const {
 
 void UIRenderer::setGUIScale(GUIScale scale) {
     m_guiScale = scale;
+    if (m_lastSceneContext.windowWidth > 0 && m_lastSceneContext.windowHeight > 0 &&
+        m_lastSceneContext.framebufferWidth > 0 && m_lastSceneContext.framebufferHeight > 0) {
+        updateSurfaceMetrics(m_lastSceneContext, m_windowWidth, m_windowHeight, m_framebufferWidth,
+                             m_framebufferHeight);
+    }
 }
 
 GUIScale UIRenderer::getGUIScale() const {
@@ -282,20 +287,14 @@ UIEventResult UIRenderer::routeUIInput(const UIInputEvent& event) const {
     UIEventResult aggregate = UIEventResult::Ignored;
     UIInputEvent refEvent = event;
 
-    // Active scene has priority (menu screens overlay gameplay controls)
-    if (m_activeScene && m_activeScene->visible) {
-        if (m_lastSceneContext.screenWidth <= 0 || m_lastSceneContext.screenHeight <= 0) {
-            const float vpW = static_cast<float>(m_surfaceWidth);
-            const float vpH = static_cast<float>(m_surfaceHeight);
-            m_lastSceneContext.scaleConfig = UIScaleConfig::create(vpW, vpH, m_guiScale);
-            m_lastSceneContext.screenWidth = m_lastSceneContext.scaleConfig.virtualWidth;
-            m_lastSceneContext.screenHeight = m_lastSceneContext.scaleConfig.virtualHeight;
-        }
+    if (m_lastSceneContext.uiWidth <= 0 || m_lastSceneContext.uiHeight <= 0) {
+        updateSurfaceMetrics(m_lastSceneContext, m_windowWidth, m_windowHeight, m_framebufferWidth,
+                             m_framebufferHeight);
     }
 
-    const float pixelScale = m_lastSceneContext.pixelScale();
-    refEvent.x /= pixelScale;
-    refEvent.y /= pixelScale;
+    const glm::vec2 pointer = m_lastSceneContext.windowToUi({event.x, event.y});
+    refEvent.x = pointer.x;
+    refEvent.y = pointer.y;
     m_lastSceneContext.resources = m_resources;
     m_lastSceneContext.rhiDevice = m_rhiDevice;
     m_lastSceneContext.textRenderer = &m_text;
@@ -506,11 +505,15 @@ void UIRenderer::setCraftingSystem(const CraftingSystem* craftingSystem) {
     m_inventoryPanel.setCraftingSystem(craftingSystem);
 }
 
-UIRenderContext UIRenderer::prepareRenderContext(const int surfaceWidth, const int surfaceHeight, RhiDevice& rhiDevice,
-                                                 const Inventory& inventory, const PlayerStatsData& playerStats,
+UIRenderContext UIRenderer::prepareRenderContext(const int windowWidth, const int windowHeight,
+                                                 const int framebufferWidth, const int framebufferHeight,
+                                                 RhiDevice& rhiDevice, const Inventory& inventory,
+                                                 const PlayerStatsData& playerStats,
                                                  const InputSnapshot& inputSnapshot) {
-    m_surfaceWidth = std::max(1, surfaceWidth);
-    m_surfaceHeight = std::max(1, surfaceHeight);
+    m_windowWidth = std::max(1, windowWidth);
+    m_windowHeight = std::max(1, windowHeight);
+    m_framebufferWidth = std::max(1, framebufferWidth);
+    m_framebufferHeight = std::max(1, framebufferHeight);
 
     m_hotbar.setInventorySource(&inventory);
     m_inventoryPanel.setInventorySource(&inventory);
@@ -519,8 +522,8 @@ UIRenderContext UIRenderer::prepareRenderContext(const int surfaceWidth, const i
     m_creativeInventoryPanel.setInventorySource(&inventory);
     m_commandInput.visible = (m_commandInputRequested);
 
-    UIRenderContext context =
-        makeContextFromSurface(m_surfaceWidth, m_surfaceHeight, inventory, playerStats, inputSnapshot);
+    UIRenderContext context = makeContextFromSizes(m_windowWidth, m_windowHeight, m_framebufferWidth,
+                                                   m_framebufferHeight, inventory, playerStats, inputSnapshot);
     if (m_activeScene && m_activeScene->visible) {
         prepareBackdropBlur(context, rhiDevice);
     }
@@ -541,16 +544,12 @@ void UIRenderer::renderPrepared(const UIRenderContext& context) {
     m_commandInputRequested = false;
 }
 
-UIRenderContext UIRenderer::makeContextFromSurface(const int surfaceWidth, const int surfaceHeight,
-                                                   const Inventory& inventory, const PlayerStatsData& playerStats,
-                                                   const InputSnapshot& inputSnapshot) const {
+UIRenderContext UIRenderer::makeContextFromSizes(const int windowWidth, const int windowHeight,
+                                                 const int framebufferWidth, const int framebufferHeight,
+                                                 const Inventory& inventory, const PlayerStatsData& playerStats,
+                                                 const InputSnapshot& inputSnapshot) const {
     UIRenderContext context;
-    const float actualW = static_cast<float>(std::max(1, surfaceWidth));
-    const float actualH = static_cast<float>(std::max(1, surfaceHeight));
-
-    context.scaleConfig = UIScaleConfig::create(actualW, actualH, m_guiScale);
-    context.screenWidth = context.scaleConfig.virtualWidth;
-    context.screenHeight = context.scaleConfig.virtualHeight;
+    updateSurfaceMetrics(context, windowWidth, windowHeight, framebufferWidth, framebufferHeight);
 
     context.timeSeconds = static_cast<float>(Time::getRawTime());
     context.resources = m_resources;
@@ -562,8 +561,9 @@ UIRenderContext UIRenderer::makeContextFromSurface(const int surfaceWidth, const
     context.textRenderer = &m_text;
     context.commandInputText = &m_commandInput.getText();
     context.commandInputVisible = m_commandInput.visible;
-    context.pointerX = inputSnapshot.mousePosition.x / context.pixelScale();
-    context.pointerY = inputSnapshot.mousePosition.y / context.pixelScale();
+    const glm::vec2 pointer = context.windowToUi(inputSnapshot.mousePosition);
+    context.pointerX = pointer.x;
+    context.pointerY = pointer.y;
     context.hasDraggedItem = inputSnapshot.draggedItem.active;
     context.draggedItemId = inputSnapshot.draggedItem.itemId;
     context.theme = &m_theme;
@@ -591,20 +591,16 @@ RhiDevice* UIRenderer::getRhiDevice() const {
     return m_rhiDevice;
 }
 
-UIRenderContext UIRenderer::prepareSceneContext(const int surfaceWidth, const int surfaceHeight, RhiDevice& rhiDevice,
-                                                const InputSnapshot& inputSnapshot) {
-    const int windowW = std::max(1, surfaceWidth);
-    const int windowH = std::max(1, surfaceHeight);
-    m_surfaceWidth = windowW;
-    m_surfaceHeight = windowH;
+UIRenderContext UIRenderer::prepareSceneContext(const int windowWidth, const int windowHeight,
+                                                const int framebufferWidth, const int framebufferHeight,
+                                                RhiDevice& rhiDevice, const InputSnapshot& inputSnapshot) {
+    m_windowWidth = std::max(1, windowWidth);
+    m_windowHeight = std::max(1, windowHeight);
+    m_framebufferWidth = std::max(1, framebufferWidth);
+    m_framebufferHeight = std::max(1, framebufferHeight);
 
     UIRenderContext context;
-    const float actualW = static_cast<float>(windowW);
-    const float actualH = static_cast<float>(windowH);
-
-    context.scaleConfig = UIScaleConfig::create(actualW, actualH, m_guiScale);
-    context.screenWidth = context.scaleConfig.virtualWidth;
-    context.screenHeight = context.scaleConfig.virtualHeight;
+    updateSurfaceMetrics(context, m_windowWidth, m_windowHeight, m_framebufferWidth, m_framebufferHeight);
     context.timeSeconds = static_cast<float>(Time::getRawTime());
     context.resources = m_resources;
     context.rhiDevice = m_rhiDevice;
@@ -614,8 +610,9 @@ UIRenderContext UIRenderer::prepareSceneContext(const int surfaceWidth, const in
     context.commandInputVisible = m_commandInput.visible;
     context.theme = &m_theme;
     context.localeManager = m_localeManager;
-    context.pointerX = inputSnapshot.mousePosition.x / context.pixelScale();
-    context.pointerY = inputSnapshot.mousePosition.y / context.pixelScale();
+    const glm::vec2 pointer = context.windowToUi(inputSnapshot.mousePosition);
+    context.pointerX = pointer.x;
+    context.pointerY = pointer.y;
     if (m_activeScene && m_activeScene->visible) {
         prepareBackdropBlur(context, rhiDevice);
     }
@@ -623,6 +620,18 @@ UIRenderContext UIRenderer::prepareSceneContext(const int surfaceWidth, const in
     collectSceneText(context);
     m_lastSceneContext = context;
     return context;
+}
+
+void UIRenderer::updateSurfaceMetrics(UIRenderContext& context, const int windowWidth, const int windowHeight,
+                                     const int framebufferWidth, const int framebufferHeight) const {
+    context.windowWidth = std::max(1, windowWidth);
+    context.windowHeight = std::max(1, windowHeight);
+    context.framebufferWidth = std::max(1, framebufferWidth);
+    context.framebufferHeight = std::max(1, framebufferHeight);
+    context.scaleConfig = UIScaleConfig::create(static_cast<float>(context.windowWidth),
+                                                static_cast<float>(context.windowHeight), m_guiScale);
+    context.uiWidth = context.scaleConfig.uiWidth;
+    context.uiHeight = context.scaleConfig.uiHeight;
 }
 
 void UIRenderer::renderSceneOnlyPrepared(const UIRenderContext& context) {
@@ -637,7 +646,7 @@ void UIRenderer::renderSceneOnlyPrepared(const UIRenderContext& context) {
 }
 
 void UIRenderer::collectGameplayText(UIRenderContext& context) {
-    m_text.beginFrameCollection(static_cast<float>(context.screenWidth), static_cast<float>(context.screenHeight));
+    m_text.beginFrameCollection(static_cast<float>(context.uiWidth), static_cast<float>(context.uiHeight));
     context.phase = UIRenderPhase::CollectText;
     context.commandList = nullptr;
     renderControls(context);
@@ -645,7 +654,7 @@ void UIRenderer::collectGameplayText(UIRenderContext& context) {
 }
 
 void UIRenderer::collectSceneText(UIRenderContext& context) {
-    m_text.beginFrameCollection(static_cast<float>(context.screenWidth), static_cast<float>(context.screenHeight));
+    m_text.beginFrameCollection(static_cast<float>(context.uiWidth), static_cast<float>(context.uiHeight));
     context.phase = UIRenderPhase::CollectText;
     context.commandList = nullptr;
     if (m_activeScene && m_activeScene->visible) {
@@ -680,12 +689,12 @@ void UIRenderer::renderDeathOverlay(const UIRenderContext& context) {
     m_deathBackdrop.anchor = Anchor::BottomLeft;
     m_deathBackdrop.anchorOffsetX = 0.0f;
     m_deathBackdrop.anchorOffsetY = 0.0f;
-    m_deathBackdrop.width = static_cast<float>(context.screenWidth);
-    m_deathBackdrop.height = static_cast<float>(context.screenHeight);
+    m_deathBackdrop.width = static_cast<float>(context.uiWidth);
+    m_deathBackdrop.height = static_cast<float>(context.uiHeight);
     m_deathBackdrop.render(context);
 
-    const float screenW = static_cast<float>(context.screenWidth);
-    const float screenH = static_cast<float>(context.screenHeight);
+    const float screenW = static_cast<float>(context.uiWidth);
+    const float screenH = static_cast<float>(context.uiHeight);
 
     const float titleW = context.textRenderer ? m_deathTitle.measureTextWidth(*context.textRenderer) : 0.0f;
     const float titleH = context.textRenderer ? m_deathTitle.measureTextHeight(*context.textRenderer) : 0.0f;
@@ -1206,8 +1215,8 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
     context.backdropBlurWidth = 0;
     context.backdropBlurHeight = 0;
 
-    const int sourceWidth = std::max(1, context.screenWidth);
-    const int sourceHeight = std::max(1, context.screenHeight);
+    const int sourceWidth = std::max(1, context.uiWidth);
+    const int sourceHeight = std::max(1, context.uiHeight);
 
     if (!ensureBackdropBlurTargets(sourceWidth, sourceHeight, rhiDevice)) {
         return;

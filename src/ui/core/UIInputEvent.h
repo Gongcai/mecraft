@@ -50,6 +50,7 @@ enum class UIPointerButton {
 
 struct UIInputEvent {
     UIInputEventType type = UIInputEventType::PointerMove;
+    // Pointer events dispatched to widgets use bottom-left-origin UI coordinates.
     float x = 0.0f;
     float y = 0.0f;
     UIPointerButton button = UIPointerButton::None;

@@ -51,8 +51,8 @@ UIInputEvent pointerEvent(UIInputEventType type, float x, float y) {
 
 int main() {
     UIRenderContext ctx{};
-    ctx.screenWidth = 200;
-    ctx.screenHeight = 200;
+    ctx.uiWidth = 200;
+    ctx.uiHeight = 200;
 
     TestScrollArea area;
     area.anchor = Anchor::BottomLeft;
@@ -63,7 +63,7 @@ int main() {
     UIInputEvent wheelDown;
     wheelDown.type = UIInputEventType::Scroll;
     wheelDown.x = 50.0f;
-    wheelDown.y = 150.0f;
+    wheelDown.y = 50.0f;
     wheelDown.scrollY = -1.0f;
     if (area.onInput(wheelDown, ctx) != UIEventResult::Handled) {
         return fail("wheel scroll inside area should be handled");
@@ -74,16 +74,16 @@ int main() {
 
     area.setScrollOffset(0.0f);
 
-    constexpr float kThumbCenterScreenYAtTop = 200.0f - (100.0f - (100.0f / 300.0f * 100.0f) * 0.5f);
+    constexpr float kThumbCenterUiY = 100.0f - (100.0f / 300.0f * 100.0f) * 0.5f;
     constexpr float kThumbTravel = 100.0f - (100.0f / 300.0f * 100.0f);
     constexpr float kDragDistance = 30.0f;
     constexpr float kExpectedOffset = (kDragDistance / kThumbTravel) * 200.0f;
 
-    if (area.onInput(pointerEvent(UIInputEventType::PointerDown, 96.0f, kThumbCenterScreenYAtTop), ctx) !=
+    if (area.onInput(pointerEvent(UIInputEventType::PointerDown, 96.0f, kThumbCenterUiY), ctx) !=
         UIEventResult::Consumed) {
-        return fail("pointer down on top-positioned thumb should start drag");
+        return fail("pointer down on top-positioned scrollbar thumb should start drag");
     }
-    if (area.onInput(pointerEvent(UIInputEventType::PointerMove, 96.0f, kThumbCenterScreenYAtTop + kDragDistance),
+    if (area.onInput(pointerEvent(UIInputEventType::PointerMove, 96.0f, kThumbCenterUiY - kDragDistance),
                      ctx) != UIEventResult::Consumed) {
         return fail("pointer move while dragging should be consumed");
     }
@@ -91,7 +91,7 @@ int main() {
         return fail("dragging thumb downward should increase scroll offset proportionally");
     }
 
-    if (area.onInput(pointerEvent(UIInputEventType::PointerUp, 96.0f, kThumbCenterScreenYAtTop + kDragDistance), ctx) !=
+    if (area.onInput(pointerEvent(UIInputEventType::PointerUp, 96.0f, kThumbCenterUiY - kDragDistance), ctx) !=
         UIEventResult::Consumed) {
         return fail("pointer up should finish scrollbar drag");
     }
@@ -110,7 +110,7 @@ int main() {
     InputHitWidget* inputChildPtr = inputChild.get();
     clippedArea.addChild(std::move(inputChild));
 
-    if (clippedArea.onInput(pointerEvent(UIInputEventType::PointerDown, 10.0f, 90.0f), ctx) != UIEventResult::Ignored) {
+    if (clippedArea.onInput(pointerEvent(UIInputEventType::PointerDown, 10.0f, 110.0f), ctx) != UIEventResult::Ignored) {
         return fail("input outside scroll viewport should be ignored even when it hits scrolled child bounds");
     }
     if (inputChildPtr->hitCount != 0) {
@@ -130,11 +130,11 @@ int main() {
     overlayChild->height = 20.0f;
     overlayArea.addChild(std::move(overlayChild));
 
-    if (overlayArea.onOverlayInput(pointerEvent(UIInputEventType::PointerMove, 10.0f, 150.0f), ctx) !=
+    if (overlayArea.onOverlayInput(pointerEvent(UIInputEventType::PointerMove, 10.0f, 50.0f), ctx) !=
         UIEventResult::Handled) {
         return fail("overlay input should use scrolled child position");
     }
-    if (overlayArea.onOverlayInput(pointerEvent(UIInputEventType::PointerMove, 10.0f, 190.0f), ctx) !=
+    if (overlayArea.onOverlayInput(pointerEvent(UIInputEventType::PointerMove, 10.0f, 10.0f), ctx) !=
         UIEventResult::Ignored) {
         return fail("overlay input should not use unscrolled child position");
     }

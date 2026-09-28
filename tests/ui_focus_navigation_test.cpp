@@ -59,8 +59,8 @@ int main() {
     scene.addRoot(std::move(second));
 
     UIRenderContext context;
-    context.screenWidth = 120;
-    context.screenHeight = 100;
+    context.uiWidth = 120;
+    context.uiHeight = 100;
     scene.setInputContext(context);
     scene.enterScene();
 
@@ -84,9 +84,9 @@ int main() {
         return fail("activate should click currently focused widget only");
     }
 
-    // Pointer coordinates are top-left origin. This lands inside the first button.
+    // Pointer coordinates use a bottom-left origin. This lands inside the first button.
     const UIEventResult pointerDown =
-        scene.onInput({UIInputEventType::PointerDown, 20.0f, 80.0f, UIPointerButton::Primary}, context);
+        scene.onInput({UIInputEventType::PointerDown, 20.0f, 20.0f, UIPointerButton::Primary}, context);
     if (pointerDown != UIEventResult::Handled) {
         return fail("pointer down inside button should be handled");
     }

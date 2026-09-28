@@ -373,8 +373,10 @@ void MainMenuAppState::render(double frameTime) {
     m_skyboxRenderer.render(static_cast<int>(frame.width), static_cast<int>(frame.height),
                             static_cast<float>(frame.width) / static_cast<float>(frame.height), m_skyboxYaw, 10.0f,
                             m_deps.rhiDevice);
+    const Window::WindowSize windowSize = m_deps.window.getWindowSize();
     UIRenderContext sceneContext = m_deps.uiRenderer.prepareSceneContext(
-        static_cast<int>(frame.width), static_cast<int>(frame.height), m_deps.rhiDevice, m_deps.input.snapshot());
+        windowSize.width, windowSize.height, static_cast<int>(frame.width), static_cast<int>(frame.height),
+        m_deps.rhiDevice, m_deps.input.snapshot());
 
     if (!beginMenuOverlayPass(m_deps.rhiDevice, m_deps.commandListPool, frame.width, frame.height, m_deps.uiRenderer,
                               commandList)) {

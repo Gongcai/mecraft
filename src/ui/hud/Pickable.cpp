@@ -33,14 +33,7 @@ static_assert(sizeof(PickableSolidPushConstants) == 48u);
 static_assert(sizeof(PickableImagePushConstants) == 64u);
 
 [[nodiscard]] RhiRect2D pickableScissor(const UIRenderContext& context) {
-    if (context.hasScissor) {
-        return context.scissor;
-    }
-    return {0, 0,
-            static_cast<uint32_t>(
-                std::max(1.0f, std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
-            static_cast<uint32_t>(
-                std::max(1.0f, std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))};
+    return context.fullFramebufferScissor();
 }
 
 } // namespace
@@ -61,7 +54,7 @@ int Pickable::hitTest(const SlotInfo* slots, const int count, const float mouseX
 void Pickable::render(const SlotInfo* slots, const int count, const int hoveredIndex, const RenderParams& params,
                       const UIRenderContext& context, const GameResources& resources, const TextureAtlas& itemIconAtlas,
                       const TextureAtlas& itemTextureAtlas) {
-    if (slots == nullptr || count <= 0 || context.screenWidth <= 0 || context.screenHeight <= 0) {
+    if (slots == nullptr || count <= 0 || context.uiWidth <= 0 || context.uiHeight <= 0) {
         return;
     }
 
@@ -73,8 +66,8 @@ void Pickable::render(const SlotInfo* slots, const int count, const int hoveredI
         if (hoveredIndex >= 0 && hoveredIndex < count && context.panelSolidPipeline.isValid()) {
             const SlotInfo& slot = slots[hoveredIndex];
             const PickableSolidPushConstants pushConstants{
-                glm::vec4(static_cast<float>(context.screenWidth), static_cast<float>(context.screenHeight),
-                          static_cast<float>(slot.x), static_cast<float>(context.screenHeight - (slot.y + slot.size))),
+                glm::vec4(static_cast<float>(context.uiWidth), static_cast<float>(context.uiHeight),
+                          static_cast<float>(slot.x), static_cast<float>(slot.y)),
                 glm::vec4(static_cast<float>(slot.size), static_cast<float>(slot.size), 0.0f, 0.0f),
                 glm::vec4(params.hoverBgColor[0], params.hoverBgColor[1], params.hoverBgColor[2],
                           params.hoverBgColor[3])};
@@ -125,9 +118,9 @@ void Pickable::render(const SlotInfo* slots, const int count, const int hoveredI
 
                     const auto uv = atlas.getUV(tileIndex);
                     const PickableImagePushConstants pushConstants{
-                        glm::vec4(static_cast<float>(context.screenWidth), static_cast<float>(context.screenHeight),
+                        glm::vec4(static_cast<float>(context.uiWidth), static_cast<float>(context.uiHeight),
                                   static_cast<float>(slot.x),
-                                  static_cast<float>(context.screenHeight - (slot.y + slot.size))),
+                                  static_cast<float>(slot.y)),
                         glm::vec4(static_cast<float>(slot.size), static_cast<float>(slot.size), 0.0f, 0.0f),
                         glm::vec4(uv.first.x, uv.first.y, uv.second.x, uv.second.y),
                         glm::vec4(params.iconTintColor[0], params.iconTintColor[1], params.iconTintColor[2],
@@ -160,8 +153,7 @@ void Pickable::render(const SlotInfo* slots, const int count, const int hoveredI
         const float textWidth = textRenderer->measureText(countString, textScale).width;
         const float textX =
             static_cast<float>(slots[i].x + slots[i].size) - textWidth + params.countTextOffsetX * slotSize;
-        const float textY = static_cast<float>(context.screenHeight - (slots[i].y + slots[i].size)) +
-                            params.countTextOffsetY * slotSize;
+        const float textY = static_cast<float>(slots[i].y) + params.countTextOffsetY * slotSize;
         textRenderer->draw(context, countString, textX, textY, textScale, kTextColor);
     }
 }

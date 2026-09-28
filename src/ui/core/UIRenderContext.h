@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <string>
 
@@ -35,9 +37,12 @@ struct PlayerStatsData {
 
 struct UIRenderContext {
     UIRenderPhase phase = UIRenderPhase::Record;
-    // Screen dimensions (physical pixels)
-    int screenWidth = 0;
-    int screenHeight = 0;
+    int windowWidth = 0; // Logical GLFW window dimensions.
+    int windowHeight = 0;
+    int framebufferWidth = 0; // Physical framebuffer dimensions.
+    int framebufferHeight = 0;
+    int uiWidth = 0; // Bottom-left-origin UI reference dimensions.
+    int uiHeight = 0;
 
     // Unified scale configuration
     UIScaleConfig scaleConfig;
@@ -52,7 +57,7 @@ struct UIRenderContext {
     const TextRenderer* textRenderer = nullptr;
     const std::string* commandInputText = nullptr;
     bool commandInputVisible = false;
-    float pointerX = 0.0f;
+    float pointerX = 0.0f; // Bottom-left-origin UI reference coordinates.
     float pointerY = 0.0f;
     bool hasDraggedItem = false;
     int draggedItemId = 0;
@@ -68,17 +73,63 @@ struct UIRenderContext {
     const UIRenderer* uiRenderer = nullptr;
     RhiCommandList* commandList = nullptr;
     bool hasScissor = false;
-    RhiRect2D scissor;
+    RhiRect2D scissor; // Bottom-left-origin physical framebuffer pixels.
     bool backdropBlurPrepared = false;
     int backdropSourceWidth = 0;
     int backdropSourceHeight = 0;
     int backdropBlurWidth = 0;
     int backdropBlurHeight = 0;
 
-    // Helper: Get anchor position in virtual coordinates
+    // Converts a GLFW top-left-origin window cursor position into UI reference coordinates.
+    [[nodiscard]] glm::vec2 windowToUi(const glm::vec2& point) const {
+        const float safeWindowWidth = static_cast<float>(std::max(1, windowWidth));
+        const float safeWindowHeight = static_cast<float>(std::max(1, windowHeight));
+        const float width = static_cast<float>(std::max(1, uiWidth));
+        const float height = static_cast<float>(std::max(1, uiHeight));
+        return {point.x * width / safeWindowWidth, height - point.y * height / safeWindowHeight};
+    }
+
+    [[nodiscard]] float uiToFramebufferScaleX() const {
+        return uiWidth > 0 ? static_cast<float>(framebufferWidth) / static_cast<float>(uiWidth) : 1.0f;
+    }
+
+    [[nodiscard]] float uiToFramebufferScaleY() const {
+        return uiHeight > 0 ? static_cast<float>(framebufferHeight) / static_cast<float>(uiHeight) : 1.0f;
+    }
+
+    [[nodiscard]] RhiRect2D fullFramebufferScissor() const {
+        if (hasScissor) {
+            return scissor;
+        }
+        return {0, 0, static_cast<uint32_t>(std::max(1, framebufferWidth)),
+                static_cast<uint32_t>(std::max(1, framebufferHeight))};
+    }
+
+    // Converts a bottom-left-origin UI rectangle into a clipped framebuffer scissor.
+    [[nodiscard]] RhiRect2D uiRectToFramebufferScissor(float x, float y, float width, float height) const {
+        const float scaleX = uiToFramebufferScaleX();
+        const float scaleY = uiToFramebufferScaleY();
+        const int32_t x0 = static_cast<int32_t>(std::floor(x * scaleX));
+        const int32_t y0 = static_cast<int32_t>(std::floor(y * scaleY));
+        const int32_t x1 = static_cast<int32_t>(std::ceil((x + width) * scaleX));
+        const int32_t y1 = static_cast<int32_t>(std::ceil((y + height) * scaleY));
+        const RhiRect2D rect{x0, y0, static_cast<uint32_t>(std::max(0, x1 - x0)),
+                             static_cast<uint32_t>(std::max(0, y1 - y0))};
+        const RhiRect2D clip = fullFramebufferScissor();
+        const int32_t clipX0 = std::max(rect.x, clip.x);
+        const int32_t clipY0 = std::max(rect.y, clip.y);
+        const int32_t clipX1 = std::min(rect.x + static_cast<int32_t>(rect.width),
+                                        clip.x + static_cast<int32_t>(clip.width));
+        const int32_t clipY1 = std::min(rect.y + static_cast<int32_t>(rect.height),
+                                        clip.y + static_cast<int32_t>(clip.height));
+        return {clipX0, clipY0, static_cast<uint32_t>(std::max(0, clipX1 - clipX0)),
+                static_cast<uint32_t>(std::max(0, clipY1 - clipY0))};
+    }
+
+    // Helper: Get anchor position in UI coordinates.
     [[nodiscard]] glm::vec2 getAnchorPosition(Anchor anchor) const {
-        const float w = static_cast<float>(scaleConfig.virtualWidth);
-        const float h = static_cast<float>(scaleConfig.virtualHeight);
+        const float w = static_cast<float>(uiWidth);
+        const float h = static_cast<float>(uiHeight);
 
         switch (anchor) {
         case Anchor::TopLeft: return {0.0f, h};
@@ -99,7 +150,4 @@ struct UIRenderContext {
         return scaleConfig.getScaleForStrategy(strategy);
     }
 
-    [[nodiscard]] float pixelScale() const {
-        return scaleConfig.effectiveScale > 0.0f ? scaleConfig.effectiveScale : 1.0f;
-    }
 };

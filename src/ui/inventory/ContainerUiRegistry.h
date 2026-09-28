@@ -17,7 +17,7 @@ struct ContainerSlotGroupDef {
     int columns = 1;
     int rows = 1;
     float x = 0.0f;
-    float y = 0.0f;
+    float y = 0.0f; // Top-left source-texture offset.
     float slotSize = 18.0f;
     float columnGap = 0.0f;
     float rowGap = 0.0f;
@@ -28,7 +28,7 @@ struct ContainerProgressDef {
     std::string id;
     ContainerProgressKind kind = ContainerProgressKind::Burn;
     float x = 0.0f;
-    float y = 0.0f;
+    float y = 0.0f; // Top-left source-texture offset.
     float width = 0.0f;
     float height = 0.0f;
     float textureX = 0.0f;
@@ -46,11 +46,11 @@ struct ContainerUiDef {
     float textureWidth = 0.0f;
     float textureHeight = 0.0f;
     float anchorX = 0.5f;
-    float anchorY = 0.5f;
+    float anchorY = 0.5f; // Normalized bottom-left UI anchor.
     float pivotX = 0.5f;
     float pivotY = 0.5f;
     float offsetX = 0.0f;
-    float offsetY = 0.0f;
+    float offsetY = 0.0f; // Positive values move upward in UI coordinates.
     float scale = 1.0f;
     float fitPadding = 8.0f;
     bool showPlayerPreview = false;

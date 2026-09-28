@@ -29,11 +29,12 @@ void GameplayHudPresenter::render(const GameplayPresentationSnapshot& snap, RhiD
 }
 
 UIRenderContext GameplayHudPresenter::prepareRenderContext(const GameplayPresentationSnapshot& snap,
-                                                           RhiDevice& rhiDevice, const int surfaceWidth,
-                                                           const int surfaceHeight) {
+                                                           RhiDevice& rhiDevice, const int framebufferWidth,
+                                                           const int framebufferHeight) {
     m_playerStats = toPlayerStatsData(snap);
-    return m_uiRenderer.prepareRenderContext(surfaceWidth, surfaceHeight, rhiDevice, *snap.inventory, m_playerStats,
-                                             m_input.snapshot());
+    const Window::WindowSize windowSize = m_window.getWindowSize();
+    return m_uiRenderer.prepareRenderContext(windowSize.width, windowSize.height, framebufferWidth, framebufferHeight,
+                                             rhiDevice, *snap.inventory, m_playerStats, m_input.snapshot());
 }
 
 bool GameplayHudPresenter::prepareTextFrame(RhiCommandList& commandList) {

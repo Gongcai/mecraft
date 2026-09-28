@@ -175,7 +175,7 @@ void UIToast::renderSelf(const UIRenderContext& ctx) const {
         return;
     const UIToastStyle baseStyle = resolveBaseStyle(ctx);
 
-    const float screenW = static_cast<float>(ctx.screenWidth);
+    const float screenW = static_cast<float>(ctx.uiWidth);
     const float centerX = screenW * 0.5f;
     float currentY = baseStyle.bottomMargin;
 
@@ -201,7 +201,7 @@ void UIToast::renderSelf(const UIRenderContext& ctx) const {
                     glm::vec4 rectRadius;
                     glm::vec4 color;
                 };
-                const Push push{glm::vec4(screenW, static_cast<float>(ctx.screenHeight), rx, ry),
+                const Push push{glm::vec4(screenW, static_cast<float>(ctx.uiHeight), rx, ry),
                                 glm::vec4(rw, rh, 0.0f, 0.0f), glm::vec4(color[0], color[1], color[2], color[3])};
                 ctx.commandList->pushConstants(&push, sizeof(push),
                                                rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));

@@ -229,12 +229,12 @@ bool TextRenderer::ensureVertexCapacity(const uint64_t requiredBytes) {
     return true;
 }
 
-void TextRenderer::beginFrameCollection(const float screenWidth, const float screenHeight) {
-    if (m_rhiDevice == nullptr || screenWidth <= 0.0f || screenHeight <= 0.0f || m_recording) {
+void TextRenderer::beginFrameCollection(const float uiWidth, const float uiHeight) {
+    if (m_rhiDevice == nullptr || uiWidth <= 0.0f || uiHeight <= 0.0f || m_recording) {
         std::abort();
     }
-    m_screenWidth = screenWidth;
-    m_screenHeight = screenHeight;
+    m_uiWidth = uiWidth;
+    m_uiHeight = uiHeight;
     m_requests.clear();
     m_vertices.clear();
     m_recordIndex = 0;
@@ -243,13 +243,7 @@ void TextRenderer::beginFrameCollection(const float screenWidth, const float scr
 }
 
 RhiRect2D TextRenderer::resolveScissor(const UIRenderContext& context) {
-    if (context.hasScissor) {
-        return context.scissor;
-    }
-    const float pixelScale = context.pixelScale();
-    return {0, 0,
-            static_cast<uint32_t>(std::max(1l, std::lround(static_cast<float>(context.screenWidth) * pixelScale))),
-            static_cast<uint32_t>(std::max(1l, std::lround(static_cast<float>(context.screenHeight) * pixelScale)))};
+    return context.fullFramebufferScissor();
 }
 
 void TextRenderer::draw(const UIRenderContext& context, const std::string& text, const float x, const float y,
@@ -442,7 +436,7 @@ void TextRenderer::recordPreparedRequest(const UIRenderContext& context, const s
     commandList.setGraphicsPipeline(m_pipeline);
     commandList.setBindGroup(0u, m_atlasBindGroup);
     commandList.setVertexBuffer(0u, m_vertexBuffer, 0u);
-    const glm::vec4 pushConstants(m_screenWidth, m_screenHeight, 0.0f, 0.0f);
+    const glm::vec4 pushConstants(m_uiWidth, m_uiHeight, 0.0f, 0.0f);
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Vertex));
     commandList.draw(request.vertexCount, 1u, request.firstVertex, 0u);
 }

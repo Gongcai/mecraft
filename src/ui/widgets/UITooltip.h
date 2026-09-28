@@ -34,7 +34,7 @@ public:
     }
 
     // Begin a hover over an item. Call each frame while hovering.
-    void startHover(const std::string& text, float cursorX, float cursorY, float screenW, float screenH,
+    void startHover(const std::string& text, float cursorX, float cursorY, float uiWidth, float uiHeight,
                     float currentTime) const {
         if (m_hoverText != text) {
             m_hoverText = text;
@@ -44,8 +44,8 @@ public:
         }
         m_cursorX = cursorX;
         m_cursorY = cursorY;
-        m_screenW = screenW;
-        m_screenH = screenH;
+        m_uiWidth = uiWidth;
+        m_uiHeight = uiHeight;
         m_hovering = true;
 
         if (!visible && (currentTime - m_hoverStartTime) >= m_hoverDelay) {
@@ -134,16 +134,16 @@ private:
 
     void updatePosition(const UIResolvedTooltipStyle& style) const {
         float wx = m_cursorX + style.offsetX;
-        float wy = (m_screenH - m_cursorY) - style.offsetY;
+        float wy = m_cursorY - style.offsetY;
 
-        if (wx + width > m_screenW - style.margin) {
+        if (wx + width > m_uiWidth - style.margin) {
             wx = m_cursorX - width - style.offsetX;
         }
         if (wy < style.margin) {
             wy = style.margin;
         }
-        if (wy + height > m_screenH - style.margin) {
-            wy = m_screenH - style.margin - height;
+        if (wy + height > m_uiHeight - style.margin) {
+            wy = m_uiHeight - style.margin - height;
         }
 
         m_panel.anchor = Anchor::BottomLeft;
@@ -170,8 +170,8 @@ private:
 
     mutable float m_cursorX = 0.0f;
     mutable float m_cursorY = 0.0f;
-    mutable float m_screenW = 0.0f;
-    mutable float m_screenH = 0.0f;
+    mutable float m_uiWidth = 0.0f;
+    mutable float m_uiHeight = 0.0f;
 
     bool m_hasLocalStyle = false;
     UITooltipStyle m_localStyle;

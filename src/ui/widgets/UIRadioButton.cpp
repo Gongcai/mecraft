@@ -167,7 +167,6 @@ void UIRadioButtonGroup::cleanupMesh() {
 }
 
 int UIRadioButtonGroup::hitTestOption(float px, float py, const UIRenderContext& ctx) const {
-    const float flippedY = static_cast<float>(ctx.screenHeight) - py;
     const float ax = getAbsoluteX(ctx);
     const float ay = getAbsoluteY(ctx);
     const float radioSz = resolveStyle(ctx, false).radioSize;
@@ -178,12 +177,12 @@ int UIRadioButtonGroup::hitTestOption(float px, float py, const UIRenderContext&
         const float cy = rowY + rowHeight * 0.5f;
         // Hit test the radio circle area (with padding).
         const float dx = px - (ax + radioSz * 0.5f);
-        const float dy = flippedY - cy;
+        const float dy = py - cy;
         if (dx * dx + dy * dy <= (radioSz * 0.5f + 4.0f) * (radioSz * 0.5f + 4.0f)) {
             return i;
         }
         // Also allow clicking on the label text area.
-        if (px >= ax && px < ax + width * scaleX && flippedY >= rowY && flippedY < rowY + rowHeight) {
+        if (px >= ax && px < ax + width * scaleX && py >= rowY && py < rowY + rowHeight) {
             return i;
         }
     }
@@ -226,7 +225,7 @@ void UIRadioButtonGroup::renderSelf(const UIRenderContext& ctx) const {
                     glm::vec4 color;
                 };
                 const PushConstants pushConstants{
-                    glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), cx - radius,
+                    glm::vec4(static_cast<float>(ctx.uiWidth), static_cast<float>(ctx.uiHeight), cx - radius,
                               cy - radius),
                     glm::vec4(diameter, diameter, radius, 0.0f),
                     glm::vec4(circleColor[0], circleColor[1], circleColor[2], circleColor[3])};

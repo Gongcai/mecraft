@@ -27,14 +27,7 @@ static_assert(sizeof(ContextMenuSolidPushConstants) == 48u);
 static_assert(sizeof(ContextMenuGlassPushConstants) == 64u);
 
 [[nodiscard]] RhiRect2D contextMenuScissor(const UIRenderContext& context) {
-    if (context.hasScissor) {
-        return context.scissor;
-    }
-    return {0, 0,
-            static_cast<uint32_t>(
-                std::max(1.0f, std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
-            static_cast<uint32_t>(
-                std::max(1.0f, std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))};
+    return context.fullFramebufferScissor();
 }
 
 } // namespace
@@ -79,10 +72,10 @@ void UIContextMenu::addSeparator() {
     m_items.push_back(std::move(item));
 }
 
-void UIContextMenu::show(float menuX, float menuY) {
+void UIContextMenu::show(float menuX, float menuBottomY) {
     m_menuVisible = true;
     m_menuX = menuX;
-    m_menuY = menuY;
+    m_menuBottomY = menuBottomY;
     m_hoveredItem = -1;
     m_scrollOffset = 0.0f;
     m_showTween.start(0.0f, 1.0f, 0.15f, EasingType::EaseOut);
@@ -114,28 +107,25 @@ void UIContextMenu::updateAnimations(float dt) {
 
 int UIContextMenu::hitTestItem(float px, float py, const UIRenderContext& ctx) const {
     const UIResolvedContextMenuStyle resolved = resolveStyle(ctx);
-    const float flippedY = static_cast<float>(ctx.screenHeight) - py;
     const float menuW = resolved.width;
     const float menuH = menuHeight(resolved);
 
-    // Menu position: m_menuX is the left edge, m_menuY is the top edge (in screen coords, Y-down).
-    // Convert to widget coords: the menu's bottom-left in widget space.
     const float menuLeft = m_menuX;
-    const float menuTop_widget = static_cast<float>(ctx.screenHeight) - m_menuY; // Top in widget coords.
-    const float menuBottom_widget = menuTop_widget - menuH;
+    const float menuBottom = m_menuBottomY;
+    const float menuTop = menuBottom + menuH;
 
     if (px < menuLeft || px >= menuLeft + menuW)
         return -1;
-    if (flippedY < menuBottom_widget || flippedY >= menuTop_widget)
+    if (py < menuBottom || py >= menuTop)
         return -1;
 
     float yOff = resolved.padding;
     for (int i = 0; i < static_cast<int>(m_items.size()); ++i) {
         const float itemH = (m_items[i].type == ItemType::Separator) ? resolved.separatorHeight : resolved.itemHeight;
         // Check from top down.
-        const float itemTop = menuTop_widget - yOff;
+        const float itemTop = menuTop - yOff;
         const float itemBottom = itemTop - itemH;
-        if (flippedY >= itemBottom && flippedY < itemTop) {
+        if (py >= itemBottom && py < itemTop) {
             return (m_items[i].type == ItemType::Entry) ? i : -1;
         }
         yOff += itemH;
@@ -171,9 +161,8 @@ void UIContextMenu::render(const UIRenderContext& ctx) const {
 
     const float menuAlpha = m_showTween.value();
     const float menuLeft = m_menuX;
-    const float menuTop_screen = m_menuY;
-    const float menuTop_widget = static_cast<float>(ctx.screenHeight) - menuTop_screen;
-    const float menuBottom_widget = menuTop_widget - menuH;
+    const float menuBottom_widget = m_menuBottomY;
+    const float menuTop_widget = menuBottom_widget + menuH;
     const bool useGlass = ctx.panelGlassPipeline.isValid() && ctx.panelGlassBindGroup.isValid() &&
                           ctx.backdropBlurView.isValid() && ctx.backdropSourceWidth > 0 &&
                           ctx.backdropSourceHeight > 0 && ctx.backdropBlurWidth > 0 && ctx.backdropBlurHeight > 0;
@@ -185,7 +174,7 @@ void UIContextMenu::render(const UIRenderContext& ctx) const {
         if (useGlass) {
             const float tintStrength = std::clamp(bgCol[3] * 0.34f, 0.16f, 0.34f);
             const ContextMenuGlassPushConstants pushConstants{
-                glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), menuLeft,
+                glm::vec4(static_cast<float>(ctx.uiWidth), static_cast<float>(ctx.uiHeight), menuLeft,
                           menuBottom_widget),
                 glm::vec4(menuW, menuH, 0.0f, std::clamp(menuAlpha * 0.96f, 0.0f, 1.0f)),
                 glm::vec4(bgCol[0], bgCol[1], bgCol[2], tintStrength), glm::vec4(0.54f, 0.70f, 0.0f, 0.0f)};
@@ -209,7 +198,7 @@ void UIContextMenu::render(const UIRenderContext& ctx) const {
                 return;
             }
             const ContextMenuSolidPushConstants pushConstants{
-                glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), rectX, rectY),
+                glm::vec4(static_cast<float>(ctx.uiWidth), static_cast<float>(ctx.uiHeight), rectX, rectY),
                 glm::vec4(rectWidth, rectHeight, 0.0f, 0.0f),
                 glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3])};
             commandList.pushConstants(&pushConstants, sizeof(pushConstants),

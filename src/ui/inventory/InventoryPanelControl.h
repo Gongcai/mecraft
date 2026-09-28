@@ -19,20 +19,20 @@ struct InventoryPanelLayout {
     float backgroundAtlasHeight = kTextureHeight;
     bool showPlayerPreview = true;
 
-    // Anchor is normalized to current screen size (0..1).
+    // Anchor is normalized to the UI reference size using a bottom-left origin.
     float anchorX = 0.5f;
     float anchorY = 0.5f;
     // Pivot is normalized to the panel rectangle (0..1).
     float pivotX = 0.5f;
     float pivotY = 0.5f;
-    // Offset from the anchored pivot in source-texture design pixels.
+    // Offset from the anchored pivot in source-texture design pixels; positive Y moves upward.
     float offsetX = 0.0f;
     float offsetY = 0.0f;
     // Uniform scale based on 176x166 source texture.
     float panelScale = 2.0f;
     float fitPadding = 8.0f;
 
-    // Inventory grid layout in source-texture design pixels (scaled by panelScale).
+    // Inventory grid offsets use top-left source-texture coordinates and convert when slots are created.
     float gridOffsetX = 6.8f;
     float gridOffsetY = 81.7f;
     float slotSize = 18.0f;
@@ -40,7 +40,7 @@ struct InventoryPanelLayout {
     float rowGap = 0.0f;
     float row4ExtraGap = 4.0f;
 
-    // Player preview frame in source texture pixels, using top-left texture coordinates.
+    // Player preview frame uses top-left source-texture coordinates.
     float playerPreviewX0 = 25.0f;
     float playerPreviewY0 = 8.0f;
     float playerPreviewX1 = 78.0f;
@@ -86,7 +86,7 @@ private:
         float scale = 1.0f;
     };
 
-    [[nodiscard]] ResolvedPanelRect resolvePanelRect(int screenWidth, int screenHeight) const;
+    [[nodiscard]] ResolvedPanelRect resolvePanelRect(int uiWidth, int uiHeight) const;
     void syncSlotsFromInventory();
     void syncCraftingGridPosition(const ResolvedPanelRect& panelRect);
     void renderBackground(const UIRenderContext& context) const;
@@ -101,8 +101,8 @@ private:
     bool m_useExternalSlots = false;
 
     GameResources* m_resources = nullptr;
-    int m_cachedScreenWidth = 1920;
-    int m_cachedScreenHeight = 1080;
+    int m_cachedUiWidth = 1920;
+    int m_cachedUiHeight = 1080;
 
     // Tooltip
     mutable UITooltip m_tooltip;

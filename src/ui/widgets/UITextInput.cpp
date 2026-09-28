@@ -317,21 +317,8 @@ void UITextInput::renderSelf(const UIRenderContext& ctx) const {
     const float aw = width * scaleX;
     const float ah = height * scaleY;
 
-    const float uiScale = ctx.pixelScale();
-    RhiRect2D contentScissor{static_cast<int32_t>(std::floor((ax + 2.0f) * uiScale)),
-                             static_cast<int32_t>(std::floor((ay + 2.0f) * uiScale)),
-                             static_cast<uint32_t>(std::max(1.0f, std::ceil((aw - 4.0f) * uiScale))),
-                             static_cast<uint32_t>(std::max(1.0f, std::ceil((ah - 4.0f) * uiScale)))};
-    if (ctx.hasScissor) {
-        const int32_t x0 = std::max(contentScissor.x, ctx.scissor.x);
-        const int32_t y0 = std::max(contentScissor.y, ctx.scissor.y);
-        const int32_t x1 = std::min(contentScissor.x + static_cast<int32_t>(contentScissor.width),
-                                    ctx.scissor.x + static_cast<int32_t>(ctx.scissor.width));
-        const int32_t y1 = std::min(contentScissor.y + static_cast<int32_t>(contentScissor.height),
-                                    ctx.scissor.y + static_cast<int32_t>(ctx.scissor.height));
-        contentScissor = {x0, y0, static_cast<uint32_t>(std::max(0, x1 - x0)),
-                          static_cast<uint32_t>(std::max(0, y1 - y0))};
-    }
+    const RhiRect2D contentScissor = ctx.uiRectToFramebufferScissor(
+        ax + 2.0f, ay + 2.0f, std::max(1.0f, aw - 4.0f), std::max(1.0f, ah - 4.0f));
 
     if (record) {
         ctx.commandList->setGraphicsPipeline(m_pipeline);
@@ -344,7 +331,7 @@ void UITextInput::renderSelf(const UIRenderContext& ctx) const {
                 glm::vec4 color;
             };
             const PushConstants pushConstants{
-                glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x, y),
+                glm::vec4(static_cast<float>(ctx.uiWidth), static_cast<float>(ctx.uiHeight), x, y),
                 glm::vec4(rectWidth, rectHeight, 0.0f, 0.0f), glm::vec4(color[0], color[1], color[2], color[3])};
             ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
                                            rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
@@ -393,11 +380,7 @@ void UITextInput::renderSelf(const UIRenderContext& ctx) const {
     }
 
     if (record) {
-        const RhiRect2D parentScissor = ctx.hasScissor
-                                            ? ctx.scissor
-                                            : RhiRect2D{0, 0, static_cast<uint32_t>(ctx.screenWidth * uiScale),
-                                                        static_cast<uint32_t>(ctx.screenHeight * uiScale)};
-        ctx.commandList->setScissor(parentScissor);
+        ctx.commandList->setScissor(ctx.fullFramebufferScissor());
     }
 }
 

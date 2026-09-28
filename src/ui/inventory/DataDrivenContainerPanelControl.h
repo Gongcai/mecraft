@@ -44,7 +44,7 @@ private:
     };
 
     [[nodiscard]] const ui::ContainerUiDef& requireDefinition() const;
-    [[nodiscard]] ResolvedPanelRect resolvePanelRect(int screenWidth, int screenHeight) const;
+    [[nodiscard]] ResolvedPanelRect resolvePanelRect(int uiWidth, int uiHeight) const;
     [[nodiscard]] int mapContainerGridIndex(int gridIndex) const;
     [[nodiscard]] int mapPlayerGridIndex(int gridIndex) const;
     void syncSlots();
@@ -68,8 +68,8 @@ private:
     std::vector<int> m_playerSlotMapping;
 
     GameResources* m_resources = nullptr;
-    int m_cachedScreenWidth = 1920;
-    int m_cachedScreenHeight = 1080;
+    int m_cachedUiWidth = 1920;
+    int m_cachedUiHeight = 1080;
     float m_burnFraction = 0.0f;
     float m_cookFraction = 0.0f;
 

@@ -176,8 +176,8 @@ void CrosshairControl::renderSelf(const UIRenderContext& ctx) const {
         return;
     }
 
-    const float screenW = static_cast<float>(ctx.screenWidth);
-    const float screenH = static_cast<float>(ctx.screenHeight);
+    const float screenW = static_cast<float>(ctx.uiWidth);
+    const float screenH = static_cast<float>(ctx.uiHeight);
 
     const UITheme* theme = ctx.theme;
     const auto& col = theme ? theme->crosshair : m_color;

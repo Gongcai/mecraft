@@ -530,8 +530,10 @@ bool testTextRendererCollectPrepareRecordSequence() {
 
     UIRenderContext firstContext;
     firstContext.phase = UIRenderPhase::CollectText;
-    firstContext.screenWidth = static_cast<int>(kScreenWidth);
-    firstContext.screenHeight = static_cast<int>(kScreenHeight);
+    firstContext.uiWidth = static_cast<int>(kScreenWidth);
+    firstContext.uiHeight = static_cast<int>(kScreenHeight);
+    firstContext.framebufferWidth = static_cast<int>(kScreenWidth);
+    firstContext.framebufferHeight = static_cast<int>(kScreenHeight);
     firstContext.scaleConfig.effectiveScale = 1.0f;
     firstContext.hasScissor = true;
     firstContext.scissor = kExplicitScissor;

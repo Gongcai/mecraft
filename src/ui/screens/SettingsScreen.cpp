@@ -156,8 +156,8 @@ void SettingsScreen::onSceneExit() {
 void SettingsScreen::layout(const UIRenderContext& ctx) {
     UIScene::layout(ctx);
 
-    const float screenW = static_cast<float>(std::max(1, ctx.screenWidth));
-    const float screenH = static_cast<float>(std::max(1, ctx.screenHeight));
+    const float screenW = static_cast<float>(std::max(1, ctx.uiWidth));
+    const float screenH = static_cast<float>(std::max(1, ctx.uiHeight));
     const float sideMargin = std::clamp(screenW * 0.055f, 36.0f, 96.0f);
     const float topMargin = std::clamp(screenH * 0.045f, 24.0f, 42.0f);
     const float titleH = 40.0f;

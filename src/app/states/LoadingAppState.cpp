@@ -173,8 +173,10 @@ void LoadingAppState::render(const double frameTime) {
         return;
     }
 
+    const Window::WindowSize windowSize = m_deps.window.getWindowSize();
     UIRenderContext sceneContext = m_deps.uiRenderer.prepareSceneContext(
-        static_cast<int>(frame.width), static_cast<int>(frame.height), m_deps.rhiDevice, m_deps.input.snapshot());
+        windowSize.width, windowSize.height, static_cast<int>(frame.width), static_cast<int>(frame.height),
+        m_deps.rhiDevice, m_deps.input.snapshot());
 
     RhiCommandList* commandList = nullptr;
     if (!beginLoadingPass(m_deps.rhiDevice, m_deps.commandListPool, frame.width, frame.height, m_deps.uiRenderer,

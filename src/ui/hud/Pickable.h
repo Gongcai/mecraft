@@ -12,8 +12,8 @@ struct UIRenderContext;
 class Pickable {
 public:
     struct SlotInfo {
-        int x = 0; // Top-left pixel X (top-down origin)
-        int y = 0; // Top-left pixel Y (top-down origin)
+        int x = 0; // Bottom-left X in UI reference units.
+        int y = 0; // Bottom-left Y in UI reference units.
         int size = 40; // Width & height (square)
         int itemId = 0; // 0 = empty slot, no icon drawn
         int count = 0; // Item stack count (displayed when > 1)
@@ -31,7 +31,7 @@ public:
     };
 
     // Hit-test: returns the index of the slot under the cursor, or -1 if none.
-    // mouseX/mouseY use top-left pixel origin (same as GLFW cursor callbacks).
+    // mouseX/mouseY use bottom-left-origin UI reference coordinates.
     static int hitTest(const SlotInfo* slots, int count, float mouseX, float mouseY);
 
     // Record the hovered background and item atlas quads into the UI command list, then append

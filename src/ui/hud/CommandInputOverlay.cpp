@@ -21,34 +21,13 @@ struct PanelSolidPushConstants {
 static_assert(sizeof(PanelSolidPushConstants) == 48u);
 
 [[nodiscard]] RhiRect2D fullOverlayScissor(const UIRenderContext& context) {
-    if (context.hasScissor) {
-        return context.scissor;
-    }
-    return {0, 0,
-            static_cast<uint32_t>(
-                std::max(1.0f, std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
-            static_cast<uint32_t>(
-                std::max(1.0f, std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))};
-}
-
-[[nodiscard]] RhiRect2D intersectScissors(const RhiRect2D& lhs, const RhiRect2D& rhs) {
-    const int32_t x0 = std::max(lhs.x, rhs.x);
-    const int32_t y0 = std::max(lhs.y, rhs.y);
-    const int32_t x1 = std::min(lhs.x + static_cast<int32_t>(lhs.width), rhs.x + static_cast<int32_t>(rhs.width));
-    const int32_t y1 = std::min(lhs.y + static_cast<int32_t>(lhs.height), rhs.y + static_cast<int32_t>(rhs.height));
-    return {x0, y0, static_cast<uint32_t>(std::max(0, x1 - x0)), static_cast<uint32_t>(std::max(0, y1 - y0))};
+    return context.fullFramebufferScissor();
 }
 
 [[nodiscard]] RhiRect2D physicalOverlayScissor(const UIRenderContext& context, const int x, const int y,
                                                const int width, const int height) {
-    const float scale = context.pixelScale();
-    const int32_t x0 = static_cast<int32_t>(std::floor(static_cast<float>(x) * scale));
-    const int32_t y0 = static_cast<int32_t>(std::floor(static_cast<float>(y) * scale));
-    const int32_t x1 = static_cast<int32_t>(std::ceil(static_cast<float>(x + width) * scale));
-    const int32_t y1 = static_cast<int32_t>(std::ceil(static_cast<float>(y + height) * scale));
-    const RhiRect2D physical{x0, y0, static_cast<uint32_t>(std::max(0, x1 - x0)),
-                             static_cast<uint32_t>(std::max(0, y1 - y0))};
-    return intersectScissors(physical, fullOverlayScissor(context));
+    return context.uiRectToFramebufferScissor(static_cast<float>(x), static_cast<float>(y),
+                                              static_cast<float>(width), static_cast<float>(height));
 }
 
 } // namespace
@@ -142,7 +121,7 @@ void CommandInputOverlay::drawOverlayRect(const UIRenderContext& context, int re
     }
 
     const PanelSolidPushConstants pushConstants{
-        glm::vec4(static_cast<float>(context.screenWidth), static_cast<float>(context.screenHeight),
+        glm::vec4(static_cast<float>(context.uiWidth), static_cast<float>(context.uiHeight),
                   static_cast<float>(rectX), static_cast<float>(rectY)),
         glm::vec4(static_cast<float>(rectW), static_cast<float>(rectH), 0.0f, 0.0f),
         glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3])};
@@ -163,8 +142,8 @@ void CommandInputOverlay::renderBox(const std::string& text, const TextRenderer&
         return;
     }
 
-    const int screenW = context.screenWidth;
-    const int screenH = context.screenHeight;
+    const int screenW = context.uiWidth;
+    const int screenH = context.uiHeight;
     if (screenW <= 0 || screenH <= 0) {
         return;
     }

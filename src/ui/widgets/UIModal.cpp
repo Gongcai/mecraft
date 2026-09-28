@@ -148,8 +148,8 @@ void UIModal::render(const UIRenderContext& ctx) const {
     // Render content panel with scale animation.
     const float panelW = style.panelWidth;
     const float panelH = style.panelMinHeight;
-    const float cx = static_cast<float>(ctx.screenWidth) * 0.5f;
-    const float cy = static_cast<float>(ctx.screenHeight) * 0.5f;
+    const float cx = static_cast<float>(ctx.uiWidth) * 0.5f;
+    const float cy = static_cast<float>(ctx.uiHeight) * 0.5f;
     const float scale = m_panelScale.value();
 
     // Position content panel at center.
@@ -205,8 +205,8 @@ UIEventResult UIModal::onInput(const UIInputEvent& event, const UIRenderContext&
     // Hit-test buttons manually (onInput is protected in UIButton).
     if (event.type == UIInputEventType::PointerDown && event.button == UIPointerButton::Primary && !m_buttons.empty()) {
         const UIResolvedModalStyle style = resolveStyle(ctx);
-        const float cx = static_cast<float>(ctx.screenWidth) * 0.5f;
-        const float cy = static_cast<float>(ctx.screenHeight) * 0.5f;
+        const float cx = static_cast<float>(ctx.uiWidth) * 0.5f;
+        const float cy = static_cast<float>(ctx.uiHeight) * 0.5f;
         const float scale = m_panelScale.value();
         const float btnW = style.buttonWidth * scale;
         const float btnH = style.buttonHeight * scale;
@@ -214,9 +214,8 @@ UIEventResult UIModal::onInput(const UIInputEvent& event, const UIRenderContext&
                                     static_cast<float>(m_buttons.size() - 1) * style.buttonSpacing * scale;
         float btnX = cx - totalBtnWidth * 0.5f;
         const float btnY = cy - style.panelMinHeight * 0.5f * scale + style.padding * scale;
-        const float flippedY = static_cast<float>(ctx.screenHeight) - event.y;
         for (size_t i = 0; i < m_buttons.size(); ++i) {
-            if (event.x >= btnX && event.x < btnX + btnW && flippedY >= btnY && flippedY < btnY + btnH) {
+            if (event.x >= btnX && event.x < btnX + btnW && event.y >= btnY && event.y < btnY + btnH) {
                 if (i < m_buttonCallbacks.size() && m_buttonCallbacks[i]) {
                     m_buttonCallbacks[i]();
                 }
@@ -236,15 +235,14 @@ UIEventResult UIModal::onInput(const UIInputEvent& event, const UIRenderContext&
         m_closeOnOverlayClick) {
         // Check if click is outside the content panel.
         const UIResolvedModalStyle style = resolveStyle(ctx);
-        const float cx = static_cast<float>(ctx.screenWidth) * 0.5f;
-        const float cy = static_cast<float>(ctx.screenHeight) * 0.5f;
-        const float flippedY = static_cast<float>(ctx.screenHeight) - event.y;
+        const float cx = static_cast<float>(ctx.uiWidth) * 0.5f;
+        const float cy = static_cast<float>(ctx.uiHeight) * 0.5f;
         const float px = event.x;
         const float panelLeft = cx - style.panelWidth * 0.5f;
         const float panelRight = cx + style.panelWidth * 0.5f;
         const float panelBottom = cy - style.panelMinHeight * 0.5f;
         const float panelTop = cy + style.panelMinHeight * 0.5f;
-        if (px < panelLeft || px >= panelRight || flippedY < panelBottom || flippedY >= panelTop) {
+        if (px < panelLeft || px >= panelRight || event.y < panelBottom || event.y >= panelTop) {
             close();
             return UIEventResult::Consumed;
         }

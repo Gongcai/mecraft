@@ -203,7 +203,7 @@ void UIToggle::renderSelf(const UIRenderContext& ctx) const {
                 glm::vec4 color;
             };
             const PushConstants pushConstants{
-                glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x0, y0),
+                glm::vec4(static_cast<float>(ctx.uiWidth), static_cast<float>(ctx.uiHeight), x0, y0),
                 glm::vec4(shapeW, shapeH, radius, 0.0f),
                 glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3])};
             ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),

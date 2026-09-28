@@ -13,8 +13,8 @@ int fail(const char* message) {
 int main() {
     CreativeInventoryPanelControl panel;
     UIRenderContext ctx{};
-    ctx.screenWidth = 400;
-    ctx.screenHeight = 300;
+    ctx.uiWidth = 400;
+    ctx.uiHeight = 300;
 
     if (panel.visible) {
         return fail("panel should default to hidden");
@@ -32,8 +32,8 @@ int main() {
     panel.setLayout(layout);
     panel.setVisible(true);
 
-    // Main panel is centered at x=102.5 y=82 in this reference context.
-    const UIInputEvent clickAllItemsTab{UIInputEventType::PointerDown, 110.0f, 60.0f, UIPointerButton::Primary};
+    // Pointer coordinates use the same bottom-left origin as the panel layout.
+    const UIInputEvent clickAllItemsTab{UIInputEventType::PointerDown, 110.0f, 240.0f, UIPointerButton::Primary};
     if (panel.onInput(clickAllItemsTab, ctx) != UIEventResult::Consumed) {
         return fail("clicking all items tab should be consumed");
     }
@@ -53,7 +53,7 @@ int main() {
     UIInputEvent scrollDown{};
     scrollDown.type = UIInputEventType::Scroll;
     scrollDown.x = 180.0f;
-    scrollDown.y = 120.0f;
+    scrollDown.y = 180.0f;
     scrollDown.scrollY = -1.0f;
     if (panel.onInput(scrollDown, ctx) != UIEventResult::Consumed) {
         return fail("scrolling enabled creative list should be consumed");
@@ -88,7 +88,7 @@ int main() {
         clickItems[i] = static_cast<ItemID>(100 + i);
     }
     panel.setCreativeItemsForTest(clickItems, 46);
-    const UIInputEvent clickFirstCreativeSlot{UIInputEventType::PointerDown, 113.0f, 103.0f, UIPointerButton::Primary};
+    const UIInputEvent clickFirstCreativeSlot{UIInputEventType::PointerDown, 113.0f, 197.0f, UIPointerButton::Primary};
     if (panel.onInput(clickFirstCreativeSlot, ctx) != UIEventResult::Consumed) {
         return fail("clicking creative item slot should be consumed");
     }
@@ -96,7 +96,7 @@ int main() {
         return fail("activated creative item should match first visible item");
     }
 
-    const UIInputEvent clickPlayerInventoryTab{UIInputEventType::PointerDown, 270.0f, 220.0f, UIPointerButton::Primary};
+    const UIInputEvent clickPlayerInventoryTab{UIInputEventType::PointerDown, 270.0f, 80.0f, UIPointerButton::Primary};
     if (panel.onInput(clickPlayerInventoryTab, ctx) != UIEventResult::Consumed) {
         return fail("clicking player inventory tab should be consumed");
     }

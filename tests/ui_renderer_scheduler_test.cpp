@@ -19,17 +19,15 @@ int main() {
     UIRenderer renderer;
 
     const UIScaleConfig hdScale = UIScaleConfig::create(1280.0f, 720.0f, GUIScale::Auto);
-    if (!almostEqual(hdScale.effectiveScale, 1.0f) || hdScale.virtualWidth != 1280 || hdScale.virtualHeight != 720) {
-        return fail("720p auto GUI scale should use 1x virtual coordinates");
+    if (!almostEqual(hdScale.effectiveScale, 1.0f) || hdScale.uiWidth != 1280 || hdScale.uiHeight != 720) {
+        return fail("720p auto GUI scale should use 1x UI reference coordinates");
     }
     const UIScaleConfig smallScale = UIScaleConfig::create(640.0f, 360.0f, GUIScale::Auto);
-    if (!almostEqual(smallScale.effectiveScale, 0.5f) || smallScale.virtualWidth != 1280 ||
-        smallScale.virtualHeight != 720) {
-        return fail("sub-720p auto GUI scale should preserve readable virtual coordinates");
+    if (!almostEqual(smallScale.effectiveScale, 0.5f) || smallScale.uiWidth != 1280 || smallScale.uiHeight != 720) {
+        return fail("sub-720p auto GUI scale should preserve readable UI reference coordinates");
     }
     const UIScaleConfig normalScale = UIScaleConfig::create(1920.0f, 1080.0f, GUIScale::Normal);
-    if (!almostEqual(normalScale.effectiveScale, 1.0f) || normalScale.virtualWidth != 1920 ||
-        normalScale.virtualHeight != 1080) {
+    if (!almostEqual(normalScale.effectiveScale, 1.0f) || normalScale.uiWidth != 1920 || normalScale.uiHeight != 1080) {
         return fail("explicit normal GUI scale should use 1x coordinates");
     }
 

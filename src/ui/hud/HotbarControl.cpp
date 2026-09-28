@@ -30,11 +30,7 @@ struct HotbarImagePushConstants {
 static_assert(sizeof(HotbarImagePushConstants) == 64u);
 
 [[nodiscard]] RhiRect2D hotbarScissor(const UIRenderContext& context) {
-    if (context.hasScissor) {
-        return context.scissor;
-    }
-    return {0, 0, static_cast<uint32_t>(std::max(1.0f, std::round(context.screenWidth * context.pixelScale()))),
-            static_cast<uint32_t>(std::max(1.0f, std::round(context.screenHeight * context.pixelScale())))};
+    return context.fullFramebufferScissor();
 }
 
 } // namespace
@@ -56,7 +52,7 @@ void HotbarControl::setInventorySource(const Inventory* inventory) {
 
 void HotbarControl::renderSelf(const UIRenderContext& context) const {
     const Inventory* inventory = context.inventory ? context.inventory : m_inventory;
-    if (!inventory || context.screenWidth <= 0 || context.screenHeight <= 0) {
+    if (!inventory || context.uiWidth <= 0 || context.uiHeight <= 0) {
         return;
     }
 
@@ -120,8 +116,8 @@ float HotbarControl::getCountTextScale() const {
 }
 
 void HotbarControl::renderInternal(const UIRenderContext& context, const Inventory& inventory) const {
-    const float screenW = static_cast<float>(context.screenWidth);
-    const float screenH = static_cast<float>(context.screenHeight);
+    const float screenW = static_cast<float>(context.uiWidth);
+    const float screenH = static_cast<float>(context.uiHeight);
     const TextRenderer* textRenderer = context.textRenderer;
     if (!m_resources) {
         return;
@@ -303,7 +299,7 @@ void HotbarControl::checkSlotChange(const Inventory& inventory, const LocaleMana
 void HotbarControl::renderItemName(const UIRenderContext& context, const Inventory& inventory,
                                    const TextRenderer& textRenderer, float timeSeconds) const {
     (void)inventory;
-    const float screenW = static_cast<float>(context.screenWidth);
+    const float screenW = static_cast<float>(context.uiWidth);
     if (m_itemName.empty()) {
         return;
     }

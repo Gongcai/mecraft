@@ -28,14 +28,7 @@ static_assert(sizeof(ImageTexturePushConstants) == 64u);
 static_assert(sizeof(ImageSolidPushConstants) == 48u);
 
 [[nodiscard]] RhiRect2D imageScissor(const UIRenderContext& context) {
-    if (context.hasScissor) {
-        return context.scissor;
-    }
-    return {0, 0,
-            static_cast<uint32_t>(
-                std::max(1.0f, std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
-            static_cast<uint32_t>(
-                std::max(1.0f, std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))};
+    return context.fullFramebufferScissor();
 }
 
 } // namespace
@@ -114,7 +107,7 @@ void UIImage::renderSelf(const UIRenderContext& ctx) const {
             return;
         }
         const ImageTexturePushConstants pushConstants{
-            glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), ax, ay),
+            glm::vec4(static_cast<float>(ctx.uiWidth), static_cast<float>(ctx.uiHeight), ax, ay),
             glm::vec4(aw, ah, 0.0f, 0.0f), glm::vec4(m_u0, m_v0, m_u1, m_v1),
             glm::vec4(tint[0], tint[1], tint[2], tint[3])};
         commandList.setGraphicsPipeline(ctx.imageTexturePipeline);
@@ -128,7 +121,7 @@ void UIImage::renderSelf(const UIRenderContext& ctx) const {
 
     if (!m_useTexture && ctx.panelSolidPipeline.isValid()) {
         const ImageSolidPushConstants pushConstants{
-            glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), ax, ay),
+            glm::vec4(static_cast<float>(ctx.uiWidth), static_cast<float>(ctx.uiHeight), ax, ay),
             glm::vec4(aw, ah, 0.0f, 0.0f), glm::vec4(tint[0], tint[1], tint[2], tint[3])};
         commandList.setGraphicsPipeline(ctx.panelSolidPipeline);
         commandList.setVertexBuffer(0u, ctx.panelQuadVertexBuffer, 0u);

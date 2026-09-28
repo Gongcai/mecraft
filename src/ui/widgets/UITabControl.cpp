@@ -27,14 +27,7 @@ static_assert(sizeof(TabSolidPushConstants) == 48u);
 static_assert(sizeof(TabGlassPushConstants) == 64u);
 
 [[nodiscard]] RhiRect2D tabScissor(const UIRenderContext& context) {
-    if (context.hasScissor) {
-        return context.scissor;
-    }
-    return {0, 0,
-            static_cast<uint32_t>(
-                std::max(1.0f, std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
-            static_cast<uint32_t>(
-                std::max(1.0f, std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))};
+    return context.fullFramebufferScissor();
 }
 
 } // namespace
@@ -150,14 +143,13 @@ void UITabControl::clearLocalStyle() {
 int UITabControl::hitTestHeader(float px, float py, const UIRenderContext& ctx) const {
     if (m_tabs.empty())
         return -1;
-    const float flippedY = static_cast<float>(ctx.screenHeight) - py;
     const float ax = getAbsoluteX(ctx);
     const float ay = getAbsoluteY(ctx);
     const float aw = width * scaleX;
     const float headerH = resolveStyle(ctx, UIStyleState_Normal).headerHeight;
 
     // Header area is at the top of the widget.
-    if (flippedY < ay + (height * scaleY - headerH) || flippedY >= ay + height * scaleY)
+    if (py < ay + (height * scaleY - headerH) || py >= ay + height * scaleY)
         return -1;
     if (px < ax || px >= ax + aw)
         return -1;
@@ -213,7 +205,7 @@ void UITabControl::renderSelf(const UIRenderContext& ctx) const {
         if (useGlass) {
             const float tintStrength = std::clamp(contentCol[3] * 0.40f, 0.18f, 0.40f);
             const TabGlassPushConstants pushConstants{
-                glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), ax, ay),
+                glm::vec4(static_cast<float>(ctx.uiWidth), static_cast<float>(ctx.uiHeight), ax, ay),
                 glm::vec4(aw, headerBottomY - ay, 0.0f, std::clamp(alpha * 0.94f, 0.0f, 1.0f)),
                 glm::vec4(contentCol[0], contentCol[1], contentCol[2], tintStrength),
                 glm::vec4(0.58f, 0.74f, 0.0f, 0.0f)};
@@ -236,7 +228,7 @@ void UITabControl::renderSelf(const UIRenderContext& ctx) const {
                 return;
             }
             const TabSolidPushConstants pushConstants{
-                glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x, y),
+                glm::vec4(static_cast<float>(ctx.uiWidth), static_cast<float>(ctx.uiHeight), x, y),
                 glm::vec4(rectWidth, rectHeight, 0.0f, 0.0f), glm::vec4(color[0], color[1], color[2], color[3])};
             commandList.pushConstants(&pushConstants, sizeof(pushConstants),
                                       rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));

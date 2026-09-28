@@ -118,7 +118,7 @@ public:
             float pw = m_parent->width * m_parent->scaleX;
             return resolveInParent(px, pw, width * scaleX, anchor, localOffsetX);
         }
-        return resolveInParent(0.0f, static_cast<float>(ctx.screenWidth), width * scaleX, anchor, localOffsetX);
+        return resolveInParent(0.0f, static_cast<float>(ctx.uiWidth), width * scaleX, anchor, localOffsetX);
     }
 
     [[nodiscard]] float getAbsoluteY(const UIRenderContext& ctx) const {
@@ -128,7 +128,7 @@ public:
             float ph = m_parent->height * m_parent->scaleY;
             return resolveInParentY(py, ph, height * scaleY, anchor, localOffsetY);
         }
-        return resolveInParentY(0.0f, static_cast<float>(ctx.screenHeight), height * scaleY, anchor, localOffsetY);
+        return resolveInParentY(0.0f, static_cast<float>(ctx.uiHeight), height * scaleY, anchor, localOffsetY);
     }
 
     [[nodiscard]] bool hitTest(float px, float py, const UIRenderContext& ctx) const {
@@ -220,14 +220,11 @@ public:
 
 protected:
     [[nodiscard]] bool hitTestSelf(float px, float py, const UIRenderContext& ctx) const {
-        // Input coordinates are already in reference space (converted by routeUIInput).
-        // Flip Y (GLFW Y=0 at top -> widget coords Y=0 at bottom).
-        float flippedY = static_cast<float>(ctx.screenHeight) - py;
         float ax = getAbsoluteX(ctx);
         float ay = getAbsoluteY(ctx);
         float aw = width * scaleX;
         float ah = height * scaleY;
-        return px >= ax && px < ax + aw && flippedY >= ay && flippedY < ay + ah;
+        return px >= ax && px < ax + aw && py >= ay && py < ay + ah;
     }
 
     [[nodiscard]] virtual bool clipsDescendantInput() const { return false; }

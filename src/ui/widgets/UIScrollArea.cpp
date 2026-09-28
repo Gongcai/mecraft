@@ -14,19 +14,7 @@
 namespace {
 
 RhiRect2D makeScaledScissorBox(float x, float y, float width, float height, const UIRenderContext& ctx) {
-    const float uiScale = ctx.pixelScale();
-    RhiRect2D rect{static_cast<int32_t>(std::floor(x * uiScale)), static_cast<int32_t>(std::floor(y * uiScale)),
-                   static_cast<uint32_t>(std::max(1.0f, std::ceil(width * uiScale))),
-                   static_cast<uint32_t>(std::max(1.0f, std::ceil(height * uiScale)))};
-    if (!ctx.hasScissor)
-        return rect;
-    const int32_t x0 = std::max(rect.x, ctx.scissor.x);
-    const int32_t y0 = std::max(rect.y, ctx.scissor.y);
-    const int32_t x1 =
-        std::min(rect.x + static_cast<int32_t>(rect.width), ctx.scissor.x + static_cast<int32_t>(ctx.scissor.width));
-    const int32_t y1 =
-        std::min(rect.y + static_cast<int32_t>(rect.height), ctx.scissor.y + static_cast<int32_t>(ctx.scissor.height));
-    return {x0, y0, static_cast<uint32_t>(std::max(0, x1 - x0)), static_cast<uint32_t>(std::max(0, y1 - y0))};
+    return ctx.uiRectToFramebufferScissor(x, y, width, height);
 }
 
 float scrollbarThumbHeight(float trackHeight, float contentHeight) {
@@ -225,10 +213,7 @@ void UIScrollArea::render(const UIRenderContext& ctx) const {
         const_cast<UIWidget*>(child.get())->anchorOffsetY -= m_scrollOffset;
     }
 
-    const RhiRect2D parentScissor = ctx.hasScissor
-                                        ? ctx.scissor
-                                        : RhiRect2D{0, 0, static_cast<uint32_t>(ctx.screenWidth * ctx.pixelScale()),
-                                                    static_cast<uint32_t>(ctx.screenHeight * ctx.pixelScale())};
+    const RhiRect2D parentScissor = ctx.fullFramebufferScissor();
     if (record) {
         ctx.commandList->setScissor(parentScissor);
     }
@@ -314,7 +299,7 @@ void UIScrollArea::renderScrollbar(const UIRenderContext& ctx) const {
             glm::vec4 color;
         };
         const PushConstants pushConstants{
-            glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x, y),
+            glm::vec4(static_cast<float>(ctx.uiWidth), static_cast<float>(ctx.uiHeight), x, y),
             glm::vec4(shapeWidth, shapeHeight, shapeWidth * 0.5f, 0.0f),
             glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3])};
         ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
@@ -336,7 +321,6 @@ bool UIScrollArea::hitTestScrollbarThumb(float px, float py, const UIRenderConte
     float ay = getAbsoluteY(ctx);
     float aw = width * scaleX;
     float ah = height * scaleY;
-    float flippedY = static_cast<float>(ctx.screenHeight) - py;
 
     float trackX = ax + aw - sbWidth;
     float trackY = ay;
@@ -345,7 +329,7 @@ bool UIScrollArea::hitTestScrollbarThumb(float px, float py, const UIRenderConte
     const float thumbH = scrollbarThumbHeight(ah, m_contentHeight);
     const float thumbY = scrollbarThumbY(trackY, ah, thumbH, m_scrollOffset, scrollMax);
 
-    return px >= trackX && px <= trackX + sbWidth && flippedY >= thumbY && flippedY <= thumbY + thumbH;
+    return px >= trackX && px <= trackX + sbWidth && py >= thumbY && py <= thumbY + thumbH;
 }
 
 UIEventResult UIScrollArea::onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
@@ -357,8 +341,7 @@ UIEventResult UIScrollArea::onInput(const UIInputEvent& event, const UIRenderCon
     // Handle scrollbar dragging
     if (m_draggingScrollbar) {
         if (event.type == UIInputEventType::PointerMove) {
-            float flippedY = static_cast<float>(ctx.screenHeight) - event.y;
-            const float delta = flippedY - m_dragStartY;
+            const float delta = event.y - m_dragStartY;
             const float ah = height * scaleY;
             const float thumbH = scrollbarThumbHeight(ah, m_contentHeight);
             const float scrollRange = ah - thumbH;
@@ -386,7 +369,7 @@ UIEventResult UIScrollArea::onInput(const UIInputEvent& event, const UIRenderCon
     if (event.type == UIInputEventType::PointerDown && event.button == UIPointerButton::Primary) {
         if (hitTestScrollbarThumb(event.x, event.y, ctx)) {
             m_draggingScrollbar = true;
-            m_dragStartY = static_cast<float>(ctx.screenHeight) - event.y;
+            m_dragStartY = event.y;
             m_dragStartOffset = m_scrollOffset;
             return UIEventResult::Consumed;
         }

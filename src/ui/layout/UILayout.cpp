@@ -1,6 +1,6 @@
 #include "UILayout.h"
 
-float UILayout::resolveX(const float screenW, const float controlW) const {
+float UILayout::resolveX(const float uiWidth, const float controlWidth) const {
     float base = 0.0f;
     switch (anchor) {
     case Anchor::TopLeft:
@@ -8,15 +8,15 @@ float UILayout::resolveX(const float screenW, const float controlW) const {
     case Anchor::BottomLeft: base = 0.0f; break;
     case Anchor::TopCenter:
     case Anchor::Center:
-    case Anchor::BottomCenter: base = (screenW - controlW) * 0.5f; break;
+    case Anchor::BottomCenter: base = (uiWidth - controlWidth) * 0.5f; break;
     case Anchor::TopRight:
     case Anchor::CenterRight:
-    case Anchor::BottomRight: base = screenW - controlW; break;
+    case Anchor::BottomRight: base = uiWidth - controlWidth; break;
     }
     return base + offsetX;
 }
 
-float UILayout::resolveY(const float screenH, const float controlH) const {
+float UILayout::resolveY(const float uiHeight, const float controlHeight) const {
     float base = 0.0f;
     switch (anchor) {
     case Anchor::BottomLeft:
@@ -24,10 +24,10 @@ float UILayout::resolveY(const float screenH, const float controlH) const {
     case Anchor::BottomRight: base = 0.0f; break;
     case Anchor::CenterLeft:
     case Anchor::Center:
-    case Anchor::CenterRight: base = (screenH - controlH) * 0.5f; break;
+    case Anchor::CenterRight: base = (uiHeight - controlHeight) * 0.5f; break;
     case Anchor::TopLeft:
     case Anchor::TopCenter:
-    case Anchor::TopRight: base = screenH - controlH; break;
+    case Anchor::TopRight: base = uiHeight - controlHeight; break;
     }
     return base + offsetY;
 }

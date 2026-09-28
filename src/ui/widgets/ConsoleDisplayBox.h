@@ -14,8 +14,8 @@ public:
     };
 
     struct RenderParams {
-        int screenW = 0;
-        int screenH = 0;
+        int uiW = 0;
+        int uiH = 0;
         int x = 20;
         int inputY = 20;
         int inputBoxH = 34;

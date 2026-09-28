@@ -16,13 +16,13 @@ struct CraftingGridLayout {
 
     int gridSize = 2;
     float offsetX = 87.4f;
-    float offsetY = 22.9f;
+    float offsetY = 22.9f; // Top-left source-texture offset.
     float slotSize = 18.0f;
     float columnGap = 0.0f;
     float rowGap = 0.0f;
 
     float resultOffsetX = 142.5f;
-    float resultOffsetY = 33.5f;
+    float resultOffsetY = 33.5f; // Top-left source-texture offset.
     float resultSlotSize = 18.0f;
 };
 
@@ -62,8 +62,8 @@ public:
     [[nodiscard]] int getHoveredSlot() const;
     void clearActivation();
 
-    // Set the panel origin (resolved screen coordinates) for positioning
-    void setPanelOrigin(float panelX, float panelY, float scale);
+    // Set the panel rectangle in bottom-left UI coordinates.
+    void setPanelOrigin(float panelX, float panelY, float panelHeight, float scale);
 
 protected:
     void renderSelf(const UIRenderContext& context) const override;
@@ -80,8 +80,9 @@ private:
     // Cached panel positioning
     float m_panelX = 0.0f;
     float m_panelY = 0.0f;
+    float m_panelHeight = 0.0f;
     float m_panelScale = 1.0f;
 
-    int m_cachedScreenWidth = 1920;
-    int m_cachedScreenHeight = 1080;
+    int m_cachedUiWidth = 1920;
+    int m_cachedUiHeight = 1080;
 };

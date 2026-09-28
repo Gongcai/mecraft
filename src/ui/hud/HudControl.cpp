@@ -22,14 +22,7 @@ struct HudImagePushConstants {
 static_assert(sizeof(HudImagePushConstants) == 64u);
 
 [[nodiscard]] RhiRect2D hudScissor(const UIRenderContext& context) {
-    if (context.hasScissor) {
-        return context.scissor;
-    }
-    return {0, 0,
-            static_cast<uint32_t>(
-                std::max(1.0f, std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
-            static_cast<uint32_t>(
-                std::max(1.0f, std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))};
+    return context.fullFramebufferScissor();
 }
 
 } // namespace
@@ -74,7 +67,7 @@ void HudControl::drawIconRow(const UIRenderContext& context, const TextureAtlas&
 
     const auto drawIcon = [&](const float x, const auto& uv) {
         const HudImagePushConstants pushConstants{
-            glm::vec4(static_cast<float>(context.screenWidth), static_cast<float>(context.screenHeight), x, startY),
+            glm::vec4(static_cast<float>(context.uiWidth), static_cast<float>(context.uiHeight), x, startY),
             glm::vec4(iconSize, iconSize, 0.0f, 0.0f), glm::vec4(uv.first.x, uv.first.y, uv.second.x, uv.second.y),
             glm::vec4(1.0f)};
         commandList.pushConstants(&pushConstants, sizeof(pushConstants),
@@ -95,7 +88,7 @@ void HudControl::drawIconRow(const UIRenderContext& context, const TextureAtlas&
 void HudControl::renderSelf(const UIRenderContext& context) const {
     if (!visible || !context.playerStats || !m_resources || context.commandList == nullptr ||
         context.uiRenderer == nullptr || !context.panelQuadVertexBuffer.isValid() ||
-        !context.imageTexturePipeline.isValid() || context.screenWidth <= 0 || context.screenHeight <= 0) {
+        !context.imageTexturePipeline.isValid() || context.uiWidth <= 0 || context.uiHeight <= 0) {
         return;
     }
 
@@ -111,7 +104,7 @@ void HudControl::renderSelf(const UIRenderContext& context) const {
         return;
     }
 
-    const float screenW = static_cast<float>(context.screenWidth);
+    const float screenW = static_cast<float>(context.uiWidth);
 
     constexpr float kIconNativeSize = 8.0f;
     constexpr float kScale = 2.0f;

@@ -38,8 +38,9 @@ public:
     void renderPreparedToShadowMap(RhiCommandList& commandList, const glm::mat4& shadowViewProj,
                                    const glm::vec3& cameraPos, float splitNear, float splitFar);
     void renderPreparedForward(RhiCommandList& commandList, const glm::mat4& viewProj, float skyIntensity);
-    void renderInventoryPreview(RhiCommandList& commandList, float x, float y, float width, float height, float uiScale,
-                                float pointerX, float pointerY, float timeSeconds, int screenWidth, int screenHeight);
+    void renderInventoryPreview(RhiCommandList& commandList, float x, float y, float width, float height,
+                                float framebufferScaleX, float framebufferScaleY, float pointerX, float pointerY,
+                                float timeSeconds, int framebufferWidth, int framebufferHeight);
 
 private:
     struct PartMesh {

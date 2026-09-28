@@ -100,8 +100,8 @@ void PauseMenuScreen::buildUI(GameResources& resources, RhiDevice& rhiDevice) {
 void PauseMenuScreen::layout(const UIRenderContext& ctx) {
     UIScene::layout(ctx);
 
-    const float screenW = static_cast<float>(std::max(1, ctx.screenWidth));
-    const float screenH = static_cast<float>(std::max(1, ctx.screenHeight));
+    const float screenW = static_cast<float>(std::max(1, ctx.uiWidth));
+    const float screenH = static_cast<float>(std::max(1, ctx.uiHeight));
     const float sideMargin = std::clamp(screenW * 0.04f, 28.0f, 64.0f);
     const float topMargin = std::clamp(screenH * 0.10f, 54.0f, 96.0f);
     const float titleH = 56.0f;

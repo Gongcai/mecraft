@@ -25,8 +25,8 @@ public:
     // Add a visual separator line.
     void addSeparator();
 
-    // Show the menu at the given screen position (in reference coordinates).
-    void show(float menuX, float menuY);
+    // Show the menu with its bottom-left corner at the supplied UI reference position.
+    void show(float menuX, float menuBottomY);
 
     // Hide the menu.
     void hide();
@@ -59,7 +59,7 @@ private:
     bool m_menuVisible = false;
     int m_hoveredItem = -1;
     float m_menuX = 0.0f;
-    float m_menuY = 0.0f;
+    float m_menuBottomY = 0.0f;
     float m_scrollOffset = 0.0f;
     bool m_hasLocalStyle = false;
     UIContextMenuStyle m_localStyle;

@@ -216,7 +216,7 @@ void UISlider::renderSelf(const UIRenderContext& ctx) const {
             glm::vec4 rectRadius;
             glm::vec4 color;
         };
-        const Push push{glm::vec4(ctx.screenWidth, ctx.screenHeight, x, y), glm::vec4(w, h, radius, 0),
+        const Push push{glm::vec4(ctx.uiWidth, ctx.uiHeight, x, y), glm::vec4(w, h, radius, 0),
                         glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3])};
         ctx.commandList->pushConstants(&push, sizeof(push),
                                        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
@@ -250,9 +250,6 @@ UIEventResult UISlider::onInput(const UIInputEvent& event, const UIRenderContext
     float cy = ay + ah * 0.5f;
     float padding = 4.0f;
 
-    // Flip GLFW Y to widget coords
-    float flippedY = static_cast<float>(ctx.screenHeight) - event.y;
-
     switch (event.type) {
     case UIInputEventType::PointerMove: {
         if (m_dragging) {
@@ -267,7 +264,7 @@ UIEventResult UISlider::onInput(const UIInputEvent& event, const UIRenderContext
         }
         bool insideWidget = hitTest(event.x, event.y, ctx);
         bool insideHandle = std::abs(event.x - hx) <= (handleSize * 0.5f + padding) &&
-                            std::abs(flippedY - cy) <= (handleSize * 0.5f + padding);
+                            std::abs(event.y - cy) <= (handleSize * 0.5f + padding);
         bool hovered = insideWidget || insideHandle;
         if (hovered && !m_handleHovered) {
             m_handleHovered = true;

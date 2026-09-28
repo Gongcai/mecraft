@@ -152,14 +152,13 @@ std::string UINumericSpinner::formatValue() const {
 
 // Returns: -1 = minus, 0 = value, 1 = plus, -2 = outside.
 int UINumericSpinner::hitTestZone(float px, float py, const UIRenderContext& ctx) const {
-    const float flippedY = static_cast<float>(ctx.screenHeight) - py;
     const float ax = getAbsoluteX(ctx);
     const float ay = getAbsoluteY(ctx);
     const float aw = width * scaleX;
     const float ah = height * scaleY;
     const UIResolvedNumericSpinnerStyle resolved = resolveStyle(ctx);
 
-    if (px < ax || px >= ax + aw || flippedY < ay || flippedY >= ay + ah)
+    if (px < ax || px >= ax + aw || py < ay || py >= ay + ah)
         return -2;
 
     const float localX = px - ax;
@@ -245,7 +244,7 @@ void UINumericSpinner::renderSelf(const UIRenderContext& ctx) const {
             struct P {
                 glm::vec4 a, b, c;
             };
-            P p{glm::vec4(ctx.screenWidth, ctx.screenHeight, x, y), glm::vec4(w, h, 0, 0),
+            P p{glm::vec4(ctx.uiWidth, ctx.uiHeight, x, y), glm::vec4(w, h, 0, 0),
                 glm::vec4(c[0], c[1], c[2], c[3])};
             ctx.commandList->pushConstants(&p, sizeof(p),
                                            rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
@@ -290,13 +289,11 @@ void UINumericSpinner::renderSelf(const UIRenderContext& ctx) const {
             const std::string valStr = m_editing ? m_editText : formatValue();
             const auto m = ctx.textRenderer->measureText(valStr.empty() ? " " : valStr, textScale);
             // Clip to value area.
-            const float uiScale = ctx.pixelScale();
             UIRenderContext textContext = ctx;
             textContext.hasScissor = true;
-            textContext.scissor = {static_cast<int>((valueX + 2) * uiScale),
-                                   static_cast<int>(((ctx.screenHeight - ay - ah) + 2) * uiScale),
-                                   static_cast<uint32_t>((valueW - 4) * uiScale),
-                                   static_cast<uint32_t>((ah - 4) * uiScale)};
+            textContext.scissor = ctx.uiRectToFramebufferScissor(valueX + 2.0f, ay + 2.0f,
+                                                                 std::max(1.0f, valueW - 4.0f),
+                                                                 std::max(1.0f, ah - 4.0f));
             if (record) {
                 ctx.commandList->setScissor(textContext.scissor);
             }
@@ -306,8 +303,7 @@ void UINumericSpinner::renderSelf(const UIRenderContext& ctx) const {
                                    {resolved.text[0], resolved.text[1], resolved.text[2], resolved.text[3] * alpha});
 
             if (record) {
-                ctx.commandList->setScissor({0, 0, static_cast<uint32_t>(ctx.screenWidth * uiScale),
-                                             static_cast<uint32_t>(ctx.screenHeight * uiScale)});
+                ctx.commandList->setScissor(ctx.fullFramebufferScissor());
             }
         }
     }

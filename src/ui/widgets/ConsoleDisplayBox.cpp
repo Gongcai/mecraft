@@ -69,7 +69,7 @@ float ConsoleDisplayBox::computeLineAlpha(double ageSec, float holdSeconds, floa
 void ConsoleDisplayBox::render(double nowSec, const RenderParams& params, const DrawRectFn& drawRect,
                                const SetClipRectFn& setClipRect, const RenderTextFn& renderText,
                                const MeasureTextFn& measureText) {
-    if (!drawRect || !setClipRect || !renderText || params.screenW <= 0 || params.screenH <= 0) {
+    if (!drawRect || !setClipRect || !renderText || params.uiW <= 0 || params.uiH <= 0) {
         return;
     }
 
@@ -80,8 +80,8 @@ void ConsoleDisplayBox::render(double nowSec, const RenderParams& params, const 
 
     const int boxW =
         std::max(params.minBoxW,
-                 std::min(params.screenW - params.horizontalMargin * 2,
-                          static_cast<int>(std::round(static_cast<float>(params.screenW) * params.boxWidthRatio))));
+                 std::min(params.uiW - params.horizontalMargin * 2,
+                          static_cast<int>(std::round(static_cast<float>(params.uiW) * params.boxWidthRatio))));
     const int clipW = std::max(1, boxW - params.textPadX * 2);
     const int clipH = std::max(1, params.boxH - params.textPadY * 2);
 
@@ -101,7 +101,7 @@ void ConsoleDisplayBox::render(double nowSec, const RenderParams& params, const 
 
         const int boxY = stackBaseY + static_cast<int>(drawnCount) * (params.boxH + params.boxGap);
 
-        setClipRect(0, 0, params.screenW, params.screenH);
+        setClipRect(0, 0, params.uiW, params.uiH);
         auto bgColor = params.boxColor;
         bgColor[3] *= alpha;
         drawRect(params.x, boxY, boxW, params.boxH, bgColor);
@@ -132,10 +132,10 @@ void ConsoleDisplayBox::render(double nowSec, const RenderParams& params, const 
         setClipRect(clipX, clipY, clipW, clipH);
         auto tintedTextColor = textColorForType(it->type, params);
         tintedTextColor[3] *= alpha;
-        renderText(visibleText, textX, textY, params.textScale, tintedTextColor, static_cast<float>(params.screenW),
-                   static_cast<float>(params.screenH));
+        renderText(visibleText, textX, textY, params.textScale, tintedTextColor, static_cast<float>(params.uiW),
+                   static_cast<float>(params.uiH));
 
         ++drawnCount;
     }
-    setClipRect(0, 0, params.screenW, params.screenH);
+    setClipRect(0, 0, params.uiW, params.uiH);
 }

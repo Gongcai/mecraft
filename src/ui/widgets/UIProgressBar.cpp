@@ -176,7 +176,7 @@ void UIProgressBar::renderSelf(const UIRenderContext& ctx) const {
                 glm::vec4 color;
             };
             const PushConstants pushConstants{
-                glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x0, y0),
+                glm::vec4(static_cast<float>(ctx.uiWidth), static_cast<float>(ctx.uiHeight), x0, y0),
                 glm::vec4(x1 - x0, y1 - y0, std::min((x1 - x0) * 0.5f, (y1 - y0) * 0.5f), 0.0f),
                 glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3])};
             ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),

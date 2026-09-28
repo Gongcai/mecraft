@@ -16,7 +16,7 @@ void ItemGridControl::renderSelf(const UIRenderContext& context) const {
     if (!visible || !m_resources || m_slots.empty()) {
         return;
     }
-    if (context.screenWidth <= 0 || context.screenHeight <= 0) {
+    if (context.uiWidth <= 0 || context.uiHeight <= 0) {
         return;
     }
 

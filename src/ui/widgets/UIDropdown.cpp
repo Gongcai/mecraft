@@ -26,14 +26,7 @@ static_assert(sizeof(PanelSolidPushConstants) == 48u);
 static_assert(sizeof(PanelGlassPushConstants) == 64u);
 
 [[nodiscard]] RhiRect2D dropdownScissor(const UIRenderContext& context) {
-    if (context.hasScissor) {
-        return context.scissor;
-    }
-    return {0, 0,
-            static_cast<uint32_t>(
-                std::max(1.0f, std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
-            static_cast<uint32_t>(
-                std::max(1.0f, std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))};
+    return context.fullFramebufferScissor();
 }
 
 Color scaledColor(Color color, float rgbScale, float alphaScale) {
@@ -163,7 +156,7 @@ void UIDropdown::renderCollapsed(const UIRenderContext& ctx) const {
             return;
         }
         const PanelSolidPushConstants pushConstants{
-            glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x, y),
+            glm::vec4(static_cast<float>(ctx.uiWidth), static_cast<float>(ctx.uiHeight), x, y),
             glm::vec4(rectWidth, rectHeight, 0.0f, 0.0f),
             glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3])};
         ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
@@ -273,7 +266,7 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
     if (record && useGlass) {
         const float tintStrength = std::clamp(bgCol[3] * 0.34f, 0.16f, 0.34f);
         const PanelGlassPushConstants pushConstants{
-            glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), ax, panelY),
+            glm::vec4(static_cast<float>(ctx.uiWidth), static_cast<float>(ctx.uiHeight), ax, panelY),
             glm::vec4(aw, panelH, 0.0f, std::clamp(alpha * expandAlpha * 0.96f, 0.0f, 1.0f)),
             glm::vec4(bgCol[0], bgCol[1], bgCol[2], tintStrength), glm::vec4(0.54f, 0.70f, 0.0f, 0.0f)};
         ctx.commandList->setGraphicsPipeline(ctx.panelGlassPipeline);
@@ -300,7 +293,7 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
             return;
         }
         const PanelSolidPushConstants pushConstants{
-            glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x, y),
+            glm::vec4(static_cast<float>(ctx.uiWidth), static_cast<float>(ctx.uiHeight), x, y),
             glm::vec4(rectWidth, rectHeight, 0.0f, 0.0f),
             glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3])};
         ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
@@ -388,7 +381,6 @@ int UIDropdown::hitTestOption(float px, float py, const UIRenderContext& ctx) co
     float ay = getAbsoluteY(ctx);
     float aw = width * scaleX;
     float ah = height * scaleY;
-    float flippedY = static_cast<float>(ctx.screenHeight) - py;
 
     int visibleCount = std::min(static_cast<int>(m_options.size()), m_maxVisibleItems);
     float panelH = visibleCount * itemHeight;
@@ -397,12 +389,12 @@ int UIDropdown::hitTestOption(float px, float py, const UIRenderContext& ctx) co
         panelY = ay + ah + 2.0f;
     }
 
-    if (px < ax || px > ax + aw || flippedY < panelY || flippedY > panelY + panelH) {
+    if (px < ax || px > ax + aw || py < panelY || py > panelY + panelH) {
         return -1;
     }
 
     int scrollItems = static_cast<int>(m_scrollOffset / itemHeight);
-    float relY = flippedY - panelY;
+    float relY = py - panelY;
     int itemIdx = static_cast<int>((panelH - relY) / itemHeight) + scrollItems;
     if (itemIdx >= 0 && itemIdx < static_cast<int>(m_options.size())) {
         return itemIdx;
@@ -416,7 +408,6 @@ bool UIDropdown::hitTestExpandedPanel(float px, float py, const UIRenderContext&
     float ay = getAbsoluteY(ctx);
     float aw = width * scaleX;
     float ah = height * scaleY;
-    float flippedY = static_cast<float>(ctx.screenHeight) - py;
 
     int visibleCount = std::min(static_cast<int>(m_options.size()), m_maxVisibleItems);
     float panelH = visibleCount * itemHeight;
@@ -425,7 +416,7 @@ bool UIDropdown::hitTestExpandedPanel(float px, float py, const UIRenderContext&
         panelY = ay + ah + 2.0f;
     }
 
-    return px >= ax && px <= ax + aw && flippedY >= panelY && flippedY <= panelY + panelH;
+    return px >= ax && px <= ax + aw && py >= panelY && py <= panelY + panelH;
 }
 
 UIEventResult UIDropdown::onInput(const UIInputEvent& event, const UIRenderContext& ctx) {

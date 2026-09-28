@@ -16,12 +16,12 @@ struct CreativeInventoryLayout {
     float sourceWidth = 195.0f;
     float sourceHeight = 136.0f;
     float itemGridX = 9.0f;
-    float itemGridY = 18.0f;
+    float itemGridY = 18.0f; // Top-left source-texture offset.
     float slotSize = 18.0f;
     float scrollbarX = 175.0f;
     float scrollbarY = 18.0f;
 
-    // Player preview frame in source texture pixels, using top-left texture coordinates.
+    // Player preview frame uses top-left source-texture coordinates.
     float playerPreviewX0 = 28.0f;
     float playerPreviewY0 = 6.0f;
     float playerPreviewX1 = 60.0f;
@@ -73,7 +73,7 @@ private:
         float height = 0.0f;
     };
 
-    [[nodiscard]] ResolvedPanelRect resolvePanelRect(int screenWidth, int screenHeight) const;
+    [[nodiscard]] ResolvedPanelRect resolvePanelRect(int uiWidth, int uiHeight) const;
     [[nodiscard]] HitRect tabRect(CreativeInventoryTab tab, const ResolvedPanelRect& panelRect) const;
     [[nodiscard]] bool hitRectContains(const HitRect& rect, float x, float y) const;
     [[nodiscard]] int maxScrollRow() const;
@@ -106,8 +106,8 @@ private:
     ItemID m_lastActivatedCreativeItem = 0;
 
     GameResources* m_resources = nullptr;
-    int m_cachedScreenWidth = 1920;
-    int m_cachedScreenHeight = 1080;
+    int m_cachedUiWidth = 1920;
+    int m_cachedUiHeight = 1080;
 
     mutable UITooltip m_tooltip;
     mutable ItemID m_tooltipHoveredItemId = 0;

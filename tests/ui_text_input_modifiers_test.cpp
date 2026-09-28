@@ -28,8 +28,8 @@ public:
 
 int main() {
     UIRenderContext context;
-    context.screenWidth = 400;
-    context.screenHeight = 240;
+    context.uiWidth = 400;
+    context.uiHeight = 240;
 
     TestTextInput input;
     input.setText("abc");
@@ -73,7 +73,7 @@ int main() {
     UIInputEvent pointerDown;
     pointerDown.type = UIInputEventType::PointerDown;
     pointerDown.x = 80.0f;
-    pointerDown.y = 4.0f;
+    pointerDown.y = 236.0f;
     pointerDown.button = UIPointerButton::Primary;
     if (spinner.onInput(pointerDown, context) != UIEventResult::Consumed) {
         return fail("numeric spinner value area should enter editing mode");

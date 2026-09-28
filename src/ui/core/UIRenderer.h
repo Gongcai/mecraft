@@ -48,7 +48,8 @@ public:
     void init(GameResources& resources, RhiDevice& rhiDevice, RhiCommandListPool& commandListPool);
     void shutdown();
 
-    UIRenderContext prepareRenderContext(int surfaceWidth, int surfaceHeight, RhiDevice& rhiDevice,
+    UIRenderContext prepareRenderContext(int windowWidth, int windowHeight, int framebufferWidth,
+                                         int framebufferHeight, RhiDevice& rhiDevice,
                                          const Inventory& inventory, const PlayerStatsData& playerStats,
                                          const InputSnapshot& inputSnapshot);
     void renderPrepared(const UIRenderContext& context);
@@ -112,7 +113,8 @@ public:
     [[nodiscard]] UIScene* getActiveScene() const;
     [[nodiscard]] GameResources* getResources() const;
     [[nodiscard]] RhiDevice* getRhiDevice() const;
-    UIRenderContext prepareSceneContext(int surfaceWidth, int surfaceHeight, RhiDevice& rhiDevice,
+    UIRenderContext prepareSceneContext(int windowWidth, int windowHeight, int framebufferWidth, int framebufferHeight,
+                                        RhiDevice& rhiDevice,
                                         const InputSnapshot& inputSnapshot);
     void renderSceneOnlyPrepared(const UIRenderContext& context);
 
@@ -155,9 +157,12 @@ public:
     [[nodiscard]] float getInventoryCountTextScale() const;
 
 private:
-    [[nodiscard]] UIRenderContext makeContextFromSurface(int surfaceWidth, int surfaceHeight,
-                                                         const Inventory& inventory, const PlayerStatsData& playerStats,
-                                                         const InputSnapshot& inputSnapshot) const;
+    [[nodiscard]] UIRenderContext makeContextFromSizes(int windowWidth, int windowHeight, int framebufferWidth,
+                                                       int framebufferHeight, const Inventory& inventory,
+                                                       const PlayerStatsData& playerStats,
+                                                       const InputSnapshot& inputSnapshot) const;
+    void updateSurfaceMetrics(UIRenderContext& context, int windowWidth, int windowHeight, int framebufferWidth,
+                              int framebufferHeight) const;
     void renderControls(const UIRenderContext& context);
     void renderDeathOverlay(const UIRenderContext& context);
     void prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDevice) const;
@@ -204,8 +209,10 @@ private:
     UITheme m_theme;
     const LocaleManager* m_localeManager = nullptr;
     mutable UIRenderContext m_lastSceneContext;
-    int m_surfaceWidth = 1;
-    int m_surfaceHeight = 1;
+    int m_windowWidth = 1;
+    int m_windowHeight = 1;
+    int m_framebufferWidth = 1;
+    int m_framebufferHeight = 1;
     bool m_commandInputRequested = false;
 
     // GUI Scale setting

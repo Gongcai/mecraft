@@ -27,14 +27,7 @@ static_assert(sizeof(PanelSolidPushConstants) == 48u);
 static_assert(sizeof(PanelGlassPushConstants) == 64u);
 
 [[nodiscard]] RhiRect2D panelScissor(const UIRenderContext& context) {
-    if (context.hasScissor) {
-        return context.scissor;
-    }
-    return {0, 0,
-            static_cast<uint32_t>(
-                std::max(1.0f, std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
-            static_cast<uint32_t>(
-                std::max(1.0f, std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))};
+    return context.fullFramebufferScissor();
 }
 
 } // namespace
@@ -86,8 +79,8 @@ void UIPanel::renderSelf(const UIRenderContext& context) const {
         std::array<float, 4> tint = resolved.background;
         const float tintStrength = std::clamp(tint[3] * 0.42f, 0.18f, 0.42f);
         const float opacity = std::clamp(alpha * 0.94f, 0.0f, 1.0f);
-        const PanelGlassPushConstants pushConstants{glm::vec4(static_cast<float>(context.screenWidth),
-                                                              static_cast<float>(context.screenHeight), panelX, panelY),
+        const PanelGlassPushConstants pushConstants{glm::vec4(static_cast<float>(context.uiWidth),
+                                                              static_cast<float>(context.uiHeight), panelX, panelY),
                                                     glm::vec4(panelWidth, panelHeight, 0.0f, opacity),
                                                     glm::vec4(tint[0], tint[1], tint[2], tintStrength),
                                                     glm::vec4(0.58f, 0.74f, 0.0f, 0.0f)};
@@ -111,7 +104,7 @@ void UIPanel::renderSelf(const UIRenderContext& context) const {
             return;
         }
         const PanelSolidPushConstants pushConstants{
-            glm::vec4(static_cast<float>(context.screenWidth), static_cast<float>(context.screenHeight), x, y),
+            glm::vec4(static_cast<float>(context.uiWidth), static_cast<float>(context.uiHeight), x, y),
             glm::vec4(rectWidth, rectHeight, 0.0f, 0.0f),
             glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3])};
         commandList.pushConstants(&pushConstants, sizeof(pushConstants),

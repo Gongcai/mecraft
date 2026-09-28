@@ -219,7 +219,7 @@ void UICheckbox::renderSelf(const UIRenderContext& ctx) const {
                 glm::vec4 rectRadius;
                 glm::vec4 color;
             };
-            const Push push{glm::vec4(ctx.screenWidth, ctx.screenHeight, x, y), glm::vec4(w, h, 0, 0),
+            const Push push{glm::vec4(ctx.uiWidth, ctx.uiHeight, x, y), glm::vec4(w, h, 0, 0),
                             glm::vec4(color[0], color[1], color[2], color[3])};
             ctx.commandList->pushConstants(&push, sizeof(push),
                                            rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
@@ -242,7 +242,7 @@ void UICheckbox::renderSelf(const UIRenderContext& ctx) const {
                     glm::vec4 rectRadius;
                     glm::vec4 color;
                 };
-                const Push push{glm::vec4(ctx.screenWidth, ctx.screenHeight, bx0 + offset, by0 + offset),
+                const Push push{glm::vec4(ctx.uiWidth, ctx.uiHeight, bx0 + offset, by0 + offset),
                                 glm::vec4(scaledSize, scaledSize, 0, 0), glm::vec4(c[0], c[1], c[2], c[3])};
                 ctx.commandList->setGraphicsPipeline(m_colorPipeline);
                 ctx.commandList->pushConstants(&push, sizeof(push),

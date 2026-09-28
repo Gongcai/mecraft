@@ -17,17 +17,17 @@ struct UILayout {
     float offsetX = 0.0f;
     float offsetY = 0.0f;
 
-    /// Resolves the horizontal position in bottom-left-origin framebuffer pixels.
-    /// @param screenW Framebuffer width in pixels.
-    /// @param controlW Control width in pixels.
-    /// @return Horizontal position in framebuffer pixels.
-    [[nodiscard]] float resolveX(float screenW, float controlW) const;
+    /// Resolves the horizontal position in bottom-left-origin UI reference units.
+    /// @param uiWidth UI reference width.
+    /// @param controlWidth Control width in UI reference units.
+    /// @return Horizontal position in UI reference units.
+    [[nodiscard]] float resolveX(float uiWidth, float controlWidth) const;
 
-    /// Resolves the vertical position in bottom-left-origin framebuffer pixels.
-    /// @param screenH Framebuffer height in pixels.
-    /// @param controlH Control height in pixels.
-    /// @return Vertical position in framebuffer pixels.
-    [[nodiscard]] float resolveY(float screenH, float controlH) const;
+    /// Resolves the vertical position in bottom-left-origin UI reference units.
+    /// @param uiHeight UI reference height.
+    /// @param controlHeight Control height in UI reference units.
+    /// @return Vertical position in UI reference units.
+    [[nodiscard]] float resolveY(float uiHeight, float controlHeight) const;
 };
 
 // Shared constants for the hotbar widget, used by HotbarControl and HudControl.
