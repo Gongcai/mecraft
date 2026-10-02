@@ -235,7 +235,7 @@ bool bootstrapGameResources(GameResources& resources, RhiDevice& rhiDevice, RhiC
         return false;
     }
 
-    resources.uiTextures.buildHudIconAtlas(ICONS_TEXTURE_DIR, 8);
+    resources.uiTextures.buildHudIconAtlas(ICONS_TEXTURE_DIR, 9);
 
     BlockRegistry::init(&resources.blockTextures);
     if (!ItemRegistry::init()) {

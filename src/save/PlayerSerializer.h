@@ -45,6 +45,8 @@ struct PlayerData {
     int food = 20;
     int foodMax = 20;
     int saturation = 5;
+    int air = 300;
+    int airMax = 300;
     bool isFlying = false;
     int selectedSlot = 0;
 

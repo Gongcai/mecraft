@@ -171,6 +171,7 @@ void EntityFactory::ensureServerPlayerProxy(GameplayRegistry& registry, const en
     ensureComponent<MeleeAttackComponent>(reg, entity);
     ensureComponent<ProjectileThrowerComponent>(reg, entity);
     ensureComponent<HealthComponent>(reg, entity);
+    ensureComponent<AirSupplyComponent>(reg, entity);
     ensureComponent<PlayerModeComponent>(reg, entity);
     ensureComponent<HurtEffectComponent>(reg, entity);
     ensureComponent<InventoryComponent>(reg, entity);

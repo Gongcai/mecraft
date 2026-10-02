@@ -425,6 +425,9 @@ GameplayPresentationSnapshot GameplayPresentationBuilder::build(ecs::GameplayReg
     snap.playerStats.maxArmor = playerQuery.getMaxArmor();
     snap.playerStats.food = playerQuery.getFood();
     snap.playerStats.maxFood = playerQuery.getMaxFood();
+    snap.playerStats.air = playerQuery.getAirSupply();
+    snap.playerStats.maxAir = playerQuery.getMaxAirSupply();
+    snap.playerStats.eyesInWater = snap.eyeInWater;
     snap.playerStats.isDead = snap.playerStats.health <= 0;
 
     // Check gameplay mode for survival stats visibility

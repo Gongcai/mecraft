@@ -325,6 +325,7 @@ static void testClientAppliesPlayerHealthSnapshot() {
     body.body.position = glm::vec3(5.0f, 6.0f, 7.0f);
     body.body.velocity = glm::vec3(1.0f, 0.0f, 0.0f);
     raw.emplace<ecs::HealthComponent>(player);
+    auto& air = raw.emplace<ecs::AirSupplyComponent>(player);
     raw.emplace<ecs::HurtEffectComponent>(player);
     client.initEntityStore(registry, nullptr);
 
@@ -339,6 +340,8 @@ static void testClientAppliesPlayerHealthSnapshot() {
     snapshot.ackInputSequence = 4;
     snapshot.playerHealth = 13;
     snapshot.playerMaxHealth = 20;
+    snapshot.playerAir = 215;
+    snapshot.playerMaxAir = 300;
     snapshot.playerHurt = true;
     snapshotPacket.inProcessPayload = snapshot;
     transportPtr->pushIncoming(std::move(snapshotPacket));
@@ -347,6 +350,7 @@ static void testClientAppliesPlayerHealthSnapshot() {
 
     require(raw.get<ecs::HealthComponent>(player).current == 13, "client should apply server player health");
     require(raw.get<ecs::HealthComponent>(player).max == 20, "client should apply server max health");
+    require(air.current == 215 && air.max == 300, "client should apply server player air supply");
     require(raw.get<ecs::HurtEffectComponent>(player).classicHurtEffectPending,
             "client should apply server hurt event");
     require(client.lastSnapshot().playerHealth == 13, "client should retain health in last snapshot");
@@ -424,6 +428,9 @@ static void testClientAppliesPlayerHealthSnapshot() {
     snapshot.authoritativePosition = glm::vec3(2.0f, 64.0f, -3.0f);
     snapshot.authoritativeVelocity = glm::vec3(0.0f);
     snapshot.playerHealth = 20;
+    snapshot.playerAir = 300;
+    air.gameTickRemainder = 0.04;
+    air.drowningTickRemainder = 19.0;
     snapshot.playerRespawned = true;
     snapshot.playerDead = false;
     snapshot.playerPoseCorrected = false;
@@ -433,6 +440,8 @@ static void testClientAppliesPlayerHealthSnapshot() {
     client.receiveMessages();
 
     require(raw.get<ecs::HealthComponent>(player).current == 20, "client should apply respawned health");
+    require(air.current == 300 && air.gameTickRemainder == 0.0 && air.drowningTickRemainder == 0.0,
+            "client respawn snapshot should restore air and clear oxygen timers");
     require(!client.isPlayerDead(), "client should clear dead state after respawn snapshot");
     require(raw.get<ecs::TransformComponent>(player).position == snapshot.authoritativePosition,
             "client should move local player to respawn position");
@@ -3659,14 +3668,15 @@ static void testServerSnapshotCodecCarriesPlayerHealth() {
     snapshot.authoritativeVelocity = glm::vec3(0.25f, 0.0f, -0.5f);
     snapshot.playerHealth = 7;
     snapshot.playerMaxHealth = 20;
+    snapshot.playerAir = 215;
+    snapshot.playerMaxAir = 300;
     snapshot.playerHurt = true;
     snapshot.playerRespawned = true;
     snapshot.playerDead = true;
     snapshot.playerPoseCorrected = true;
 
     const auto encoded = net::PacketCodec::encodeServerSnapshot(snapshot);
-    require(encoded.size() == 40,
-            "server snapshot codec should include health, respawn, dead, and pose correction bytes");
+    require(encoded.size() == 44, "server snapshot codec should include health, player state, and air supply bytes");
     require(encoded[32] == 7 && encoded[33] == 0,
             "server snapshot codec should write player health after base payload");
     require(encoded[34] == 20 && encoded[35] == 0, "server snapshot codec should write max health after health");
@@ -3681,6 +3691,8 @@ static void testServerSnapshotCodecCarriesPlayerHealth() {
     require(decoded.ackInputSequence == 9, "server snapshot codec should keep ack");
     require(decoded.playerHealth == 7, "server snapshot codec should keep player health");
     require(decoded.playerMaxHealth == 20, "server snapshot codec should keep max health");
+    require(decoded.playerAir == 215 && decoded.playerMaxAir == 300,
+            "server snapshot codec should keep air supply values");
     require(decoded.playerHurt, "server snapshot codec should keep hurt event");
     require(decoded.playerRespawned, "server snapshot codec should keep respawn event");
     require(decoded.playerDead, "server snapshot codec should keep dead state");
@@ -3691,6 +3703,8 @@ static void testServerSnapshotCodecCarriesPlayerHealth() {
             "server snapshot codec should decode legacy dead payload");
     require(legacyDeadDecoded.playerDead, "legacy dead payload should keep dead state");
     require(!legacyDeadDecoded.playerPoseCorrected, "legacy dead payload should default pose correction state off");
+    require(legacyDeadDecoded.playerAir == 300 && legacyDeadDecoded.playerMaxAir == 300,
+            "legacy snapshots should default air supply to full");
 
     net::ServerSnapshot legacyDecoded;
     require(net::PacketCodec::decodeServerSnapshot(encoded.data(), 38, legacyDecoded),

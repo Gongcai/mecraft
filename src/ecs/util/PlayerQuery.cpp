@@ -257,6 +257,20 @@ int PlayerQuery::getMaxFood() const {
     return 20;
 }
 
+int PlayerQuery::getAirSupply() const {
+    auto e = findPlayer();
+    if (const auto* air = m_registry.try_get<AirSupplyComponent>(e))
+        return air->current;
+    return 300;
+}
+
+int PlayerQuery::getMaxAirSupply() const {
+    auto e = findPlayer();
+    if (const auto* air = m_registry.try_get<AirSupplyComponent>(e))
+        return air->max;
+    return 300;
+}
+
 // ── View Bob ──
 
 float PlayerQuery::getEyeBobAmplitude() const {

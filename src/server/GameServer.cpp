@@ -574,6 +574,11 @@ void GameServer::respawnPlayer(ConnectedClient& client) {
     }
     health->max = std::max(1, health->max);
     health->current = health->max;
+    if (auto* air = reg.try_get<ecs::AirSupplyComponent>(playerEntity)) {
+        air->current = air->max;
+        air->gameTickRemainder = 0.0;
+        air->drowningTickRemainder = 0.0;
+    }
 
     if (auto* hurt = reg.try_get<ecs::HurtEffectComponent>(playerEntity)) {
         hurt->classicHurtEffectPending = false;
@@ -2321,6 +2326,10 @@ void GameServer::sendSnapshotsToClients() {
             if (const auto* health = m_ecsRegistry->try_get<ecs::HealthComponent>(playerEntity)) {
                 snapshot.playerHealth = static_cast<uint16_t>(std::clamp(health->current, 0, 65535));
                 snapshot.playerMaxHealth = static_cast<uint16_t>(std::clamp(health->max, 0, 65535));
+            }
+            if (const auto* air = m_ecsRegistry->try_get<ecs::AirSupplyComponent>(playerEntity)) {
+                snapshot.playerAir = static_cast<uint16_t>(std::clamp(air->current, 0, 65535));
+                snapshot.playerMaxAir = static_cast<uint16_t>(std::clamp(air->max, 1, 65535));
             }
             if (auto* hurt = m_ecsRegistry->try_get<ecs::HurtEffectComponent>(playerEntity)) {
                 snapshot.playerHurt = hurt->classicHurtEffectPending;

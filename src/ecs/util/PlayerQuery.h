@@ -60,6 +60,8 @@ public:
     [[nodiscard]] int getMaxArmor() const;
     [[nodiscard]] int getFood() const;
     [[nodiscard]] int getMaxFood() const;
+    [[nodiscard]] int getAirSupply() const;
+    [[nodiscard]] int getMaxAirSupply() const;
 
     // ── View Bob ──
     [[nodiscard]] float getEyeBobAmplitude() const;

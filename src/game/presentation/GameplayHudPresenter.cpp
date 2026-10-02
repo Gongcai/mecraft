@@ -15,6 +15,9 @@ PlayerStatsData toPlayerStatsData(const GameplayPresentationSnapshot& snap) {
     playerStats.maxArmor = snap.playerStats.maxArmor;
     playerStats.food = snap.playerStats.food;
     playerStats.maxFood = snap.playerStats.maxFood;
+    playerStats.air = snap.playerStats.air;
+    playerStats.maxAir = snap.playerStats.maxAir;
+    playerStats.eyesInWater = snap.playerStats.eyesInWater;
     playerStats.showSurvivalStats = snap.playerStats.showSurvivalStats;
     playerStats.isDead = snap.playerStats.isDead;
     return playerStats;

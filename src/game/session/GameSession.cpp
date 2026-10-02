@@ -793,6 +793,12 @@ void GameSession::saveLocalPlayer() {
             data.saturation = f.saturation;
         }
 
+        if (ecsReg.all_of<ecs::AirSupplyComponent>(e)) {
+            const auto& air = ecsReg.get<ecs::AirSupplyComponent>(e);
+            data.air = air.current;
+            data.airMax = air.max;
+        }
+
         // Flight
         if (ecsReg.all_of<ecs::FlightStateComponent>(e)) {
             auto& fs = ecsReg.get<ecs::FlightStateComponent>(e);
@@ -877,6 +883,14 @@ void GameSession::loadLocalPlayer() {
             f.current = data.food;
             f.max = data.foodMax;
             f.saturation = data.saturation;
+        }
+
+        if (ecsReg.all_of<ecs::AirSupplyComponent>(e)) {
+            auto& air = ecsReg.get<ecs::AirSupplyComponent>(e);
+            air.max = std::max(1, data.airMax);
+            air.current = std::clamp(data.air, 0, air.max);
+            air.gameTickRemainder = 0.0;
+            air.drowningTickRemainder = 0.0;
         }
 
         // Flight

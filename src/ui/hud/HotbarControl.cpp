@@ -133,8 +133,9 @@ void HotbarControl::renderInternal(const UIRenderContext& context, const Invento
 
     const TextureAtlas& itemIconAtlas = m_resources->uiTextures.blockIconAtlas();
     const TextureAtlas& itemTextureAtlas = m_resources->uiTextures.itemTextureAtlas();
-    const RhiTextureHandle widgetsTexture = m_resources->texture2D.getGuiHandle("widgets");
-    if (!widgetsTexture.isValid()) {
+    const RhiTextureHandle hotbarTexture = m_resources->texture2D.getGuiHandle("hud_hotbar");
+    const RhiTextureHandle selectionTexture = m_resources->texture2D.getGuiHandle("hud_hotbar_selection");
+    if (!hotbarTexture.isValid() || !selectionTexture.isValid()) {
         return;
     }
 
@@ -179,27 +180,14 @@ void HotbarControl::renderInternal(const UIRenderContext& context, const Invento
         commandList.draw(6u, 1u, 0u, 0u);
     };
 
-    auto uvFromTopLeftPixels = [](float x0, float y0, float x1, float y1) {
-        const float u0 = x0 / HotbarLayout::kWidgetsWidth;
-        const float u1 = x1 / HotbarLayout::kWidgetsWidth;
-        const float v0 = (HotbarLayout::kWidgetsHeight - y1) / HotbarLayout::kWidgetsHeight;
-        const float v1 = (HotbarLayout::kWidgetsHeight - y0) / HotbarLayout::kWidgetsHeight;
-        return std::array<float, 4>{u0, v0, u1, v1};
-    };
+    const std::array<float, 4> fullUv{0.0f, 0.0f, 1.0f, 1.0f};
+    drawImage(hotbarTexture, startX, startY, hotbarWidth, hotbarHeight, fullUv, m_bgColor);
 
-    {
-        const auto uv = uvFromTopLeftPixels(1.0f, 0.0f, 182.0f, 21.0f);
-        drawImage(widgetsTexture, startX, startY, hotbarWidth, hotbarHeight, uv, m_bgColor);
-    }
-
-    {
-        const auto uv = uvFromTopLeftPixels(0.0f, 21.0f, 25.0f, 46.0f);
-        const float selectorOffset = ((HotbarLayout::kHighlightSize - 20.0f) * 0.5f) * HotbarLayout::kScale;
-        const float selX = startX + static_cast<float>(selectedSlot) * slotStride - selectorOffset + 2;
-        const float selY = startY - 3.0f;
-        const float selectorSize = HotbarLayout::kHighlightSize * HotbarLayout::kScale;
-        drawImage(widgetsTexture, selX, selY, selectorSize, selectorSize, uv, m_borderColor);
-    }
+    const float selectorSize = HotbarLayout::kHighlightSize * HotbarLayout::kScale;
+    const float selectorOffset = (HotbarLayout::kHighlightSize - 20.0f) * 0.5f * HotbarLayout::kScale;
+    const float selectedX = startX + static_cast<float>(selectedSlot) * slotStride - selectorOffset + 2.0f;
+    const float selectedY = startY - HotbarLayout::kScale * 0.5f;
+    drawImage(selectionTexture, selectedX, selectedY, selectorSize, selectorSize, fullUv, m_borderColor);
 
     constexpr float iconInset = 2.0f * HotbarLayout::kScale;
     constexpr float iconSize = 17.5f * HotbarLayout::kScale;

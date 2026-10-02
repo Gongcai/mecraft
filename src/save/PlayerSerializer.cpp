@@ -136,6 +136,7 @@ nlohmann::json PlayerSerializer::serialize(const PlayerData& data) {
     j["health"] = {{"current", data.health}, {"max", data.healthMax}};
     j["armor"] = {{"current", data.armor}, {"max", data.armorMax}};
     j["food"] = {{"current", data.food}, {"max", data.foodMax}, {"saturation", data.saturation}};
+    j["air"] = {{"current", data.air}, {"max", data.airMax}};
     j["flight"] = {{"isFlying", data.isFlying}};
 
     // Serialize non-empty inventory slots
@@ -199,6 +200,13 @@ bool PlayerSerializer::deserialize(const nlohmann::json& j, PlayerData& out) {
         if (!food->is_object() || !readIntField(*food, "current", out.food) ||
             !readIntField(*food, "max", out.foodMax) || !readIntField(*food, "saturation", out.saturation)) {
             MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid food object\n");
+            return false;
+        }
+    }
+
+    if (const nlohmann::json* air = findField(j, "air")) {
+        if (!air->is_object() || !readIntField(*air, "current", out.air) || !readIntField(*air, "max", out.airMax)) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid air supply object\n");
             return false;
         }
     }

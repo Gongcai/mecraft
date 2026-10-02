@@ -2,9 +2,6 @@
 
 #include <array>
 
-#include <cstdint>
-
-#include "renderer/rhi/RhiHandles.h"
 #include "../core/UIWidget.h"
 
 struct GameResources;
@@ -25,17 +22,6 @@ protected:
     void renderSelf(const UIRenderContext& ctx) const override;
 
 private:
-    void initMesh();
-    void rebuildMesh();
-    void cleanupMesh();
-
-    RhiDevice* m_rhiDevice = nullptr;
-    RhiBufferHandle m_vertexBuffer;
-    RhiShaderHandle m_vertexShader;
-    RhiShaderHandle m_fragmentShader;
-    RhiPipelineLayoutHandle m_pipelineLayout;
-    RhiPipelineHandle m_pipeline;
-    int m_vertexCount = 0;
     float m_size = 1.0f;
     std::array<float, 4> m_color{1.0f, 1.0f, 1.0f, 1.0f};
 };

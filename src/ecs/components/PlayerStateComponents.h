@@ -45,6 +45,13 @@ struct FoodComponent {
     double lastHungerTick = 0.0; // last game-time (seconds) when hunger was depleted
 };
 
+struct AirSupplyComponent {
+    int current = 300;
+    int max = 300;
+    double gameTickRemainder = 0.0;
+    double drowningTickRemainder = 0.0;
+};
+
 struct HurtEffectComponent {
     bool classicHurtEffectPending = false;
     float flashSecondsRemaining = 0.0f;

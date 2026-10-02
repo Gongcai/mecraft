@@ -1049,6 +1049,8 @@ static void testPlayerSerializerRoundTrip() {
     data.food = 18;
     data.foodMax = 20;
     data.saturation = 3;
+    data.air = 215;
+    data.airMax = 300;
     data.isFlying = true;
     data.selectedSlot = 3;
 
@@ -1077,6 +1079,8 @@ static void testPlayerSerializerRoundTrip() {
     assert(loaded.armor == 5);
     assert(loaded.food == 18);
     assert(loaded.saturation == 3);
+    assert(loaded.air == 215);
+    assert(loaded.airMax == 300);
     assert(loaded.isFlying == true);
     assert(loaded.selectedSlot == 3);
     assert(loaded.inventory.size() >= 6);

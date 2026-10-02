@@ -31,6 +31,9 @@ struct PlayerStatsData {
     int maxArmor = 20;
     int food = 20;
     int maxFood = 20;
+    int air = 300;
+    int maxAir = 300;
+    bool eyesInWater = false;
     bool showSurvivalStats = true; // false in creative mode
     bool isDead = false;
 };

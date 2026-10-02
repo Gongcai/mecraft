@@ -73,6 +73,7 @@ void GameplayScene::initLocalPlayer(const glm::vec3& spawnPos) {
     m_registry.emplace<HealthComponent>(m_localPlayer);
     m_registry.emplace<ArmorComponent>(m_localPlayer);
     m_registry.emplace<FoodComponent>(m_localPlayer);
+    m_registry.emplace<AirSupplyComponent>(m_localPlayer);
     m_registry.emplace<ViewBobComponent>(m_localPlayer);
     m_registry.emplace<HurtEffectComponent>(m_localPlayer);
 

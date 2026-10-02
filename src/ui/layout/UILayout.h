@@ -33,12 +33,12 @@ struct UILayout {
 // Shared constants for the hotbar widget, used by HotbarControl and HudControl.
 namespace HotbarLayout {
 constexpr float kWidgetsWidth = 182.0f;
-constexpr float kWidgetsHeight = 46.0f;
-constexpr float kBgHeight = 21.0f;
-constexpr float kHighlightSize = 25.0f;
+constexpr float kWidgetsHeight = 22.0f;
+constexpr float kBgHeight = 22.0f;
+constexpr float kHighlightSize = 24.0f;
 constexpr float kScale = 2.0f;
 constexpr float kBottomMargin = 8.0f;
 
 constexpr float kWidth = kWidgetsWidth * kScale; // 364
-constexpr float kHeight = kBgHeight * kScale; // 42
+constexpr float kHeight = kBgHeight * kScale; // 44
 } // namespace HotbarLayout

@@ -365,6 +365,14 @@ void GameClient::handleServerSnapshot(const net::ServerSnapshot& snapshot) {
         const bool hurtFlagRising = snapshot.playerHurt && !m_playerHurtLatched;
         health.current = static_cast<int>(snapshot.playerHealth);
         health.max = static_cast<int>(snapshot.playerMaxHealth);
+        if (auto* air = m_ecsRegistry->try_get<ecs::AirSupplyComponent>(player)) {
+            air->max = std::max(1, static_cast<int>(snapshot.playerMaxAir));
+            air->current = std::clamp(static_cast<int>(snapshot.playerAir), 0, air->max);
+            if (snapshot.playerRespawned) {
+                air->gameTickRemainder = 0.0;
+                air->drowningTickRemainder = 0.0;
+            }
+        }
 
         if (snapshot.playerRespawned || snapshot.playerPoseCorrected) {
             if (auto* transform = m_ecsRegistry->try_get<ecs::TransformComponent>(player)) {

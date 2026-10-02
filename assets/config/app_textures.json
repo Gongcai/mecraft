@@ -30,6 +30,24 @@
       "flip": true
     },
     {
+      "name": "hud_hotbar",
+      "path": "textures/gui/hud/hotbar.png",
+      "kind": "gui",
+      "flip": true
+    },
+    {
+      "name": "hud_hotbar_selection",
+      "path": "textures/gui/hud/hotbar_selection.png",
+      "kind": "gui",
+      "flip": true
+    },
+    {
+      "name": "hud_crosshair",
+      "path": "textures/gui/hud/crosshair.png",
+      "kind": "gui",
+      "flip": true
+    },
+    {
       "name": "inventory",
       "path": "textures/gui/inventory.png",
       "kind": "gui",

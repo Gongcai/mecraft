@@ -138,6 +138,8 @@ public:
         pushU8(buf, msg.playerRespawned ? 1 : 0);
         pushU8(buf, msg.playerDead ? 1 : 0);
         pushU8(buf, msg.playerPoseCorrected ? 1 : 0);
+        pushU16(buf, msg.playerAir);
+        pushU16(buf, msg.playerMaxAir);
         return buf;
     }
 
@@ -535,6 +537,8 @@ public:
         out.authoritativeVelocity.z = readFloat(data, offset);
         out.playerHealth = 20;
         out.playerMaxHealth = 20;
+        out.playerAir = 300;
+        out.playerMaxAir = 300;
         out.playerHurt = false;
         out.playerRespawned = false;
         out.playerDead = false;
@@ -552,6 +556,10 @@ public:
         }
         if (size >= 40) {
             out.playerPoseCorrected = readU8(data, offset) != 0;
+        }
+        if (size >= 44) {
+            out.playerAir = readU16(data, offset);
+            out.playerMaxAir = readU16(data, offset);
         }
         return true;
     }

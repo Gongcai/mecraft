@@ -27,6 +27,7 @@
 #include "systems/player/FallDamageSystem.h"
 #include "systems/player/FallRollEffectSystem.h"
 #include "systems/player/HungerDepletionSystem.h"
+#include "systems/player/OxygenDepletionSystem.h"
 #include "systems/player/InputSamplingSystem.h"
 #include "systems/player/PlayerIntentBuildSystem.h"
 #include "systems/player/PlayerRuntimeUpdateSystem.h"
@@ -106,6 +107,7 @@ void GameplayPipeline::buildClientFixedUpdateSystems() {
 
     // Survival state.
     addFixedUpdateSystem<HungerDepletionSystem>();
+    addFixedUpdateSystem<OxygenDepletionSystem>();
 
     // Audio and local presentation.
     addFixedUpdateSystem<PlayerFootstepAudioSystem>();
@@ -134,6 +136,7 @@ void GameplayPipeline::buildServerFixedUpdateSystems() {
     addFixedUpdateSystem<DamageSystem>(FixedUpdateDebugCategory::State, PostSystemHook::AfterDamageSystem);
     addFixedUpdateSystem<HurtEffectDecaySystem>();
     addFixedUpdateSystem<DeathSystem>();
+    addFixedUpdateSystem<OxygenDepletionSystem>();
     addFixedUpdateSystem<ItemPhysicsSystem>(FixedUpdateDebugCategory::Drop);
     addFixedUpdateSystem<ItemMergeSystem>(FixedUpdateDebugCategory::Drop);
     addFixedUpdateSystem<ItemPickupSystem>(FixedUpdateDebugCategory::Drop);

@@ -251,6 +251,8 @@ struct ServerSnapshot {
     glm::vec3 authoritativeVelocity = glm::vec3(0.0f);
     uint16_t playerHealth = 20;
     uint16_t playerMaxHealth = 20;
+    uint16_t playerAir = 300;
+    uint16_t playerMaxAir = 300;
     bool playerHurt = false;
     bool playerRespawned = false;
     bool playerDead = false;
