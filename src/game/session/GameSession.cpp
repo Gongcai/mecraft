@@ -262,9 +262,10 @@ void GameSession::init(const GameSessionConfig& config, GameResources& resources
 
         if (!worldSavePath.empty()) {
             m_server->init(static_cast<uint32_t>(config.seed), threadPool, config.renderDistance,
-                           std::move(worldSavePath), config.worldDisplayName);
+                           std::move(worldSavePath), config.worldDisplayName, config.worldGenerationMode);
         } else {
-            m_server->init(static_cast<uint32_t>(config.seed), threadPool, config.renderDistance);
+            m_server->init(static_cast<uint32_t>(config.seed), threadPool, config.renderDistance,
+                           config.worldGenerationMode);
         }
 
         m_client = std::make_unique<client::GameClient>();

@@ -4,6 +4,7 @@
 #include "../widgets/UIPanel.h"
 #include "../widgets/UIText.h"
 #include "../widgets/UITextInput.h"
+#include "../widgets/UIDropdown.h"
 #include "../../resource/GameResources.h"
 #include "../../locale/LocaleManager.h"
 
@@ -48,7 +49,7 @@ void CreateWorldScreen::buildUI(GameResources& resources, RhiDevice& rhiDevice) 
     nameLabel->setTone(UITextTone::OnOverlaySecondary);
     nameLabel->setAlignment(TextAlignment::Center);
     nameLabel->anchor = Anchor::Center;
-    nameLabel->anchorOffsetY = 110.0f;
+    nameLabel->anchorOffsetY = 120.0f;
     nameLabel->width = 400.0f;
     nameLabel->height = 24.0f;
     m_nameLabel = nameLabel.get();
@@ -59,7 +60,7 @@ void CreateWorldScreen::buildUI(GameResources& resources, RhiDevice& rhiDevice) 
     nameInput->width = 350.0f;
     nameInput->height = 36.0f;
     nameInput->anchor = Anchor::Center;
-    nameInput->anchorOffsetY = 72.0f;
+    nameInput->anchorOffsetY = 82.0f;
     nameInput->setPlaceholder(getLocaleManager() ? getLocaleManager()->tr("world_name_placeholder") : "New World");
     nameInput->setMaxLength(96);
     m_nameInput = nameInput.get();
@@ -73,7 +74,7 @@ void CreateWorldScreen::buildUI(GameResources& resources, RhiDevice& rhiDevice) 
     seedLabel->setTone(UITextTone::OnOverlaySecondary);
     seedLabel->setAlignment(TextAlignment::Center);
     seedLabel->anchor = Anchor::Center;
-    seedLabel->anchorOffsetY = 26.0f;
+    seedLabel->anchorOffsetY = 34.0f;
     seedLabel->width = 400.0f;
     seedLabel->height = 24.0f;
     m_seedLabel = seedLabel.get();
@@ -84,11 +85,35 @@ void CreateWorldScreen::buildUI(GameResources& resources, RhiDevice& rhiDevice) 
     seedInput->width = 350.0f;
     seedInput->height = 36.0f;
     seedInput->anchor = Anchor::Center;
-    seedInput->anchorOffsetY = -12.0f;
+    seedInput->anchorOffsetY = -4.0f;
     seedInput->setPlaceholder(getLocaleManager() ? getLocaleManager()->tr("seed_placeholder") : "Enter seed...");
     seedInput->setMaxLength(64);
     m_seedInput = seedInput.get();
     addRoot(std::move(seedInput));
+
+    auto modeLabel = std::make_unique<UIText>();
+    modeLabel->setText(getLocaleManager() ? getLocaleManager()->tr("world_generation_mode") : "World type:");
+    modeLabel->setTextScale(1.4f);
+    modeLabel->setTone(UITextTone::OnOverlaySecondary);
+    modeLabel->setAlignment(TextAlignment::Center);
+    modeLabel->anchor = Anchor::Center;
+    modeLabel->anchorOffsetY = -50.0f;
+    modeLabel->width = 400.0f;
+    modeLabel->height = 24.0f;
+    m_modeLabel = modeLabel.get();
+    addRoot(std::move(modeLabel));
+
+    auto modeDropdown = std::make_unique<UIDropdown>();
+    modeDropdown->width = 350.0f;
+    modeDropdown->height = 36.0f;
+    modeDropdown->anchor = Anchor::Center;
+    modeDropdown->anchorOffsetY = -88.0f;
+    modeDropdown->setOptions({getLocaleManager() ? getLocaleManager()->tr("world_generation_default") : "Default",
+                              getLocaleManager() ? getLocaleManager()->tr("world_generation_superflat") : "Superflat",
+                              getLocaleManager() ? getLocaleManager()->tr("world_generation_amplified") : "Amplified"});
+    modeDropdown->setSelectedIndex(0);
+    m_modeDropdown = modeDropdown.get();
+    addRoot(std::move(modeDropdown));
 
     // -- "Start New Game" button --
     auto startBtn = std::make_unique<UIButton>();
@@ -97,13 +122,21 @@ void CreateWorldScreen::buildUI(GameResources& resources, RhiDevice& rhiDevice) 
     startBtn->width = 300.0f;
     startBtn->height = 50.0f;
     startBtn->anchor = Anchor::Center;
-    startBtn->anchorOffsetY = -82.0f;
+    startBtn->anchorOffsetY = -150.0f;
     startBtn->setTone(UIButtonTone::Success);
     startBtn->setOnClick([this]() {
         int seed = parseSeed(m_seedInput ? m_seedInput->getText() : "");
         const std::string displayName = trimDisplayName(m_nameInput ? m_nameInput->getText() : "");
+        WorldGenerationMode mode = WorldGenerationMode::Default;
+        if (m_modeDropdown) {
+            switch (m_modeDropdown->getSelectedIndex()) {
+            case 1: mode = WorldGenerationMode::Superflat; break;
+            case 2: mode = WorldGenerationMode::Amplified; break;
+            default: break;
+            }
+        }
         if (onCreateWorld)
-            onCreateWorld(seed, displayName);
+            onCreateWorld(seed, displayName, mode);
     });
     m_startButton = startBtn.get();
     addRoot(std::move(startBtn));
@@ -115,7 +148,7 @@ void CreateWorldScreen::buildUI(GameResources& resources, RhiDevice& rhiDevice) 
     backBtn->width = 180.0f;
     backBtn->height = 44.0f;
     backBtn->anchor = Anchor::Center;
-    backBtn->anchorOffsetY = -152.0f;
+    backBtn->anchorOffsetY = -218.0f;
     backBtn->setTone(UIButtonTone::Secondary);
     backBtn->setOnClick([this]() {
         if (onBackClicked)
@@ -140,6 +173,9 @@ void CreateWorldScreen::onSceneEnter() {
     // Reset seed input
     if (m_seedInput) {
         m_seedInput->setText("");
+    }
+    if (m_modeDropdown) {
+        m_modeDropdown->setSelectedIndex(0);
     }
 
     // Title drops in

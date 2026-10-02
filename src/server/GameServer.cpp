@@ -48,6 +48,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <system_error>
 #include <unordered_map>
 #include <vector>
 
@@ -748,10 +749,11 @@ void GameServer::tickServerEcs(const float dt) {
     }
 }
 
-void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance) {
+void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
+                      const WorldGenerationMode generationMode) {
     m_world.setRenderDistance(renderDistance);
     m_world.setThreadPool(threadPool);
-    m_world.init(seed);
+    m_world.init(seed, generationMode);
 
     // Register block change callback to collect dirty blocks for BlockUpdateBatch
     m_world.setBlockChangeCallback([this](int x, int y, int z, BlockStateId newStateId) {
@@ -786,7 +788,7 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance)
 }
 
 void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance, std::filesystem::path savePath,
-                      std::string displayName) {
+                      std::string displayName, WorldGenerationMode generationMode) {
     // Create save manager if path is provided
     if (!savePath.empty()) {
         if (displayName.empty()) {
@@ -802,6 +804,11 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
         meta.seed = seed;
         if (m_saveManager->loadLevelMeta(meta)) {
             seed = meta.seed;
+            const auto savedGenerationMode = worldGenerationModeFromId(meta.worldGenerationMode);
+            if (!savedGenerationMode.has_value()) {
+                failGameServer("Unsupported world generation mode in level metadata: " + meta.worldGenerationMode);
+            }
+            generationMode = *savedGenerationMode;
             // Restore time and weather after world init
             m_loadedMeta = meta;
             m_hasLoadedMeta = true;
@@ -813,8 +820,18 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
             MECRAFT_LOG_PRINTF("[Server] Loaded existing world (seed=%u, mode=%s)\n", seed,
                                modeName(m_defaultGameplayMode));
         } else {
+            std::error_code metadataError;
+            const bool levelMetaExists = std::filesystem::exists(m_saveManager->paths().levelPath(), metadataError);
+            if (metadataError) {
+                failGameServer("Failed to inspect existing world metadata: " + metadataError.message());
+            }
+            if (levelMetaExists) {
+                failGameServer("Failed to load existing world metadata");
+            }
+
             // New world - set creation timestamp
             meta.seed = seed;
+            meta.worldGenerationMode = std::string(worldGenerationModeId(generationMode));
             meta.createdUtc = save::SaveManager::currentUtcTimestamp();
             meta.lastSavedUtc = meta.createdUtc;
             meta.displayName = displayName.empty() ? "New World" : displayName;
@@ -827,7 +844,7 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
     }
 
     // Delegate to the base init for world setup
-    init(seed, threadPool, renderDistance);
+    init(seed, threadPool, renderDistance, generationMode);
 
     // Restore time and weather from loaded metadata
     if (m_hasLoadedMeta) {
@@ -859,6 +876,7 @@ void GameServer::saveLevelMeta() {
 
     save::LevelMeta meta;
     meta.seed = m_world.getSeed();
+    meta.worldGenerationMode = std::string(worldGenerationModeId(m_world.getGenerationMode()));
     meta.spawnX = m_spawnPosition.x;
     meta.spawnY = m_spawnPosition.y;
     meta.spawnZ = m_spawnPosition.z;
@@ -1032,8 +1050,8 @@ void GameServer::tickWorldSystems() {
     }
     if (RedstoneTick::runsOnGameTick(m_currentTick)) {
         if (m_gameplayRegistry != nullptr) {
-            ecs::RedstoneSystem::processWorld(m_world, RedstoneTick::fromGameTick(m_currentTick),
-                                              *m_gameplayRegistry, 4096);
+            ecs::RedstoneSystem::processWorld(m_world, RedstoneTick::fromGameTick(m_currentTick), *m_gameplayRegistry,
+                                              4096);
             ecs::RedstoneDeviceActionSystem::processEvents(m_world, *m_gameplayRegistry);
         } else {
             ecs::RedstoneSystem::processWorld(m_world, RedstoneTick::fromGameTick(m_currentTick), 4096);

@@ -451,9 +451,9 @@ bool rayIntersectsAabb(const glm::vec3& rayOrigin, const glm::vec3& rayDir, cons
     return true;
 }
 } // namespace
-void World::init(uint32_t seed) {
+void World::init(const uint32_t seed, const WorldGenerationMode generationMode) {
     m_seed = seed;
-    m_terrainGen.init(seed, m_flatSurfaceY);
+    m_terrainGen.init(seed, m_flatSurfaceY, generationMode);
     m_chunks.clear();
     m_loadQueue.clear();
     m_generationInFlight.clear();

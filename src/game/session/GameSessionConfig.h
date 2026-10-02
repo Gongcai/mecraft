@@ -2,6 +2,7 @@
 #define MECRAFT_GAME_SESSION_CONFIG_H
 
 #include "renderer/core/RenderSettings.h"
+#include "../../world/gen/WorldGenerationMode.h"
 
 #include <glm/glm.hpp>
 #include <cstdint>
@@ -28,6 +29,7 @@ enum class GameRenderSettingsSource : uint8_t { UserProfile, FixedProfile };
 /// Configuration for a gameplay session (seed, render distance, etc.)
 struct GameSessionConfig {
     int seed = 1234;
+    WorldGenerationMode worldGenerationMode = WorldGenerationMode::Default;
     int renderDistance = 16;
     glm::vec3 debugMobOffset = glm::vec3(5.0f, 0.0f, 0.0f);
 

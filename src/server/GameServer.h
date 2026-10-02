@@ -74,12 +74,13 @@ public:
     ~GameServer();
 
     /// Initialize the server world with a seed.
-    void init(uint32_t seed, ThreadPool* threadPool, int renderDistance);
+    void init(uint32_t seed, ThreadPool* threadPool, int renderDistance,
+              WorldGenerationMode generationMode = WorldGenerationMode::Default);
 
     /// Initialize with save support. If savePath is non-empty, chunks will be
     /// persisted to disk and restored on subsequent sessions.
     void init(uint32_t seed, ThreadPool* threadPool, int renderDistance, std::filesystem::path savePath,
-              std::string displayName = {});
+              std::string displayName = {}, WorldGenerationMode generationMode = WorldGenerationMode::Default);
 
     /// Explicit shutdown: flush pending saves before destruction.
     void shutdown();

@@ -29,7 +29,8 @@ private:
     enum class Page { MainMenu, SaveList, CreateWorld };
 
     void switchToPage(Page page);
-    void startGameWithWorld(const std::string& worldName, int seed, const std::string& displayName = {});
+    void startGameWithWorld(const std::string& worldName, int seed, const std::string& displayName = {},
+                            WorldGenerationMode generationMode = WorldGenerationMode::Default);
 
     AppStateDependencies m_deps;
 

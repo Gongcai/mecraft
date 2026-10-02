@@ -197,9 +197,10 @@ void MainMenuAppState::onEnter() {
     m_createWorldScreen.init(m_deps.resources, m_deps.rhiDevice);
 
     // "Start New Game" → create world and start
-    m_createWorldScreen.onCreateWorld = [this](int seed, const std::string& displayName) {
+    m_createWorldScreen.onCreateWorld = [this](int seed, const std::string& displayName,
+                                               const WorldGenerationMode generationMode) {
         std::string worldName = CreateWorldScreen::generateWorldName(m_savesRoot);
-        startGameWithWorld(worldName, seed, displayName.empty() ? worldName : displayName);
+        startGameWithWorld(worldName, seed, displayName.empty() ? worldName : displayName, generationMode);
     };
 
     // "Back" → return to save list
@@ -271,9 +272,11 @@ void MainMenuAppState::switchToPage(Page page) {
 // Start game with a specific world
 // ---------------------------------------------------------------------------
 
-void MainMenuAppState::startGameWithWorld(const std::string& worldName, int seed, const std::string& displayName) {
+void MainMenuAppState::startGameWithWorld(const std::string& worldName, const int seed, const std::string& displayName,
+                                          const WorldGenerationMode generationMode) {
     m_pendingConfig = GameSessionConfig{};
     m_pendingConfig.seed = seed;
+    m_pendingConfig.worldGenerationMode = generationMode;
     m_pendingConfig.renderDistance = app::loadRenderDistance();
     m_pendingConfig.worldName = worldName;
     m_pendingConfig.worldDisplayName = displayName;

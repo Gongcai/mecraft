@@ -288,7 +288,8 @@ bool SaveManager::loadLevelMeta(LevelMeta& outMeta) {
         }
     }
 
-    return readStringField(j, "displayName", outMeta.displayName) &&
+    return readStringField(j, "worldGenerationMode", outMeta.worldGenerationMode) &&
+           readStringField(j, "displayName", outMeta.displayName) &&
            readStringField(j, "createdUtc", outMeta.createdUtc) &&
            readStringField(j, "lastSavedUtc", outMeta.lastSavedUtc) &&
            readStringField(j, "screenshotPath", outMeta.screenshotPath) &&
@@ -300,6 +301,7 @@ void SaveManager::saveLevelMeta(const LevelMeta& meta) {
     j["format"] = "mecraft.level";
     j["version"] = 1;
     j["seed"] = meta.seed;
+    j["worldGenerationMode"] = meta.worldGenerationMode;
     j["displayName"] = meta.displayName;
     j["spawn"] = {meta.spawnX, meta.spawnY, meta.spawnZ};
     j["time"] = {

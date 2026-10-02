@@ -7,18 +7,20 @@
 
 #include "../core/UIScene.h"
 #include "../core/Tween.h"
+#include "../../world/gen/WorldGenerationMode.h"
 
 class UIPanel;
 class UIText;
 class UIButton;
 class UITextInput;
+class UIDropdown;
 
 /// Screen for creating a new world. Contains name/seed inputs and a start button.
 class CreateWorldScreen : public UIScene {
 public:
     /// Fired when the user clicks "Start New Game".
     /// displayName is the user-visible level.json name; empty means use the default.
-    std::function<void(int seed, const std::string& displayName)> onCreateWorld;
+    std::function<void(int seed, const std::string& displayName, WorldGenerationMode mode)> onCreateWorld;
 
     /// Fired when the user clicks "Back".
     std::function<void()> onBackClicked;
@@ -43,6 +45,8 @@ private:
     UITextInput* m_nameInput = nullptr;
     UIText* m_seedLabel = nullptr;
     UITextInput* m_seedInput = nullptr;
+    UIText* m_modeLabel = nullptr;
+    UIDropdown* m_modeDropdown = nullptr;
     UIButton* m_startButton = nullptr;
     UIButton* m_backButton = nullptr;
 

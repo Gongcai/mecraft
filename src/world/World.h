@@ -39,12 +39,13 @@ public:
         int inFlight = 0;
     };
 
-    void init(uint32_t seed);
+    void init(uint32_t seed, WorldGenerationMode generationMode = WorldGenerationMode::Default);
     void update(const glm::vec3& playerPos, float dt = 1.0f / 60.0f);
     void updateForInitialLoad(const glm::vec3& playerPos, float dt);
     void flushInteractiveLighting(const glm::vec3& playerPos);
 
     [[nodiscard]] uint32_t getSeed() const { return m_seed; }
+    [[nodiscard]] WorldGenerationMode getGenerationMode() const { return m_terrainGen.mode(); }
 
     [[nodiscard]] BlockStateId getBlock(int x, int y, int z) const override;
     [[nodiscard]] uint8_t getPackedLight(int x, int y, int z) const override;

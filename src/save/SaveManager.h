@@ -81,6 +81,7 @@ struct BlockEntityData {
 /// World-level metadata persisted in level.json.
 struct LevelMeta {
     uint32_t seed = 0;
+    std::string worldGenerationMode = "default";
     std::string displayName; // User-visible save name (may differ from folder name)
     float spawnX = 0.0f;
     float spawnY = 68.0f;
