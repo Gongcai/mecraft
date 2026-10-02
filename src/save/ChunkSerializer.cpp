@@ -68,6 +68,13 @@ void writeU16(std::vector<uint8_t>& out, uint16_t v) {
     out.push_back(static_cast<uint8_t>(v >> 8));
 }
 
+void writeU32(std::vector<uint8_t>& out, uint32_t v) {
+    out.push_back(static_cast<uint8_t>(v));
+    out.push_back(static_cast<uint8_t>(v >> 8));
+    out.push_back(static_cast<uint8_t>(v >> 16));
+    out.push_back(static_cast<uint8_t>(v >> 24));
+}
+
 bool readU8(const uint8_t*& cursor, const uint8_t* end, uint8_t& out) {
     if (cursor >= end)
         return false;
@@ -80,6 +87,16 @@ bool readU16(const uint8_t*& cursor, const uint8_t* end, uint16_t& out) {
         return false;
     out = static_cast<uint16_t>(cursor[0]) | (static_cast<uint16_t>(cursor[1]) << 8);
     cursor += 2;
+    return true;
+}
+
+bool readU32(const uint8_t*& cursor, const uint8_t* end, uint32_t& out) {
+    if (static_cast<size_t>(end - cursor) < 4) {
+        return false;
+    }
+    out = static_cast<uint32_t>(cursor[0]) | (static_cast<uint32_t>(cursor[1]) << 8) |
+          (static_cast<uint32_t>(cursor[2]) << 16) | (static_cast<uint32_t>(cursor[3]) << 24);
+    cursor += 4;
     return true;
 }
 
@@ -407,16 +424,16 @@ std::vector<uint8_t> ChunkSerializer::serializePayload(const Chunk& chunk,
                                                        const std::vector<WireContainerSaveEntry>& wireContainers) {
     std::vector<uint8_t> payload;
 
-    writeU8(payload, MCHK_ENCODING_PALLETIZED);
+    writeU8(payload, MCHK_ENCODING_PALLETIZED_32_BIT_MASK);
 
-    uint16_t subChunkMask = 0;
+    uint32_t subChunkMask = 0;
     for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
         const SubChunk* sub = chunk.getSubChunk(scy);
         if (sub && sub->getType() != SubChunkType::Air) {
             subChunkMask |= (1u << scy);
         }
     }
-    writeU16(payload, subChunkMask);
+    writeU32(payload, subChunkMask);
 
     for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
         if ((subChunkMask & (1u << scy)) == 0)
@@ -451,12 +468,19 @@ ChunkLoadData ChunkSerializer::deserializePayloadData(int32_t cx, int32_t cz, co
     uint8_t encoding = 0;
     if (!readU8(cursor, end, encoding))
         return loadData;
-    if (encoding != MCHK_ENCODING_PALLETIZED)
+    if (encoding != MCHK_ENCODING_PALLETIZED && encoding != MCHK_ENCODING_PALLETIZED_32_BIT_MASK)
         return loadData;
 
-    uint16_t subChunkMask = 0;
-    if (!readU16(cursor, end, subChunkMask))
+    uint32_t subChunkMask = 0;
+    if (encoding == MCHK_ENCODING_PALLETIZED) {
+        uint16_t legacyMask = 0;
+        if (!readU16(cursor, end, legacyMask)) {
+            return loadData;
+        }
+        subChunkMask = legacyMask;
+    } else if (!readU32(cursor, end, subChunkMask)) {
         return loadData;
+    }
 
     auto chunk = std::make_shared<Chunk>(cx, cz);
 
@@ -552,7 +576,7 @@ ChunkLoadData ChunkSerializer::deserializeFileData(const uint8_t* data, size_t s
         return loadData;
     }
 
-    if (header.version != MCHK_VERSION) {
+    if (header.version != MCHK_VERSION_LEGACY_16_BIT_MASK && header.version != MCHK_VERSION) {
         MECRAFT_LOG_FPRINTF(stderr, "[Save] Unsupported MCHK version: %u\n", header.version);
         return loadData;
     }

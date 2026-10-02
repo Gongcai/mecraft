@@ -105,7 +105,7 @@ uint64_t ClientWorld::getBlockContentRevision() const {
 }
 
 BlockStateId ClientWorld::getBlock(int x, int y, int z) const {
-    if (y < 0 || y >= 256)
+    if (y < 0 || y >= Chunk::SIZE_Y)
         return NULL_BLOCK_STATE;
     const int cx = static_cast<int>(std::floor(static_cast<float>(x) / 16.0f));
     const int cz = static_cast<int>(std::floor(static_cast<float>(z) / 16.0f));
@@ -121,7 +121,7 @@ BlockStateId ClientWorld::getBlock(int x, int y, int z) const {
 }
 
 uint8_t ClientWorld::getPackedLight(int x, int y, int z) const {
-    if (y < 0 || y >= 256)
+    if (y < 0 || y >= Chunk::SIZE_Y)
         return 0;
     const int cx = static_cast<int>(std::floor(static_cast<float>(x) / 16.0f));
     const int cz = static_cast<int>(std::floor(static_cast<float>(z) / 16.0f));
@@ -141,7 +141,7 @@ BlockStateId ClientWorld::getBlockState(int x, int y, int z) const {
 }
 
 BlockStateId ClientWorld::getFluidState(int x, int y, int z) const {
-    if (y < 0 || y >= 256)
+    if (y < 0 || y >= Chunk::SIZE_Y)
         return NULL_BLOCK_STATE;
     const int cx = static_cast<int>(std::floor(static_cast<float>(x) / 16.0f));
     const int cz = static_cast<int>(std::floor(static_cast<float>(z) / 16.0f));
@@ -279,7 +279,7 @@ void ClientWorld::applyBlockUpdate(int x, int y, int z, BlockStateId stateId,
 
 void ClientWorld::applyBlockUpdate(const int x, const int y, const int z, const net::BlockUpdateKind kind,
                                    const BlockStateId stateId, const std::vector<uint8_t>& packedLightPatch) {
-    if (y < 0 || y >= 256)
+    if (y < 0 || y >= Chunk::SIZE_Y)
         return;
     const int cx = static_cast<int>(std::floor(static_cast<float>(x) / 16.0f));
     const int cz = static_cast<int>(std::floor(static_cast<float>(z) / 16.0f));
@@ -380,7 +380,7 @@ void ClientWorld::applyBlockUpdate(const int x, const int y, const int z, const 
 }
 
 void ClientWorld::applyWireContainerUpdate(const glm::ivec3& position, const WireContainerParts& parts) {
-    if (position.y < 0 || position.y >= 256) {
+    if (position.y < 0 || position.y >= Chunk::SIZE_Y) {
         return;
     }
 

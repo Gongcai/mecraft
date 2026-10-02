@@ -16,16 +16,16 @@
 class Chunk {
 public:
     static constexpr int SIZE_X = 16;
-    static constexpr int SIZE_Y = 256;
+    static constexpr int SIZE_Y = 384;
     static constexpr int SIZE_Z = 16;
     static constexpr int SUB_CHUNK_SIZE = SubChunk::SIZE; // 16
-    static constexpr int NUM_SUB_CHUNKS = SIZE_Y / SUB_CHUNK_SIZE; // 16
+    static constexpr int NUM_SUB_CHUNKS = SIZE_Y / SUB_CHUNK_SIZE; // 24
     static constexpr std::size_t BLOCK_COUNT = static_cast<std::size_t>(SIZE_X) * SIZE_Y * SIZE_Z;
 
     Chunk(int chunkX, int chunkZ);
     ~Chunk();
 
-    // --- Block access (column-local coordinates, y in [0, 256)) ---
+    // --- Block access (column-local coordinates, y in [0, SIZE_Y)) ---
     [[nodiscard]] BlockStateId getBlock(int x, int y, int z) const;
     [[nodiscard]] BlockStateId getFluidState(int x, int y, int z) const;
     void setBlock(int x, int y, int z, BlockStateId stateId);

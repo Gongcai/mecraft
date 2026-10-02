@@ -8,9 +8,11 @@
 //   MchkHeader (24 bytes, fixed)
 //   payload[]  (payloadSize bytes)
 //
-// Payload layout:
-//   uint8_t   encoding (MCHK_ENCODING_PALLETIZED = 1)
+// Payload layout for encoding 1 (legacy):
 //   uint16_t  subChunkMask (bit N = 1 if subchunk N is present)
+// Payload layout for encoding 2:
+//   uint32_t  subChunkMask (bit N = 1 if subchunk N is present)
+// Both layouts begin with a uint8_t encoding followed by present subchunks.
 //   For each present subchunk:
 //     uint8_t scy
 //     LayerPayload blockLayer
@@ -42,10 +44,12 @@ namespace save {
 
 // MCHK file magic: 'M' 'C' 'H' 'K' = 0x4D43484B
 constexpr uint32_t MCHK_MAGIC = 0x4D43484Bu;
-constexpr uint16_t MCHK_VERSION = 3;
+constexpr uint16_t MCHK_VERSION_LEGACY_16_BIT_MASK = 3;
+constexpr uint16_t MCHK_VERSION = 4;
 
 // Encoding identifiers
 constexpr uint8_t MCHK_ENCODING_PALLETIZED = 1;
+constexpr uint8_t MCHK_ENCODING_PALLETIZED_32_BIT_MASK = 2;
 
 // MCHK file header — 24 bytes, tightly packed.
 #pragma pack(push, 1)

@@ -81,6 +81,7 @@ public:
             return buf;
         }
         pushU8(buf, kChunkEncodingRleSubChunks);
+        pushU8(buf, static_cast<uint8_t>(Chunk::NUM_SUB_CHUNKS));
         for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
             const SubChunk* subChunk = msg.chunk->getSubChunk(scy);
             bool hasExplicitLight = false;
@@ -461,7 +462,18 @@ public:
         }
 
         const uint8_t encoding = readU8(data, offset);
-        if (encoding != kChunkEncodingRleSubChunks) {
+        uint8_t subChunkCount = 0;
+        if (encoding == kChunkEncodingRleSubChunksLegacy) {
+            subChunkCount = kLegacyChunkSubChunkCount;
+        } else if (encoding == kChunkEncodingRleSubChunks) {
+            if (offset >= size) {
+                return false;
+            }
+            subChunkCount = readU8(data, offset);
+            if (subChunkCount != Chunk::NUM_SUB_CHUNKS) {
+                return false;
+            }
+        } else {
             return false;
         }
 
@@ -475,7 +487,7 @@ public:
             }
         }
 
-        for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+        for (int scy = 0; scy < subChunkCount; ++scy) {
             if (offset >= size) {
                 return false;
             }
@@ -981,7 +993,9 @@ public:
 
 private:
     static constexpr size_t kHeaderSize = 6; // channel(1) + type(1) + payload_size(4)
-    static constexpr uint8_t kChunkEncodingRleSubChunks = 1;
+    static constexpr uint8_t kChunkEncodingRleSubChunksLegacy = 1;
+    static constexpr uint8_t kChunkEncodingRleSubChunks = 2;
+    static constexpr uint8_t kLegacyChunkSubChunkCount = 16;
 
     static uint8_t implicitPackedLight(const Chunk& chunk, const int x, const int y, const int z) {
         return static_cast<uint8_t>((y >= chunk.getHeightMap(x, z) ? 15 : 0) << 4);

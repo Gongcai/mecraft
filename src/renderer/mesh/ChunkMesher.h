@@ -62,7 +62,7 @@ struct SubChunkMeshingSnapshot {
     const IWorldView* worldView = nullptr;
     // Sub-chunk index within the column (0..15)
     int scy = 0;
-    // Whether this is the topmost sub-chunk (for sky light at y=256)
+    // Whether this is the topmost sub-chunk (for sky light at y=Chunk::SIZE_Y)
     bool isTopSection = false;
     // Whether this is the bottommost sub-chunk
     bool isBottomSection = false;
