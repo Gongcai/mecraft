@@ -946,7 +946,10 @@ void main() {
     // Minimum ambient + fake bounce
     // DerivativeMain strict: these are Mecraft extensions, not in DerivativeMain deferred5.fsh
     float minimumAmbientMask = mix(0.35, 1.0, outdoorSkyMask);
-    vec3 minAmbientContrib = uShadowTintColor * uMinimumAmbient * minimumAmbientMask * 0.62;
+    // Artistic ambient follows daylight; at night it should preserve silhouettes
+    // without competing with nearby torches or adding light inside sealed rooms.
+    float ambientDayWeight = mix(0.1, 1.0, clamp(uSkyIntensity, 0.0, 1.0));
+    vec3 minAmbientContrib = uShadowTintColor * uMinimumAmbient * minimumAmbientMask * 0.62 * ambientDayWeight;
     if (uDerivativeStrictMode == 0) { sceneData += minAmbientContrib; }
     dbgMinAmbient = minAmbientContrib;
     // DerivativeMain: CalculateFakeBouncedLight (SunLighting.glsl:168-174)

@@ -79,6 +79,13 @@ const float kTwoPi = 6.28318530718;
 const float STARS_COVERAGE = 0.15;
 const float STARS_INTENSITY = 0.1;
 
+// Cloud lighting uses the same LUT irradiance as sky metadata and terrain.
+struct CaptureLighting {
+    vec3 sunIlluminance;
+    vec3 moonIlluminance;
+    vec3 skyIlluminance;
+};
+
 // Approximate blackbody radiation color for temperature range 4000K-8000K.
 // DerivativeMain uses a full Planck function; this polynomial approximation
 // captures the warm-orange to cool-blue-white transition visible in stars.
@@ -179,7 +186,8 @@ float captureNoiseDetail(vec3 worldDir) {
     return pnoise - 0.15;
 }
 
-vec4 capturePlanarClouds(vec3 worldDir, float LdotV, vec3 skyRadiance, vec3 sunDir, vec3 moonDir) {
+vec4 capturePlanarClouds(vec3 worldDir, float LdotV, vec3 skyRadiance, vec3 sunDir, vec3 moonDir,
+                         CaptureLighting lighting) {
     if (worldDir.y <= 0.01) {
         return vec4(0.0, 0.0, 0.0, 1.0);
     }
@@ -200,12 +208,12 @@ vec4 capturePlanarClouds(vec3 worldDir, float LdotV, vec3 skyRadiance, vec3 sunD
     float peak = cloudCornetteShanksPhase(LdotV, 0.9) * (0.1 + 0.7 * wetness);
     float phase = forward + backward + peak;
 
-    vec3 sunLight = uSunIlluminance * clamp(uSunVisibility, 0.0, 1.0);
-    vec3 moonLight = uMoonIlluminance * clamp(uMoonVisibility, 0.0, 1.0);
+    vec3 sunLight = lighting.sunIlluminance * clamp(uSunVisibility, 0.0, 1.0);
+    vec3 moonLight = lighting.moonIlluminance * clamp(uMoonVisibility, 0.0, 1.0);
     vec3 light = max(sunLight + moonLight, vec3(0.0));
     vec3 cloudLit = skyRadiance * (0.25 + 0.55 * wetness);
     cloudLit += light * phase * mix(4.0, 1.4, wetness);
-    cloudLit += uSkyIlluminance * mix(0.35, 0.18, wetness);
+    cloudLit += lighting.skyIlluminance * mix(0.35, 0.18, wetness);
 
     float atmosFade = exp(-distanceToPlane * (0.1 + 0.1 * wetness) * 0.00015);
     vec3 color = mix(skyRadiance * coverage, cloudLit * coverage, atmosFade);
@@ -213,7 +221,8 @@ vec4 capturePlanarClouds(vec3 worldDir, float LdotV, vec3 skyRadiance, vec3 sunD
     return vec4(max(color, vec3(0.0)), transmittance);
 }
 
-vec4 captureVolumetricClouds(vec3 worldDir, float LdotV, vec3 skyRadiance, vec3 sunDir, vec3 moonDir) {
+vec4 captureVolumetricClouds(vec3 worldDir, float LdotV, vec3 skyRadiance, vec3 sunDir, vec3 moonDir,
+                             CaptureLighting lighting) {
     // DerivativeMain VolumetricClouds.glsl:57-61: storm intensity raises cloud altitude
     float stormZ = uCloudDynamicWeather.z;
     float cloudBottom = max(uCloudHeight * (1.0 + stormZ * 2.0), 64.0);
@@ -256,11 +265,11 @@ vec4 captureVolumetricClouds(vec3 worldDir, float LdotV, vec3 skyRadiance, vec3 
     float phase = atmHenyeyGreensteinPhase(LdotV, 0.6 - wetness * 0.2) * 0.7
                 + atmHenyeyGreensteinPhase(LdotV, -0.4 + wetness * 0.2) * 0.25
                 + cloudCornetteShanksPhase(LdotV, 0.9) * (0.1 + 0.7 * wetness);
-    vec3 sunLight = uSunIlluminance * clamp(uSunVisibility, 0.0, 1.0);
-    vec3 moonLight = uMoonIlluminance * clamp(uMoonVisibility, 0.0, 1.0);
+    vec3 sunLight = lighting.sunIlluminance * clamp(uSunVisibility, 0.0, 1.0);
+    vec3 moonLight = lighting.moonIlluminance * clamp(uMoonVisibility, 0.0, 1.0);
     // DerivativeMain VolumetricClouds.glsl:66-67: storm boosts lighting slightly
     vec3 cloudLit = (sunLight + moonLight) * phase * mix(8.0, 2.0, wetness) * (1.0 + stormZ * 0.2);
-    cloudLit += uSkyIlluminance * mix(0.28, 0.12, wetness) * (1.0 + stormZ * 0.2);
+    cloudLit += lighting.skyIlluminance * mix(0.28, 0.12, wetness) * (1.0 + stormZ * 0.2);
 
     float meanDistance = mix(startT, endT, 0.5);
     float atmosFade = exp(-meanDistance * (0.2 + 0.1 * wetness) * 1e-4);
@@ -268,15 +277,16 @@ vec4 captureVolumetricClouds(vec3 worldDir, float LdotV, vec3 skyRadiance, vec3 
     return vec4(max(color, vec3(0.0)), transmittance);
 }
 
-vec3 captureCloudySkybox(vec3 worldDir, vec3 skyRadiance, vec3 sunDir, vec3 moonDir, vec3 transmittance) {
+vec3 captureCloudySkybox(vec3 worldDir, vec3 skyRadiance, vec3 sunDir, vec3 moonDir, vec3 transmittance,
+                         CaptureLighting lighting) {
     float LdotV = dot(worldDir, sunDir);
     vec4 cloudsData = vec4(0.0, 0.0, 0.0, 1.0);
 
-    vec4 volumeClouds = captureVolumetricClouds(worldDir, LdotV, skyRadiance, sunDir, moonDir);
+    vec4 volumeClouds = captureVolumetricClouds(worldDir, LdotV, skyRadiance, sunDir, moonDir, lighting);
     cloudsData.rgb += volumeClouds.rgb * cloudsData.a;
     cloudsData.a *= volumeClouds.a;
 
-    vec4 planarClouds = capturePlanarClouds(worldDir, LdotV, skyRadiance, sunDir, moonDir);
+    vec4 planarClouds = capturePlanarClouds(worldDir, LdotV, skyRadiance, sunDir, moonDir, lighting);
     cloudsData.rgb += planarClouds.rgb * cloudsData.a;
     cloudsData.a *= planarClouds.a;
 
@@ -299,7 +309,11 @@ void main() {
 
     vec3 transmittance;
     vec3 sky = atmGetSkyRadiance(max(uCameraAltitude, 0.0), dir, sunDir, transmittance);
-    sky = captureCloudySkybox(dir, sky, sunDir, moonDir, transmittance);
+    CaptureLighting lighting;
+    vec3 camera = vec3(0.0, atmPlanetRadius + max(uCameraAltitude, 0.0), 0.0);
+    lighting.skyIlluminance = atmGetSunAndSkyIrradiance(camera, sunDir,
+                                                       lighting.sunIlluminance, lighting.moonIlluminance);
+    sky = captureCloudySkybox(dir, sky, sunDir, moonDir, transmittance, lighting);
 
     float weatherOcclusion = clamp(uSkyWetness, 0.0, 1.0);
     if (weatherOcclusion > 0.001) {

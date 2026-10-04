@@ -1269,7 +1269,10 @@ bool rtgiEmissiveTriangleRegistered(uint customIndex, uint geometryIndex, uint p
 bool rtgiAccumulateSkyAmbient(RtgiSecondarySurface surface, vec3 surfacePosition, float coneWidth,
                               float originSkyPrior, inout vec3 radiance) {
     float skyVisibility = clamp(surface.skyVisibility, 0.0, 1.0) * originSkyPrior;
-    if (skyVisibility <= 0.0 || all(lessThanEqual(uSecondaryLighting.skyAmbientRadiance.rgb, vec3(0.0)))) {
+    // Secondary hits must use the same captured irradiance as primary lighting.
+    // CPU artistic sky colors retain a night floor and cannot represent LUT energy.
+    vec3 skyAmbientRadiance = max(getSkyIlluminance(uSkyCapture), vec3(0.0));
+    if (skyVisibility <= 0.0 || all(lessThanEqual(skyAmbientRadiance, vec3(0.0)))) {
         return true;
     }
     vec3 skyDirection = surface.normal + vec3(0.0, 1.0, 0.0);
@@ -1286,7 +1289,7 @@ bool rtgiAccumulateSkyAmbient(RtgiSecondarySurface surface, vec3 surfacePosition
                              uSecondaryLighting.traceAndEmissionScales.x, 0.0, coneWidth, visibility)) {
         return false;
     }
-    radiance += rtgiDiffuseTransportAlbedo(surface) * uSecondaryLighting.skyAmbientRadiance.rgb * surface.ao *
+    radiance += rtgiDiffuseTransportAlbedo(surface) * skyAmbientRadiance * surface.ao *
                 skyVisibility * visibility;
     return rtgiFinite(radiance);
 }

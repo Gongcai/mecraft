@@ -54,7 +54,7 @@ vec3 atmDoNightEye(vec3 color) {
 // blends it in through twilight so outdoor visibility does not depend on moonrise.
 vec3 atmAirglowRadiance(float sunAltitude) {
     float nightWeight = 1.0 - smoothstep(-0.16, 0.04, sunAltitude);
-    return vec3(0.68, 0.82, 1.0) * (0.002 * nightWeight);
+    return vec3(0.68, 0.82, 1.0) * (0.0003 * nightWeight);
 }
 
 float atmClampCosine(float mu) {
@@ -176,7 +176,9 @@ vec4 atmGetScatteringTextureUvwzFromRMuMuSNu(float r, float mu, float muS, float
     float a = (d - dMin) / (dMax - dMin);
     float D = atmDistanceToTopAtmosphereBoundary(atmAtmosphereBottomRadius, atmMuSMin);
     float A = (D - dMin) / (dMax - dMin);
-    float uMuS = atmGetTextureCoordFromUnitRange(max(1.0 - a / A, 0.0) / (1.0 + a), atmScatteringTextureMuSize);
+    // Each azimuth slice contains MuSSize solar-angle texels. Using the view-angle
+    // size moves boundary samples into the adjacent slice and leaks daylight at night.
+    float uMuS = atmGetTextureCoordFromUnitRange(max(1.0 - a / A, 0.0) / (1.0 + a), atmScatteringTextureMuSSize);
     float uNu = nu * 0.5 + 0.5;
     return vec4(uNu, uMuS, uMu, uR);
 }

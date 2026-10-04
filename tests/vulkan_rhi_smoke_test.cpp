@@ -335,6 +335,133 @@ struct RtgiTraceSmokeCase final {
     return valid;
 }
 
+/// Dispatches the production atmosphere mapping and checks the atlas filtering footprint.
+/// @param device Vulkan device that owns the test resources.
+/// @param commandPool Command-list pool used for dispatch and readback.
+/// @return True when all solar angles remain inside their 32-texel azimuth slice.
+[[nodiscard]] bool validateAtmosphereLutSampling(VkRhiDevice& device, RhiCommandListPool& commandPool) {
+    constexpr uint32_t kSampleCount = 64u;
+    const std::array<uint32_t, kSampleCount> expected{};
+    std::array<uint32_t, kSampleCount> initial;
+    initial.fill(1u);
+
+    RhiBufferDesc scratchDesc;
+    scratchDesc.debugName = "VulkanSmoke.AtmosphereLutSampling.Buffer";
+    scratchDesc.size = sizeof(expected);
+    scratchDesc.usage = rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferSrc);
+    scratchDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    scratchDesc.initialState = RhiResourceState::StorageBuffer;
+    scratchDesc.memoryCategory = RhiMemoryCategory::SceneData;
+    const RhiBufferHandle scratch = device.createBuffer(scratchDesc, initial.data(), sizeof(initial));
+    if (!scratch.isValid()) {
+        return false;
+    }
+
+    const std::optional<std::string> shaderSource =
+        renderer::rhi::loadShaderSource("tests/shaders/atmosphere_lut_sampling_test.comp");
+    RhiShaderHandle shader;
+    RhiBindGroupLayoutHandle bindGroupLayout;
+    RhiPipelineLayoutHandle pipelineLayout;
+    RhiPipelineHandle pipeline;
+    RhiBindGroupHandle bindGroup;
+    const auto destroyResources = [&]() {
+        if (bindGroup.isValid()) {
+            device.destroyBindGroup(bindGroup);
+        }
+        if (pipeline.isValid()) {
+            device.destroyPipeline(pipeline);
+        }
+        if (pipelineLayout.isValid()) {
+            device.destroyPipelineLayout(pipelineLayout);
+        }
+        if (bindGroupLayout.isValid()) {
+            device.destroyBindGroupLayout(bindGroupLayout);
+        }
+        if (shader.isValid()) {
+            device.destroyShader(shader);
+        }
+        device.destroyBuffer(scratch);
+    };
+
+    bool valid = shaderSource.has_value();
+    if (valid) {
+        RhiShaderDesc shaderDesc;
+        shaderDesc.debugName = "VulkanSmoke.AtmosphereLutSampling.Shader";
+        shaderDesc.stage = RhiShaderStage::Compute;
+        shaderDesc.source = shaderSource->c_str();
+        shaderDesc.sourceSize = shaderSource->size();
+        shader = device.createShader(shaderDesc);
+        valid = shader.isValid();
+    }
+    if (valid) {
+        RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+        bindGroupLayoutDesc.debugName = "VulkanSmoke.AtmosphereLutSampling.BindGroupLayout";
+        bindGroupLayoutDesc.entries.push_back(
+            {0u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u});
+        bindGroupLayout = device.createBindGroupLayout(bindGroupLayoutDesc);
+        valid = bindGroupLayout.isValid();
+    }
+    if (valid) {
+        RhiPipelineLayoutDesc pipelineLayoutDesc;
+        pipelineLayoutDesc.debugName = "VulkanSmoke.AtmosphereLutSampling.PipelineLayout";
+        pipelineLayoutDesc.bindGroupLayouts.push_back(bindGroupLayout);
+        pipelineLayout = device.createPipelineLayout(pipelineLayoutDesc);
+        valid = pipelineLayout.isValid();
+        if (valid) {
+            RhiComputePipelineDesc pipelineDesc;
+            pipelineDesc.debugName = "VulkanSmoke.AtmosphereLutSampling.Pipeline";
+            pipelineDesc.computeShader = shader;
+            pipelineDesc.layout = pipelineLayout;
+            pipeline = device.createComputePipeline(pipelineDesc);
+            valid = pipeline.isValid();
+        }
+    }
+    if (valid) {
+        RhiBindGroupDesc bindGroupDesc;
+        bindGroupDesc.layout = bindGroupLayout;
+        RhiBindGroupEntry entry;
+        entry.binding = 0u;
+        entry.resource.buffer.buffer = scratch;
+        entry.resource.buffer.offset = 0u;
+        entry.resource.buffer.range = scratchDesc.size;
+        bindGroupDesc.entries.push_back(entry);
+        bindGroup = device.createBindGroup(bindGroupDesc);
+        valid = bindGroup.isValid();
+    }
+
+    RhiCommandList* commands = nullptr;
+    if (valid) {
+        commands = commandPool.acquire(RhiCommandListType::Compute);
+        valid = commands != nullptr &&
+                commands->begin({"VulkanSmoke.AtmosphereLutSampling.Commands", RhiCommandListType::Compute});
+    }
+    if (valid) {
+        commands->setComputePipeline(pipeline);
+        commands->setBindGroup(0u, bindGroup);
+        commands->dispatch(1u, 1u, 1u);
+        valid = commands->end();
+    }
+    RhiSubmissionToken token;
+    if (valid) {
+        RhiCommandList* submissions[] = {commands};
+        valid = device.submit({"VulkanSmoke.AtmosphereLutSampling.Submit", submissions, 1u, RhiQueueType::Compute},
+                              &token) &&
+                device.waitForSubmission(token);
+    }
+    if (valid) {
+        valid =
+            validateGpuBufferContents(device, commandPool, scratch, RhiResourceState::StorageBuffer, expected.data(),
+                                      sizeof(expected), "VulkanSmoke.AtmosphereLutSampling.Readback");
+    }
+    destroyResources();
+    if (valid) {
+        std::cout << "vulkan_rhi_smoke_test: atmosphere LUT solar-angle sampling passed\n";
+    } else {
+        std::cerr << "vulkan_rhi_smoke_test: atmosphere LUT filtering crosses an azimuth slice boundary\n";
+    }
+    return valid;
+}
+
 [[nodiscard]] bool validateIndependentUiPresentation(VkRhiDevice& device, RhiCommandListPool& commandPool,
                                                      GLFWwindow* window) {
     std::unique_ptr<PresentationBackend> backend = createNativePresentationBackend(device);
@@ -4971,8 +5098,21 @@ namespace {
         terrainSpecularPixels[texel * 4u + 2u] = 0u;
         terrainSpecularPixels[texel * 4u + 3u] = 255u;
     }
-    const std::array<float, 4u> skyCapturePixel{smokeCase.skyCaptureRadiance.r, smokeCase.skyCaptureRadiance.g,
-                                                smokeCase.skyCaptureRadiance.b, 1.0f};
+    constexpr uint32_t kSkyCaptureWidth = 256u;
+    constexpr uint32_t kSkyCaptureHeight = 514u;
+    std::vector<float> skyCapturePixels(kSkyCaptureWidth * kSkyCaptureHeight * 4u);
+    for (size_t pixel = 0u; pixel < skyCapturePixels.size() / 4u; ++pixel) {
+        skyCapturePixels[pixel * 4u] = smokeCase.skyCaptureRadiance.r;
+        skyCapturePixels[pixel * 4u + 1u] = smokeCase.skyCaptureRadiance.g;
+        skyCapturePixels[pixel * 4u + 2u] = smokeCase.skyCaptureRadiance.b;
+        skyCapturePixels[pixel * 4u + 3u] = 1.0f;
+    }
+    // Vulkan stores the sky metadata in the final six atlas rows. Keep ambient
+    // energy separate from raw sky radiance to validate the production contract.
+    const size_t ambientPixel = ((kSkyCaptureHeight - 6u + 1u) * kSkyCaptureWidth + kSkyCaptureWidth - 1u) * 4u;
+    skyCapturePixels[ambientPixel] = smokeCase.skyAmbientRadiance.r;
+    skyCapturePixels[ambientPixel + 1u] = smokeCase.skyAmbientRadiance.g;
+    skyCapturePixels[ambientPixel + 2u] = smokeCase.skyAmbientRadiance.b;
     constexpr float kInitializedShadowDepth = 1.0f;
     constexpr std::array<float, 6u> kInitializedPointShadowDepth{
         1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
@@ -5029,8 +5169,9 @@ namespace {
                       RhiTextureFormat::Rgba8Unorm, 1u, 1u, 1u, kSampledUsage, smokeCase.foliageColormap.data(),
                       smokeCase.foliageColormap.size(), RhiResourceState::ShaderRead, foliageColormap) &&
         createTexture("VulkanSmoke.RTGI.SkyCapture", RhiTextureDimension::Texture2D, RhiTextureViewType::Texture2D,
-                      RhiTextureFormat::Rgba32Float, 1u, 1u, 1u, kSampledUsage, skyCapturePixel.data(),
-                      sizeof(skyCapturePixel), RhiResourceState::ShaderRead, skyCapture) &&
+                      RhiTextureFormat::Rgba32Float, kSkyCaptureWidth, kSkyCaptureHeight, 1u, kSampledUsage,
+                      skyCapturePixels.data(), skyCapturePixels.size() * sizeof(float), RhiResourceState::ShaderRead,
+                      skyCapture) &&
         createTexture("VulkanSmoke.RTGI.LocalShadowSpotAtlas", RhiTextureDimension::Texture2D,
                       RhiTextureViewType::Texture2D, RhiTextureFormat::Depth32Float, 1u, 1u, 1u, kShadowTextureUsage,
                       &kInitializedShadowDepth, sizeof(kInitializedShadowDepth), RhiResourceState::DepthRead,
@@ -5132,7 +5273,9 @@ namespace {
     frame.skyColors.moonVisibility = smokeCase.moonVisibility;
     frame.skyIlluminance.sunIlluminance = smokeCase.sunRadiance;
     frame.skyIlluminance.moonIlluminance = smokeCase.moonRadiance;
-    frame.skyIlluminance.skyIlluminance = smokeCase.skyAmbientRadiance;
+    // Deliberately disagree with GPU metadata: secondary ambient must ignore
+    // the CPU artistic estimate, including its formerly excessive night floor.
+    frame.skyIlluminance.skyIlluminance = glm::vec3(8.0f);
     frame.animationTime = smokeCase.animationTime;
 
     if (valid) {
@@ -6992,6 +7135,7 @@ int main() {
         (commandPool != nullptr && !validateCubeArrayCaptureOrientation(device, *commandPool)) ||
         !validateRg32UintAttachmentClear(device, *commandPool) ||
         !validateClusteredScratchScan(device, *commandPool) ||
+        !validateAtmosphereLutSampling(device, *commandPool) ||
 #if defined(MECRAFT_ENABLE_FSR31)
         !validateFsr31VulkanDispatch(device, *commandPool) || !validateFsr31VulkanContext(device) ||
 #endif

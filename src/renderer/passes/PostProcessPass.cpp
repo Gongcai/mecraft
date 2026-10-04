@@ -22,6 +22,8 @@
 namespace {
 // One 1x1 RGBA16F exposure-state texel: four 16-bit float channels.
 constexpr uint32_t kExposureReadbackSlotBytes = 8u;
+// Limit night adaptation to two stops so local lights remain visibly brighter than sky fill.
+constexpr float kNightAutoExposureMaximum = 4.0f;
 
 struct ExposureDownsamplePushConstants {
     glm::vec4 sourceSize;
@@ -31,9 +33,10 @@ static_assert(sizeof(ExposureDownsamplePushConstants) == 32u);
 
 struct ExposureResolvePushConstants {
     glm::vec4 exposure;
+    glm::vec4 limits;
     glm::ivec4 flags;
 };
-static_assert(sizeof(ExposureResolvePushConstants) == 32u);
+static_assert(sizeof(ExposureResolvePushConstants) == 48u);
 
 [[nodiscard]] bool sameTextureHandle(const RhiTextureHandle lhs, const RhiTextureHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
@@ -748,6 +751,8 @@ void PostProcessPass::recordExposureResolve(RhiCommandList& commandList, const i
     commandList.setBindGroup(0u, m_exposureResolveBindGroup[readIndex]);
     const ExposureResolvePushConstants resolvePushConstants{
         glm::vec4(elapsedFrameTime, m_effects.autoExposureSpeed, m_effects.autoExposureBias, manualExposure),
+        glm::vec4(m_effects.autoExposureMin, m_effects.autoExposureMax, m_effects.autoExposureDayFactor,
+                  kNightAutoExposureMaximum),
         glm::ivec4(historyAvailable ? 1 : 0, reuseExposure ? 1 : 0, 0, 0)};
     commandList.pushConstants(&resolvePushConstants, sizeof(resolvePushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);

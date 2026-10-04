@@ -1,0 +1,25 @@
+#version 450 core
+
+layout(local_size_x = 64) in;
+layout(binding = 0, std430) buffer SamplingResults {
+    uint violations[];
+};
+// Texture-dependent functions are unused; the production coordinate mapping is tested directly.
+layout(binding = 1) uniform sampler3D uAtmosphereLut;
+#define MECRAFT_ATMOSPHERE_EXTERNAL_UNIFORMS 1
+const float uMoonPhaseFlux = 0.0;
+#include "../../assets/shaders/atmosphere_lut.glsl"
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    // Include both clamped solar-angle boundaries, twilight, and interior samples.
+    float solarCosine = -1.0 + 2.0 * float(index) / 63.0;
+    vec4 uvwz = atmGetScatteringTextureUvwzFromRMuMuSNu(
+        atmPlanetRadius + 80.0, 0.3, solarCosine, 0.0, false);
+    // The atlas has eight 32-texel azimuth slices. Linear filtering must stay
+    // between each slice's first and last texel centers, even below the horizon.
+    float solarTexel = uvwz.y * 32.0 - 0.5;
+    bool contained = !isnan(solarTexel) && !isinf(solarTexel)
+                  && solarTexel >= -0.001 && solarTexel <= 31.001;
+    violations[index] = contained ? 0u : 1u;
+}
