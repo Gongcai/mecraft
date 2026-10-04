@@ -1236,14 +1236,14 @@
       "modelVariants": {
         "facing=floor,powered=false": { "model": "block/lever_floor" },
         "facing=floor,powered=true": { "model": "block/lever_floor_powered" },
-        "facing=north,powered=false": { "model": "block/lever_wall", "transform": { "rotY": 180 } },
-        "facing=north,powered=true": { "model": "block/lever_wall_powered", "transform": { "rotY": 180 } },
-        "facing=south,powered=false": { "model": "block/lever_wall" },
-        "facing=south,powered=true": { "model": "block/lever_wall_powered" },
-        "facing=east,powered=false": { "model": "block/lever_wall", "transform": { "rotY": 270 } },
-        "facing=east,powered=true": { "model": "block/lever_wall_powered", "transform": { "rotY": 270 } },
-        "facing=west,powered=false": { "model": "block/lever_wall", "transform": { "rotY": 90 } },
-        "facing=west,powered=true": { "model": "block/lever_wall_powered", "transform": { "rotY": 90 } }
+        "facing=north,powered=false": { "model": "block/lever_wall", "transform": { "rotX": 90, "rotY": 180 } },
+        "facing=north,powered=true": { "model": "block/lever_wall_powered", "transform": { "rotX": 90, "rotY": 180 } },
+        "facing=south,powered=false": { "model": "block/lever_wall", "transform": { "rotX": 90 } },
+        "facing=south,powered=true": { "model": "block/lever_wall_powered", "transform": { "rotX": 90 } },
+        "facing=east,powered=false": { "model": "block/lever_wall", "transform": { "rotX": 90, "rotY": 90 } },
+        "facing=east,powered=true": { "model": "block/lever_wall_powered", "transform": { "rotX": 90, "rotY": 90 } },
+        "facing=west,powered=false": { "model": "block/lever_wall", "transform": { "rotX": 90, "rotY": 270 } },
+        "facing=west,powered=true": { "model": "block/lever_wall_powered", "transform": { "rotX": 90, "rotY": 270 } }
       }
     },
     {
