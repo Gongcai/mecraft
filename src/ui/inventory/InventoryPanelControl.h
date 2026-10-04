@@ -12,11 +12,9 @@ class Inventory;
 class CraftingSystem;
 
 struct InventoryPanelLayout {
-    static constexpr float kTextureWidth = 176.0f;
-    static constexpr float kTextureHeight = 166.0f;
-    std::string backgroundTextureName = "inventory";
-    float backgroundAtlasWidth = kTextureWidth;
-    float backgroundAtlasHeight = kTextureHeight;
+    static constexpr float kDesignWidth = 176.0f;
+    static constexpr float kDesignHeight = 166.0f;
+    std::string titleKey = "inventory_title";
     bool showPlayerPreview = true;
 
     // Anchor is normalized to the UI reference size using a bottom-left origin.
@@ -25,14 +23,14 @@ struct InventoryPanelLayout {
     // Pivot is normalized to the panel rectangle (0..1).
     float pivotX = 0.5f;
     float pivotY = 0.5f;
-    // Offset from the anchored pivot in source-texture design pixels; positive Y moves upward.
+    // Offset from the anchored pivot in design units; positive Y moves upward.
     float offsetX = 0.0f;
     float offsetY = 0.0f;
-    // Uniform scale based on 176x166 source texture.
+    // Uniform scale based on the 176x166 content design; the title adds twenty units above it.
     float panelScale = 2.0f;
     float fitPadding = 8.0f;
 
-    // Inventory grid offsets use top-left source-texture coordinates and convert when slots are created.
+    // Inventory grid offsets use top-left design coordinates and convert when slots are created.
     float gridOffsetX = 6.8f;
     float gridOffsetY = 81.7f;
     float slotSize = 18.0f;
@@ -40,7 +38,7 @@ struct InventoryPanelLayout {
     float rowGap = 0.0f;
     float row4ExtraGap = 4.0f;
 
-    // Player preview frame uses top-left source-texture coordinates.
+    // Player preview frame uses top-left design coordinates.
     float playerPreviewX0 = 25.0f;
     float playerPreviewY0 = 8.0f;
     float playerPreviewX1 = 78.0f;

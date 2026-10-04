@@ -2436,8 +2436,8 @@ void Dashboard::showInventoryPanelSettings(UIRenderer& uiRenderer) {
         changed |= ImGui::SliderFloat("Offset X", &layout.offsetX, -1200.0f, 1200.0f, "%.1f");
         changed |= ImGui::SliderFloat("Offset Y", &layout.offsetY, -1200.0f, 1200.0f, "%.1f");
         changed |= ImGui::SliderFloat("Panel Scale", &layout.panelScale, 0.5f, 4.0f, "%.2f");
-        ImGui::Text("Texture Base: %.0fx%.0f", InventoryPanelLayout::kTextureWidth,
-                    InventoryPanelLayout::kTextureHeight);
+        ImGui::Text("Design Size: %.0fx%.0f", InventoryPanelLayout::kDesignWidth,
+                    InventoryPanelLayout::kDesignHeight);
         ImGui::Separator();
         changed |= ImGui::SliderFloat("Grid Offset X", &layout.gridOffsetX, -40.0f, 120.0f, "%.1f");
         changed |= ImGui::SliderFloat("Grid Offset Y", &layout.gridOffsetY, -40.0f, 120.0f, "%.1f");

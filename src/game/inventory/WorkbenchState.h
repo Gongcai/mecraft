@@ -190,8 +190,8 @@ private:
     }
 
     static void applyContainerUiLayout(const ui::ContainerUiDef& def, InventoryPanelLayout& layout) {
-        requireEqualMetric(def.id, "width", def.width, InventoryPanelLayout::kTextureWidth);
-        requireEqualMetric(def.id, "height", def.height, InventoryPanelLayout::kTextureHeight);
+        requireEqualMetric(def.id, "width", def.width, InventoryPanelLayout::kDesignWidth);
+        requireEqualMetric(def.id, "height", def.height, InventoryPanelLayout::kDesignHeight);
 
         const ui::ContainerSlotGroupDef& craftingInput =
             requireSlotGroup(def, "crafting_input", ui::ContainerSlotGroupKind::CraftingInput);
@@ -219,9 +219,7 @@ private:
             fail(def.id + ".hotbar requires y at or below the main inventory rows");
         }
 
-        layout.backgroundTextureName = def.backgroundTexture;
-        layout.backgroundAtlasWidth = def.textureWidth;
-        layout.backgroundAtlasHeight = def.textureHeight;
+        layout.titleKey = def.titleKey;
         layout.showPlayerPreview = def.showPlayerPreview;
         layout.anchorX = def.anchorX;
         layout.anchorY = def.anchorY;

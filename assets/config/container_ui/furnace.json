@@ -1,12 +1,8 @@
 {
   "id": "minecraft:furnace",
   "behavior": "minecraft:furnace",
-  "backgroundTexture": "furnace",
-  "backgroundTexturePath": "textures/gui/furnace.png",
   "width": 176,
   "height": 166,
-  "textureWidth": 256,
-  "textureHeight": 256,
   "anchorX": 0.5,
   "anchorY": 0.5,
   "pivotX": 0.5,
@@ -91,8 +87,6 @@
       "y": 36,
       "width": 14,
       "height": 14,
-      "textureX": 176,
-      "textureY": 0,
       "direction": "up"
     },
     {
@@ -102,9 +96,8 @@
       "y": 34,
       "width": 24,
       "height": 17,
-      "textureX": 176,
-      "textureY": 14,
       "direction": "right"
     }
-  ]
+  ],
+  "titleKey": "container_furnace"
 }

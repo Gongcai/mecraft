@@ -223,14 +223,6 @@ bool bootstrapGameResources(GameResources& resources, RhiDevice& rhiDevice, RhiC
     if (!ContainerBehaviorRegistry::init() || !BlockInteractionRegistry::init() || !ui::ContainerUiRegistry::init()) {
         return false;
     }
-    for (const auto& [id, def] : ui::ContainerUiRegistry::all()) {
-        const std::string texturePath = std::string(ASSETS_DIR) + "/" + def.backgroundTexturePath;
-        if (!resources.texture2D.loadGui(def.backgroundTexture, texturePath, true).isValid()) {
-            std::cerr << "Failed to load container UI texture for " << id << ": " << texturePath << '\n';
-            return false;
-        }
-    }
-
     if (!resource::preloadEntityTexturesFromConfig(resources, ENTITIES_CONFIG_PATH)) {
         return false;
     }

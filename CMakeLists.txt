@@ -565,6 +565,7 @@ set(SRC_UI
         src/ui/imgui/ImGuiRhiRenderer.cpp
         src/ui/imgui/RenderSettingsImGui.cpp
         src/ui/core/UIInputAdapter.cpp
+        src/ui/core/UIPrimitives.cpp
         src/ui/core/UIRenderer.cpp
         src/ui/core/UIScene.cpp
         src/ui/core/ScreenTransition.cpp

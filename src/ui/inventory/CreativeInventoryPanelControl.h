@@ -13,15 +13,16 @@ enum class CreativeInventoryTab { PlayerInventory, AllItems };
 
 struct CreativeInventoryLayout {
     float panelScale = 2.0f;
+    float fitPadding = 8.0f;
     float sourceWidth = 195.0f;
     float sourceHeight = 136.0f;
     float itemGridX = 9.0f;
-    float itemGridY = 18.0f; // Top-left source-texture offset.
+    float itemGridY = 18.0f; // Top-left design offset.
     float slotSize = 18.0f;
     float scrollbarX = 175.0f;
     float scrollbarY = 18.0f;
 
-    // Player preview frame uses top-left source-texture coordinates.
+    // Player preview frame uses top-left design coordinates.
     float playerPreviewX0 = 28.0f;
     float playerPreviewY0 = 6.0f;
     float playerPreviewX1 = 60.0f;

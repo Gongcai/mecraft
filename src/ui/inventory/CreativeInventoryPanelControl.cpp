@@ -15,14 +15,13 @@
 #include "../../resource/GameResources.h"
 #include "../ItemIconPolicy.h"
 #include "../core/UIRenderer.h"
+#include "../core/UIPrimitives.h"
 
 namespace {
 constexpr int kColumns = 9;
 constexpr int kCreativeRows = 4;
 constexpr int kInventoryRows = 4;
-constexpr int kTabCount = 7;
-constexpr float kTabWidth = 26.0f;
-constexpr float kTabHeight = 32.0f;
+constexpr float kTabHeight = 24.0f;
 constexpr float kScrollerWidth = 12.0f;
 constexpr float kScrollerHeight = 15.0f;
 constexpr float kScrollTrackHeight = 90.0f;
@@ -43,12 +42,6 @@ static_assert(sizeof(ImageTexturePushConstants) == 64u);
     return context.fullFramebufferScissor();
 }
 
-std::string tabTextureName(const bool top, const bool selected, const int index) {
-    std::string name = top ? "creative_tab_top_" : "creative_tab_bottom_";
-    name += selected ? "selected_" : "unselected_";
-    name += std::to_string(index);
-    return name;
-}
 } // namespace
 
 CreativeInventoryPanelControl::CreativeInventoryPanelControl() {
@@ -297,26 +290,28 @@ CreativeInventoryPanelControl::ResolvedPanelRect
 CreativeInventoryPanelControl::resolvePanelRect(const int uiWidth, const int uiHeight) const {
     const int safeWidth = std::max(1, uiWidth);
     const int safeHeight = std::max(1, uiHeight);
-    const float scale = std::max(0.1f, m_layout.panelScale);
+    const float availableWidth = std::max(1.0f, static_cast<float>(safeWidth) - m_layout.fitPadding * 2.0f);
+    const float availableHeight = std::max(1.0f, static_cast<float>(safeHeight) - m_layout.fitPadding * 2.0f);
+    const float fitScale =
+        std::min(availableWidth / m_layout.sourceWidth, availableHeight / (m_layout.sourceHeight + kTabHeight));
+    const float scale = std::max(0.1f, std::min(m_layout.panelScale, fitScale));
 
     ResolvedPanelRect rect;
     rect.scale = scale;
     rect.width = m_layout.sourceWidth * scale;
     rect.height = m_layout.sourceHeight * scale;
     rect.x = (static_cast<float>(safeWidth) - rect.width) * 0.5f;
-    rect.y = (static_cast<float>(safeHeight) - rect.height) * 0.5f;
+    rect.y = (static_cast<float>(safeHeight) - rect.height - kTabHeight * scale) * 0.5f;
     return rect;
 }
 
 CreativeInventoryPanelControl::HitRect
 CreativeInventoryPanelControl::tabRect(const CreativeInventoryTab tab, const ResolvedPanelRect& panelRect) const {
-    const bool top = (tab == CreativeInventoryTab::AllItems);
-    const int index = (tab == CreativeInventoryTab::AllItems) ? 1 : 7;
     HitRect rect;
-    rect.x = panelRect.x + static_cast<float>(index - 1) * kTabWidth * panelRect.scale;
-    rect.y = top ? panelRect.y + panelRect.height : panelRect.y - kTabHeight * panelRect.scale;
-    rect.width = kTabWidth * panelRect.scale;
+    rect.width = panelRect.width * 0.5f;
     rect.height = kTabHeight * panelRect.scale;
+    rect.x = panelRect.x + (tab == CreativeInventoryTab::AllItems ? 0.0f : rect.width);
+    rect.y = panelRect.y + panelRect.height;
     return rect;
 }
 
@@ -377,10 +372,12 @@ void CreativeInventoryPanelControl::syncInventorySlots(const ResolvedPanelRect& 
     const int inset = std::max(1, static_cast<int>(std::lround(1.0f * panelRect.scale)));
     const int baseX = static_cast<int>(std::lround(panelRect.x + kInventoryGridX * panelRect.scale)) + inset;
     const int slotSize = std::max(1, step - inset * 2);
-    const int baseY = static_cast<int>(std::lround(panelRect.y + panelRect.height -
-                                                   kInventoryGridY * panelRect.scale)) - inset - slotSize;
-    const int hotbarY = static_cast<int>(std::lround(panelRect.y + panelRect.height -
-                                                     kInventoryHotbarY * panelRect.scale)) - inset - slotSize;
+    const int baseY =
+        static_cast<int>(std::lround(panelRect.y + panelRect.height - kInventoryGridY * panelRect.scale)) - inset -
+        slotSize;
+    const int hotbarY =
+        static_cast<int>(std::lround(panelRect.y + panelRect.height - kInventoryHotbarY * panelRect.scale)) - inset -
+        slotSize;
 
     int outIndex = 0;
     for (int row = 0; row < kInventoryRows; ++row) {
@@ -407,8 +404,9 @@ void CreativeInventoryPanelControl::syncCreativeSlots(const ResolvedPanelRect& p
     const int inset = std::max(1, static_cast<int>(std::lround(1.0f * panelRect.scale)));
     const int baseX = static_cast<int>(std::lround(panelRect.x + m_layout.itemGridX * panelRect.scale)) + inset;
     const int slotSize = std::max(1, step - inset * 2);
-    const int baseY = static_cast<int>(std::lround(panelRect.y + panelRect.height -
-                                                   m_layout.itemGridY * panelRect.scale)) - inset - slotSize;
+    const int baseY =
+        static_cast<int>(std::lround(panelRect.y + panelRect.height - m_layout.itemGridY * panelRect.scale)) - inset -
+        slotSize;
 
     for (int row = 0; row < kCreativeRows; ++row) {
         for (int col = 0; col < kColumns; ++col) {
@@ -432,20 +430,12 @@ void CreativeInventoryPanelControl::clampScrollRow() {
 }
 
 void CreativeInventoryPanelControl::renderBackground(const UIRenderContext& context) const {
-    if (!m_resources) {
-        return;
-    }
-
-    const RhiTextureHandle texture = m_resources->texture2D.getGuiHandle(
-        m_tab == CreativeInventoryTab::AllItems ? "creative_tab_items" : "creative_tab_inventory");
-    if (!texture.isValid()) {
+    if (context.theme == nullptr) {
         return;
     }
 
     const ResolvedPanelRect panelRect = resolvePanelRect(context.uiWidth, context.uiHeight);
-    constexpr float kAtlasSize = 256.0f;
-    renderGuiTextureQuad(context, texture, panelRect.x, panelRect.y, panelRect.width, panelRect.height, 0.0f,
-                         1.0f - (136.0f / kAtlasSize), 195.0f / kAtlasSize, 1.0f, 1.0f);
+    ui::drawPanelSurface(context, panelRect.x, panelRect.y, panelRect.width, panelRect.height);
 }
 
 void CreativeInventoryPanelControl::renderPlayerPreview(const UIRenderContext& context,
@@ -468,56 +458,49 @@ void CreativeInventoryPanelControl::renderPlayerPreview(const UIRenderContext& c
 
 void CreativeInventoryPanelControl::renderTabs(const UIRenderContext& context,
                                                const ResolvedPanelRect& panelRect) const {
-    if (!m_resources) {
+    if (context.theme == nullptr) {
         return;
     }
 
-    for (int i = 1; i <= kTabCount; ++i) {
-        const bool top = true;
-        const bool selected = (m_tab == CreativeInventoryTab::AllItems && i == 1);
-        const RhiTextureHandle texture = m_resources->texture2D.getGuiHandle(tabTextureName(top, selected, i));
-        if (!texture.isValid()) {
-            continue;
+    for (const auto tab : {CreativeInventoryTab::AllItems, CreativeInventoryTab::PlayerInventory}) {
+        const HitRect rect = tabRect(tab, panelRect);
+        const bool selected = m_tab == tab;
+        const bool hovered = hitRectContains(rect, context.pointerX, context.pointerY);
+        const auto& background = selected  ? context.theme->tabHeaderActive
+                                 : hovered ? context.theme->tabHeaderHover
+                                           : context.theme->tabHeader;
+        ui::drawFramedRect(context, rect.x, rect.y, rect.width, rect.height, background, context.theme->panelBorder,
+                           std::max(1.0f, panelRect.scale * 0.5f));
+        if (selected) {
+            ui::drawSolidRect(context, rect.x, rect.y, rect.width, 2.0f * panelRect.scale, context.theme->tabIndicator);
         }
-        renderGuiTextureQuad(context, texture, panelRect.x + static_cast<float>(i - 1) * kTabWidth * panelRect.scale,
-                             panelRect.y + panelRect.height, kTabWidth * panelRect.scale,
-                             kTabHeight * panelRect.scale, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f);
-    }
-
-    for (int i = 1; i <= kTabCount; ++i) {
-        const bool top = false;
-        const bool selected = (m_tab == CreativeInventoryTab::PlayerInventory && i == kTabCount);
-        const RhiTextureHandle texture = m_resources->texture2D.getGuiHandle(tabTextureName(top, selected, i));
-        if (!texture.isValid()) {
-            continue;
-        }
-        renderGuiTextureQuad(context, texture, panelRect.x + static_cast<float>(i - 1) * kTabWidth * panelRect.scale,
-                             panelRect.y - kTabHeight * panelRect.scale, kTabWidth * panelRect.scale,
-                             kTabHeight * panelRect.scale, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f);
+        const std::string label =
+            context.localeManager ? context.localeManager->tr(tab == CreativeInventoryTab::AllItems ? "creative_items"
+                                                                                                    : "inventory_title")
+            : tab == CreativeInventoryTab::AllItems ? "All items"
+                                                    : "Inventory";
+        ui::drawText(context, label, rect.x + 8.0f * panelRect.scale, rect.y + 7.0f * panelRect.scale,
+                     1.25f * panelRect.scale, context.theme->textPrimary);
     }
 }
 
 void CreativeInventoryPanelControl::renderScroller(const UIRenderContext& context,
                                                    const ResolvedPanelRect& panelRect) const {
-    if (!m_resources) {
+    if (context.theme == nullptr) {
         return;
     }
-
+    const float x = panelRect.x + m_layout.scrollbarX * panelRect.scale;
+    const float y = panelRect.y + panelRect.height - (m_layout.scrollbarY + kScrollTrackHeight) * panelRect.scale;
+    ui::drawSolidRect(context, x, y, kScrollerWidth * panelRect.scale, kScrollTrackHeight * panelRect.scale,
+                      context.theme->scrollbarTrack);
     const bool enabled = scrollerEnabled();
-    const RhiTextureHandle texture =
-        m_resources->texture2D.getGuiHandle(enabled ? "creative_scroller" : "creative_scroller_disabled");
-    if (!texture.isValid()) {
-        return;
-    }
-
     const int maxRow = maxScrollRow();
-    const float t = (enabled && maxRow > 0) ? static_cast<float>(m_scrollRow) / static_cast<float>(maxRow) : 0.0f;
-    const float travel = std::max(0.0f, kScrollTrackHeight - kScrollerHeight);
-    renderGuiTextureQuad(context, texture, panelRect.x + m_layout.scrollbarX * panelRect.scale,
-                         panelRect.y + panelRect.height -
-                             (m_layout.scrollbarY + travel * t + kScrollerHeight) * panelRect.scale,
-                         kScrollerWidth * panelRect.scale, kScrollerHeight * panelRect.scale, 0.0f, 0.0f, 1.0f, 1.0f,
-                         1.0f);
+    const float fraction = enabled ? static_cast<float>(m_scrollRow) / static_cast<float>(maxRow) : 0.0f;
+    const float travel = kScrollTrackHeight - kScrollerHeight;
+    const float thumbY = y + travel * (1.0f - fraction) * panelRect.scale;
+    ui::drawSolidRect(context, x + panelRect.scale, thumbY, (kScrollerWidth - 2.0f) * panelRect.scale,
+                      kScrollerHeight * panelRect.scale,
+                      enabled ? context.theme->scrollbarThumb : context.theme->textDisabled);
 }
 
 void CreativeInventoryPanelControl::renderDraggedItem(const UIRenderContext& context) const {

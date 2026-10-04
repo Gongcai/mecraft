@@ -1,6 +1,16 @@
 {
   "language_name": "English",
   "ui": {
+    "inventory_title": "Inventory",
+    "creative_items": "All items",
+    "crafting_title": "Crafting",
+    "container_chest": "Chest",
+    "container_barrel": "Barrel",
+    "container_furnace": "Furnace",
+    "container_crafting_table": "Crafting table",
+    "container_hopper": "Hopper",
+    "container_dropper": "Dropper",
+    "container_dispenser": "Dispenser",
     "mecraft": "MECRAFT",
     "start_game": "START GAME",
     "model_scene": "MODEL SCENE",

@@ -17,6 +17,7 @@
 #include "../../locale/LocaleManager.h"
 #include "../ItemIconPolicy.h"
 #include "../core/UIRenderer.h"
+#include "../core/UIPrimitives.h"
 
 namespace {
 struct InventoryImagePushConstants {
@@ -248,25 +249,29 @@ void InventoryPanelControl::syncCraftingGridPosition(const ResolvedPanelRect& pa
 }
 
 void InventoryPanelControl::renderBackground(const UIRenderContext& context) const {
-    if (!m_resources || context.uiWidth <= 0 || context.uiHeight <= 0 ||
-        m_layout.backgroundAtlasWidth <= 0.0f || m_layout.backgroundAtlasHeight <= 0.0f) {
-        return;
-    }
-
-    const RhiTextureHandle texture = m_resources->texture2D.getGuiHandle(m_layout.backgroundTextureName);
-    if (!texture.isValid()) {
+    if (!context.theme || context.uiWidth <= 0 || context.uiHeight <= 0) {
         return;
     }
 
     const ResolvedPanelRect panelRect = resolvePanelRect(context.uiWidth, context.uiHeight);
-    const float atlasWidth = m_layout.backgroundAtlasWidth;
-    const float atlasHeight = m_layout.backgroundAtlasHeight;
-    const float u0 = 0.0f;
-    const float u1 = InventoryPanelLayout::kTextureWidth / atlasWidth;
-    const float v0 = 1.0f - InventoryPanelLayout::kTextureHeight / atlasHeight;
-    const float v1 = 1.0f;
-    drawTexturedQuad(context, texture, panelRect.x, panelRect.y, panelRect.width, panelRect.height,
-                     glm::vec4(u0, v0, u1, v1), glm::vec4(1.0f));
+    ui::drawPanelSurface(context, panelRect.x, panelRect.y, panelRect.width,
+                         panelRect.height + 20.0f * panelRect.scale);
+    const std::string title = context.localeManager ? context.localeManager->tr(m_layout.titleKey) : m_layout.titleKey;
+    ui::drawText(context, title, panelRect.x + 8.0f * panelRect.scale,
+                 panelRect.y + panelRect.height + 6.0f * panelRect.scale, panelRect.scale * 1.25f,
+                 context.theme->textPrimary);
+    const auto& craft = m_layout.craftingGrid;
+    ui::drawText(context, context.localeManager ? context.localeManager->tr("crafting_title") : "Crafting",
+                 panelRect.x + craft.offsetX * panelRect.scale,
+                 panelRect.y + panelRect.height - (craft.offsetY - 4.0f) * panelRect.scale, panelRect.scale,
+                 context.theme->textSecondary);
+    const float inputRight = craft.offsetX + static_cast<float>(craft.gridSize) * craft.slotSize +
+                             static_cast<float>(craft.gridSize - 1) * craft.columnGap;
+    const float arrowSize = std::min(10.0f, craft.resultOffsetX - inputRight - 4.0f) * panelRect.scale;
+    ui::drawArrow(context, panelRect.x + (inputRight + 2.0f) * panelRect.scale,
+                  panelRect.y + panelRect.height -
+                      (craft.resultOffsetY + craft.resultSlotSize * 0.7f) * panelRect.scale,
+                  arrowSize, context.theme->textSecondary);
 }
 
 void InventoryPanelControl::renderPlayerPreview(const UIRenderContext& context,
@@ -338,16 +343,16 @@ InventoryPanelControl::ResolvedPanelRect InventoryPanelControl::resolvePanelRect
     const float fitPadding = std::max(0.0f, m_layout.fitPadding);
     const float availableWidth = std::max(1.0f, static_cast<float>(safeWidth) - fitPadding * 2.0f);
     const float availableHeight = std::max(1.0f, static_cast<float>(safeHeight) - fitPadding * 2.0f);
-    const float fitScale = std::min(availableWidth / InventoryPanelLayout::kTextureWidth,
-                                    availableHeight / InventoryPanelLayout::kTextureHeight);
+    const float fitScale = std::min(availableWidth / InventoryPanelLayout::kDesignWidth,
+                                    availableHeight / (InventoryPanelLayout::kDesignHeight + 20.0f));
     const float scale = std::max(0.1f, std::min(preferredScale, fitScale));
 
     ResolvedPanelRect rect;
     rect.scale = scale;
-    rect.width = InventoryPanelLayout::kTextureWidth * scale;
-    rect.height = InventoryPanelLayout::kTextureHeight * scale;
+    rect.width = InventoryPanelLayout::kDesignWidth * scale;
+    rect.height = InventoryPanelLayout::kDesignHeight * scale;
     rect.x = static_cast<float>(safeWidth) * m_layout.anchorX - rect.width * m_layout.pivotX + m_layout.offsetX * scale;
-    rect.y =
-        static_cast<float>(safeHeight) * m_layout.anchorY - rect.height * m_layout.pivotY + m_layout.offsetY * scale;
+    rect.y = static_cast<float>(safeHeight) * m_layout.anchorY - (rect.height + 20.0f * scale) * m_layout.pivotY +
+             m_layout.offsetY * scale;
     return rect;
 }

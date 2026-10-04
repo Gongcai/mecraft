@@ -524,7 +524,8 @@ UIRenderContext UIRenderer::prepareRenderContext(const int windowWidth, const in
 
     UIRenderContext context = makeContextFromSizes(m_windowWidth, m_windowHeight, m_framebufferWidth,
                                                    m_framebufferHeight, inventory, playerStats, inputSnapshot);
-    if (m_activeScene && m_activeScene->visible) {
+    if ((m_activeScene && m_activeScene->visible) || m_inventoryPanel.visible || m_storagePanel.visible ||
+        m_machinePanel.visible || m_creativeInventoryPanel.visible) {
         prepareBackdropBlur(context, rhiDevice);
     }
     populatePanelRhiContext(context);
@@ -623,7 +624,7 @@ UIRenderContext UIRenderer::prepareSceneContext(const int windowWidth, const int
 }
 
 void UIRenderer::updateSurfaceMetrics(UIRenderContext& context, const int windowWidth, const int windowHeight,
-                                     const int framebufferWidth, const int framebufferHeight) const {
+                                      const int framebufferWidth, const int framebufferHeight) const {
     context.windowWidth = std::max(1, windowWidth);
     context.windowHeight = std::max(1, windowHeight);
     context.framebufferWidth = std::max(1, framebufferWidth);

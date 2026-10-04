@@ -233,9 +233,7 @@ bool parseProgress(const nlohmann::json& progressJson, const std::string& contai
     if (progress.width <= 0.0f || progress.height <= 0.0f) {
         return fail(error, ownerName + " requires positive width and height");
     }
-    if (!readNumber(progressJson, ownerName, "textureX", progress.textureX, error) ||
-        !readNumber(progressJson, ownerName, "textureY", progress.textureY, error) ||
-        !readString(progressJson, ownerName, "direction", progress.direction, error)) {
+    if (!readString(progressJson, ownerName, "direction", progress.direction, error)) {
         return false;
     }
     if (progress.direction != "up" && progress.direction != "right") {
@@ -253,21 +251,13 @@ bool parseContainerUiDef(const nlohmann::json& root, const std::string& sourceNa
     def = ContainerUiDef{};
     if (!readNamespacedField(root, sourceName, "id", def.id, error) ||
         !readNamespacedField(root, def.id, "behavior", def.behavior, error) ||
-        !readString(root, def.id, "backgroundTexture", def.backgroundTexture, error) ||
-        !readString(root, def.id, "backgroundTexturePath", def.backgroundTexturePath, error) ||
+        !readString(root, def.id, "titleKey", def.titleKey, error) ||
         !readFiniteNumber(root, def.id, "width", def.width, error) ||
         !readFiniteNumber(root, def.id, "height", def.height, error)) {
         return false;
     }
     if (def.width <= 0.0f || def.height <= 0.0f) {
         return fail(error, def.id + " requires positive width and height");
-    }
-    if (!readFiniteNumber(root, def.id, "textureWidth", def.textureWidth, error) ||
-        !readFiniteNumber(root, def.id, "textureHeight", def.textureHeight, error)) {
-        return false;
-    }
-    if (def.textureWidth <= 0.0f || def.textureHeight <= 0.0f) {
-        return fail(error, def.id + " requires positive textureWidth and textureHeight");
     }
     if (!readNormalizedNumber(root, def.id, "anchorX", def.anchorX, error) ||
         !readNormalizedNumber(root, def.id, "anchorY", def.anchorY, error) ||

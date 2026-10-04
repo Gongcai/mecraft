@@ -39,8 +39,7 @@ int main() {
     ui::ContainerUiRegistry::init();
 
     const ui::ContainerUiDef& chest = ui::ContainerUiRegistry::require("minecraft:chest");
-    if (chest.behavior != "minecraft:chest" || chest.backgroundTexture != "generic_54" ||
-        chest.backgroundTexturePath != "textures/gui/generic_54.png" || chest.width != 176.0f ||
+    if (chest.behavior != "minecraft:chest" || chest.titleKey != "container_chest" || chest.width != 176.0f ||
         chest.height != 222.0f || !hasCenteredAdaptivePanel(chest) || chest.slotGroups.size() != 3 ||
         !chest.progressBars.empty()) {
         return fail("chest UI should parse its static layout definition");
@@ -52,8 +51,7 @@ int main() {
     }
 
     const ui::ContainerUiDef& barrel = ui::ContainerUiRegistry::require("minecraft:barrel");
-    if (barrel.behavior != "minecraft:barrel" || barrel.backgroundTexture != "generic_54" ||
-        barrel.backgroundTexturePath != "textures/gui/generic_54.png" || barrel.width != 176.0f ||
+    if (barrel.behavior != "minecraft:barrel" || barrel.titleKey != "container_barrel" || barrel.width != 176.0f ||
         barrel.height != 222.0f || !hasCenteredAdaptivePanel(barrel) || barrel.slotGroups.size() != 3 ||
         !barrel.progressBars.empty()) {
         return fail("barrel UI should parse its static storage layout definition");
@@ -65,10 +63,9 @@ int main() {
     }
 
     const ui::ContainerUiDef& dispenser = ui::ContainerUiRegistry::require("minecraft:dispenser");
-    if (dispenser.behavior != "minecraft:dispenser" || dispenser.backgroundTexture != "dispenser" ||
-        dispenser.backgroundTexturePath != "textures/gui/dispenser.png" || dispenser.width != 176.0f ||
-        dispenser.height != 166.0f || !hasCenteredAdaptivePanel(dispenser) || dispenser.slotGroups.size() != 3 ||
-        !dispenser.progressBars.empty()) {
+    if (dispenser.behavior != "minecraft:dispenser" || dispenser.titleKey != "container_dispenser" ||
+        dispenser.width != 176.0f || dispenser.height != 166.0f || !hasCenteredAdaptivePanel(dispenser) ||
+        dispenser.slotGroups.size() != 3 || !dispenser.progressBars.empty()) {
         return fail("dispenser UI should parse its storage layout definition");
     }
     const ui::ContainerSlotGroupDef* dispenserSlots = findSlotGroup(dispenser, "dispenser");
@@ -78,8 +75,7 @@ int main() {
     }
 
     const ui::ContainerUiDef& dropper = ui::ContainerUiRegistry::require("minecraft:dropper");
-    if (dropper.behavior != "minecraft:dropper" || dropper.backgroundTexture != "dispenser" ||
-        dropper.backgroundTexturePath != "textures/gui/dispenser.png" || dropper.width != 176.0f ||
+    if (dropper.behavior != "minecraft:dropper" || dropper.titleKey != "container_dropper" || dropper.width != 176.0f ||
         dropper.height != 166.0f || !hasCenteredAdaptivePanel(dropper) || dropper.slotGroups.size() != 3 ||
         !dropper.progressBars.empty()) {
         return fail("dropper UI should parse its storage layout definition");
@@ -91,8 +87,7 @@ int main() {
     }
 
     const ui::ContainerUiDef& hopper = ui::ContainerUiRegistry::require("minecraft:hopper");
-    if (hopper.behavior != "minecraft:hopper" || hopper.backgroundTexture != "hopper" ||
-        hopper.backgroundTexturePath != "textures/gui/hopper.png" || hopper.width != 176.0f ||
+    if (hopper.behavior != "minecraft:hopper" || hopper.titleKey != "container_hopper" || hopper.width != 176.0f ||
         hopper.height != 133.0f || !hasCenteredAdaptivePanel(hopper) || hopper.slotGroups.size() != 3 ||
         !hopper.progressBars.empty()) {
         return fail("hopper UI should parse its 5-slot storage layout definition");
@@ -105,9 +100,8 @@ int main() {
     }
 
     const ui::ContainerUiDef& furnace = ui::ContainerUiRegistry::require("minecraft:furnace");
-    if (furnace.behavior != "minecraft:furnace" || furnace.backgroundTexture != "furnace" ||
-        furnace.backgroundTexturePath != "textures/gui/furnace.png" || !hasCenteredAdaptivePanel(furnace) ||
-        furnace.slotGroups.size() != 5 || furnace.progressBars.size() != 2) {
+    if (furnace.behavior != "minecraft:furnace" || furnace.titleKey != "container_furnace" ||
+        !hasCenteredAdaptivePanel(furnace) || furnace.slotGroups.size() != 5 || furnace.progressBars.size() != 2) {
         return fail("furnace UI should parse slots and progress bars");
     }
     const ui::ContainerSlotGroupDef* furnaceFuel = findSlotGroup(furnace, "fuel");
@@ -122,9 +116,9 @@ int main() {
     }
 
     const ui::ContainerUiDef& crafting = ui::ContainerUiRegistry::require("minecraft:crafting_table");
-    if (crafting.behavior != "minecraft:crafting_table" || crafting.backgroundTexture != "crafting_table" ||
-        crafting.backgroundTexturePath != "textures/gui/crafting_table.png" || crafting.textureWidth != 256.0f ||
-        crafting.textureHeight != 256.0f || !hasCenteredAdaptivePanel(crafting) || crafting.slotGroups.size() != 4) {
+    if (crafting.behavior != "minecraft:crafting_table" || crafting.titleKey != "container_crafting_table" ||
+        crafting.width != 176.0f || crafting.height != 166.0f || !hasCenteredAdaptivePanel(crafting) ||
+        crafting.slotGroups.size() != 4) {
         return fail("crafting table UI should parse its layout definition");
     }
     const ui::ContainerSlotGroupDef* craftingInput = findSlotGroup(crafting, "crafting_input");

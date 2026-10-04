@@ -11,7 +11,9 @@
 #include "../../resource/GameResources.h"
 #include "../ItemIconPolicy.h"
 #include "../core/UIRenderContext.h"
+#include "../core/UIPrimitives.h"
 #include "../core/UIRenderer.h"
+#include "../core/UITheme.h"
 #include "../font/TextRenderer.h"
 
 namespace {
@@ -62,6 +64,21 @@ void Pickable::render(const SlotInfo* slots, const int count, const int hoveredI
         context.panelQuadVertexBuffer.isValid()) {
         RhiCommandList& commandList = *context.commandList;
         const RhiRect2D scissor = pickableScissor(context);
+
+        if (context.theme != nullptr) {
+            // Slot frames share theme tokens with other editable surfaces.
+            auto slotBackground = context.theme->inputBackground;
+            slotBackground[3] = 1.0f;
+            const float edge = std::max(1.0f, context.theme->panelBorderWidth * 0.5f);
+            for (int i = 0; i < count; ++i) {
+                const SlotInfo& slot = slots[i];
+                const float x = static_cast<float>(slot.x);
+                const float y = static_cast<float>(slot.y);
+                const float size = static_cast<float>(slot.size);
+                ui::drawSolidRect(context, x, y, size, size, context.theme->inputBorder);
+                ui::drawSolidRect(context, x + edge, y + edge, size - edge * 2.0f, size - edge * 2.0f, slotBackground);
+            }
+        }
 
         if (hoveredIndex >= 0 && hoveredIndex < count && context.panelSolidPipeline.isValid()) {
             const SlotInfo& slot = slots[hoveredIndex];
@@ -117,11 +134,12 @@ void Pickable::render(const SlotInfo* slots, const int count, const int hoveredI
                     }
 
                     const auto uv = atlas.getUV(tileIndex);
+                    const float inset = static_cast<float>(slot.size) * 0.08f;
                     const PickableImagePushConstants pushConstants{
                         glm::vec4(static_cast<float>(context.uiWidth), static_cast<float>(context.uiHeight),
-                                  static_cast<float>(slot.x),
-                                  static_cast<float>(slot.y)),
-                        glm::vec4(static_cast<float>(slot.size), static_cast<float>(slot.size), 0.0f, 0.0f),
+                                  static_cast<float>(slot.x) + inset, static_cast<float>(slot.y) + inset),
+                        glm::vec4(static_cast<float>(slot.size) - inset * 2.0f,
+                                  static_cast<float>(slot.size) - inset * 2.0f, 0.0f, 0.0f),
                         glm::vec4(uv.first.x, uv.first.y, uv.second.x, uv.second.y),
                         glm::vec4(params.iconTintColor[0], params.iconTintColor[1], params.iconTintColor[2],
                                   params.iconTintColor[3])};

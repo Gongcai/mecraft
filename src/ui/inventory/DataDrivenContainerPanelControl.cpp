@@ -14,6 +14,7 @@
 #include "../../resource/GameResources.h"
 #include "../ItemIconPolicy.h"
 #include "../core/UIRenderer.h"
+#include "../core/UIPrimitives.h"
 
 namespace {
 struct ImageTexturePushConstants {
@@ -177,7 +178,7 @@ DataDrivenContainerPanelControl::resolvePanelRect(const int uiWidth, const int u
     const float fitPadding = std::max(0.0f, def.fitPadding);
     const float availableWidth = std::max(1.0f, static_cast<float>(safeWidth) - fitPadding * 2.0f);
     const float availableHeight = std::max(1.0f, static_cast<float>(safeHeight) - fitPadding * 2.0f);
-    const float fitScale = std::min(availableWidth / def.width, availableHeight / def.height);
+    const float fitScale = std::min(availableWidth / def.width, availableHeight / (def.height + 20.0f));
     const float scale = std::max(0.1f, std::min(preferredScale, fitScale));
 
     ResolvedPanelRect rect;
@@ -185,7 +186,8 @@ DataDrivenContainerPanelControl::resolvePanelRect(const int uiWidth, const int u
     rect.width = def.width * scale;
     rect.height = def.height * scale;
     rect.x = static_cast<float>(safeWidth) * def.anchorX - rect.width * def.pivotX + def.offsetX * scale;
-    rect.y = static_cast<float>(safeHeight) * def.anchorY - rect.height * def.pivotY + def.offsetY * scale;
+    rect.y =
+        static_cast<float>(safeHeight) * def.anchorY - (rect.height + 20.0f * scale) * def.pivotY + def.offsetY * scale;
     return rect;
 }
 
@@ -245,8 +247,7 @@ void DataDrivenContainerPanelControl::appendSlotsForGroup(const ui::ContainerSlo
     const int colStep = std::max(1, static_cast<int>(std::lround((group.slotSize + group.columnGap) * scale)));
     const int rowStep = std::max(1, static_cast<int>(std::lround((group.slotSize + group.rowGap) * scale)));
     const int baseX = static_cast<int>(std::lround(panelRect.x + group.x * scale));
-    const int baseY =
-        static_cast<int>(std::lround(panelRect.y + panelRect.height - group.y * scale)) - slotSize;
+    const int baseY = static_cast<int>(std::lround(panelRect.y + panelRect.height - group.y * scale)) - slotSize;
 
     for (int row = 0; row < group.rows; ++row) {
         const int rowExtraGap = row >= 3 ? static_cast<int>(std::lround(group.row4ExtraGap * scale)) : 0;
@@ -272,7 +273,7 @@ void DataDrivenContainerPanelControl::appendSlotsForGroup(const ui::ContainerSlo
 }
 
 void DataDrivenContainerPanelControl::renderBackground(const UIRenderContext& context) const {
-    if (m_resources == nullptr) {
+    if (context.theme == nullptr) {
         return;
     }
     if (context.uiWidth <= 0 || context.uiHeight <= 0) {
@@ -281,61 +282,35 @@ void DataDrivenContainerPanelControl::renderBackground(const UIRenderContext& co
 
     const ui::ContainerUiDef& def = requireDefinition();
     const ResolvedPanelRect panelRect = resolvePanelRect(context.uiWidth, context.uiHeight);
-    const float x0 = panelRect.x;
-    const float y0 = panelRect.y;
-    const float x1 = panelRect.x + panelRect.width;
-    const float y1 = panelRect.y + panelRect.height;
-    const float u0 = 0.0f;
-    const float u1 = def.width / def.textureWidth;
-    const float v0 = 1.0f - def.height / def.textureHeight;
-    const float v1 = 1.0f;
-
-    drawTextureQuad(context, m_resources->texture2D.getGuiHandle(def.backgroundTexture), x0, y0, x1, y1, u0, v0, u1, v1,
-                    1.0f);
+    ui::drawPanelSurface(context, panelRect.x, panelRect.y, panelRect.width,
+                         panelRect.height + 20.0f * panelRect.scale);
+    const std::string title = context.localeManager ? context.localeManager->tr(def.titleKey) : def.titleKey;
+    ui::drawText(context, title, panelRect.x + 8.0f * panelRect.scale,
+                 panelRect.y + panelRect.height + 6.0f * panelRect.scale, panelRect.scale * 1.25f,
+                 context.theme->textPrimary);
 }
 
 void DataDrivenContainerPanelControl::renderProgressBars(const UIRenderContext& context) const {
-    if (m_definition == nullptr || m_resources == nullptr || m_definition->progressBars.empty()) {
+    if (m_definition == nullptr || context.theme == nullptr) {
         return;
     }
-    const ui::ContainerUiDef& def = requireDefinition();
-    const RhiTextureHandle backgroundTexture = m_resources->texture2D.getGuiHandle(def.backgroundTexture);
     const ResolvedPanelRect panelRect = resolvePanelRect(context.uiWidth, context.uiHeight);
     const float scale = panelRect.scale;
-
-    for (const ui::ContainerProgressDef& progress : def.progressBars) {
+    for (const ui::ContainerProgressDef& progress : m_definition->progressBars) {
         const float fraction = progress.kind == ui::ContainerProgressKind::Burn ? m_burnFraction : m_cookFraction;
-        if (fraction <= 0.0f) {
-            continue;
-        }
-
-        if (progress.direction == "up") {
-            const float visibleHeight = std::round(progress.height * fraction);
-            if (visibleHeight <= 0.0f) {
-                continue;
-            }
-            const float srcX0 = progress.textureX;
-            const float srcY0 = progress.textureY + progress.height - visibleHeight;
-            const float srcX1 = progress.textureX + progress.width;
-            const float srcY1 = progress.textureY + progress.height;
-            const float dstX0 = panelRect.x + progress.x * scale;
-            const float dstY0 = panelRect.y + panelRect.height - (progress.y + progress.height) * scale;
-            drawTextureQuad(context, backgroundTexture, dstX0, dstY0, dstX0 + progress.width * scale,
-                            dstY0 + visibleHeight * scale, srcX0 / def.textureWidth, 1.0f - srcY1 / def.textureHeight,
-                            srcX1 / def.textureWidth, 1.0f - srcY0 / def.textureHeight, 1.0f);
-        } else if (progress.direction == "right") {
-            const float visibleWidth = std::round(progress.width * fraction);
-            if (visibleWidth <= 0.0f) {
-                continue;
-            }
-            const float dstX0 = panelRect.x + progress.x * scale;
-            const float dstY0 = panelRect.y + panelRect.height - (progress.y + progress.height) * scale;
-            drawTextureQuad(context, backgroundTexture, dstX0, dstY0, dstX0 + visibleWidth * scale,
-                            dstY0 + progress.height * scale, progress.textureX / def.textureWidth,
-                            1.0f - (progress.textureY + progress.height) / def.textureHeight,
-                            (progress.textureX + visibleWidth) / def.textureWidth,
-                            1.0f - progress.textureY / def.textureHeight, 1.0f);
-        }
+        const float x = panelRect.x + progress.x * scale;
+        const float y = panelRect.y + panelRect.height - (progress.y + progress.height) * scale;
+        const float width = progress.width * scale;
+        const float height = progress.height * scale;
+        ui::drawFramedRect(context, x, y, width, height, context.theme->progressTrack, context.theme->panelBorder,
+                           std::max(1.0f, scale * 0.5f));
+        const auto& fill = progress.kind == ui::ContainerProgressKind::Burn ? context.theme->accentSuccess
+                                                                            : context.theme->progressFill;
+        const float inset = std::max(1.0f, scale * 0.5f);
+        const float fillWidth = std::max(0.0f, width - inset * 2.0f);
+        const float fillHeight = std::max(0.0f, height - inset * 2.0f);
+        ui::drawSolidRect(context, x + inset, y + inset, fillWidth * (progress.direction == "right" ? fraction : 1.0f),
+                          fillHeight * (progress.direction == "up" ? fraction : 1.0f), fill);
     }
 }
 
@@ -382,7 +357,8 @@ void DataDrivenContainerPanelControl::renderDraggedItem(const UIRenderContext& c
     const ItemDef& itemDef = ItemRegistry::get(draggedItem);
 
     const bool useBakedBlockIcon = ui::shouldUseBakedBlockIcon(itemDef);
-    const int itemTileIndex = useBakedBlockIcon ? -1 : m_resources->uiTextures.itemTextureIndex(itemDef.iconTextureName);
+    const int itemTileIndex =
+        useBakedBlockIcon ? -1 : m_resources->uiTextures.itemTextureIndex(itemDef.iconTextureName);
     const TextureAtlas& selectedAtlas = useBakedBlockIcon ? itemIconAtlas : itemTextureAtlas;
     const int selectedTile = useBakedBlockIcon ? static_cast<int>(itemDef.renderBlock) : itemTileIndex;
     if (!selectedAtlas.texture.isValid() || selectedAtlas.tilesPerRow <= 0 || selectedTile < 0) {
@@ -404,8 +380,8 @@ void DataDrivenContainerPanelControl::renderDraggedItem(const UIRenderContext& c
     const float x0 = context.pointerX + kDragCursorOffsetPx;
     const float y0 = context.pointerY - iconSize - kDragCursorOffsetPx;
     const auto uv = selectedAtlas.getUV(selectedTile);
-    drawTextureQuad(context, selectedAtlas.texture, x0, y0, x0 + iconSize, y0 + iconSize, uv.first.x, uv.first.y, uv.second.x,
-                    uv.second.y, 0.95f);
+    drawTextureQuad(context, selectedAtlas.texture, x0, y0, x0 + iconSize, y0 + iconSize, uv.first.x, uv.first.y,
+                    uv.second.x, uv.second.y, 0.95f);
 }
 
 void DataDrivenContainerPanelControl::renderTooltip(const UIRenderContext& context) const {

@@ -33,7 +33,7 @@ int main() {
     panel.setVisible(true);
 
     // Pointer coordinates use the same bottom-left origin as the panel layout.
-    const UIInputEvent clickAllItemsTab{UIInputEventType::PointerDown, 110.0f, 240.0f, UIPointerButton::Primary};
+    const UIInputEvent clickAllItemsTab{UIInputEventType::PointerDown, 110.0f, 223.0f, UIPointerButton::Primary};
     if (panel.onInput(clickAllItemsTab, ctx) != UIEventResult::Consumed) {
         return fail("clicking all items tab should be consumed");
     }
@@ -64,7 +64,7 @@ int main() {
     for (int i = 0; i < 20; ++i) {
         panel.onInput(scrollDown, ctx);
     }
-    if (panel.getScrollRowForTest() != 3) {
+    if (panel.getScrollRowForTest() != 4) {
         return fail("scroll row should clamp to max row");
     }
 
@@ -88,7 +88,7 @@ int main() {
         clickItems[i] = static_cast<ItemID>(100 + i);
     }
     panel.setCreativeItemsForTest(clickItems, 46);
-    const UIInputEvent clickFirstCreativeSlot{UIInputEventType::PointerDown, 113.0f, 197.0f, UIPointerButton::Primary};
+    const UIInputEvent clickFirstCreativeSlot{UIInputEventType::PointerDown, 113.0f, 185.0f, UIPointerButton::Primary};
     if (panel.onInput(clickFirstCreativeSlot, ctx) != UIEventResult::Consumed) {
         return fail("clicking creative item slot should be consumed");
     }
@@ -96,12 +96,27 @@ int main() {
         return fail("activated creative item should match first visible item");
     }
 
-    const UIInputEvent clickPlayerInventoryTab{UIInputEventType::PointerDown, 270.0f, 80.0f, UIPointerButton::Primary};
+    const UIInputEvent clickPlayerInventoryTab{UIInputEventType::PointerDown, 270.0f, 223.0f, UIPointerButton::Primary};
     if (panel.onInput(clickPlayerInventoryTab, ctx) != UIEventResult::Consumed) {
         return fail("clicking player inventory tab should be consumed");
     }
     if (panel.getTab() != CreativeInventoryTab::PlayerInventory) {
         return fail("player inventory tab should be selected");
+    }
+
+    // Both tabs must remain reachable after a smaller viewport forces panel scaling.
+    ctx.uiWidth = 220;
+    ctx.uiHeight = 180;
+    panel.setTab(CreativeInventoryTab::PlayerInventory);
+    if (panel.onInput({UIInputEventType::PointerDown, 35.0f, 159.0f, UIPointerButton::Primary}, ctx) !=
+            UIEventResult::Consumed ||
+        panel.getTab() != CreativeInventoryTab::AllItems) {
+        return fail("all items tab should remain clickable after a viewport resize");
+    }
+    if (panel.onInput({UIInputEventType::PointerDown, 165.0f, 159.0f, UIPointerButton::Primary}, ctx) !=
+            UIEventResult::Consumed ||
+        panel.getTab() != CreativeInventoryTab::PlayerInventory) {
+        return fail("inventory tab should remain clickable after a viewport resize");
     }
 
     panel.shutdown();
