@@ -9,8 +9,12 @@
 
 #include <array>
 #include <cmath>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <limits>
+#include <string>
+#include <string_view>
 #include <type_traits>
 
 namespace {
@@ -367,6 +371,48 @@ bool testTemporalReset() {
                        "world and camera causes must reset every history owner");
 }
 
+bool testWorldEditsPreserveTemporalContinuity() {
+    // Guard the scene-to-history boundary: local world revisions must not
+    // become global reset events before the per-pixel rejection passes run.
+    const std::string scenePath = std::string(MECRAFT_TEST_SOURCE_DIR) + "/src/renderer/core/RenderScene.cpp";
+    std::ifstream sceneFile(scenePath, std::ios::binary);
+    if (!requireTrue(sceneFile.is_open(), "RenderScene source must be readable")) {
+        return false;
+    }
+    const std::string source{std::istreambuf_iterator<char>(sceneFile), std::istreambuf_iterator<char>()};
+    const size_t begin = source.find("RenderScene::buildFrameContext(");
+    const size_t end = source.find("RenderScene::internalRenderSize(", begin);
+    if (!requireTrue(begin != std::string::npos && end != std::string::npos && end > begin,
+                     "frame context construction must be available for the continuity contract")) {
+        return false;
+    }
+    const std::string_view frameContext = std::string_view(source).substr(begin, end - begin);
+    if (!requireTrue(frameContext.find("getBlockEditRevision") == std::string_view::npos &&
+                         frameContext.find("getBlockContentRevision") == std::string_view::npos &&
+                         frameContext.find("getActiveChunkRevision") == std::string_view::npos,
+                     "block edits and chunk streaming must not drive global temporal resets")) {
+        return false;
+    }
+
+    constexpr std::array<TemporalHistoryOwner, 5u> owners{
+        TemporalHistoryOwner::NrdDiffuse, TemporalHistoryOwner::Clouds, TemporalHistoryOwner::Volumetrics,
+        TemporalHistoryOwner::ScreenSpace, TemporalHistoryOwner::Upscaler};
+    const TemporalFrameExtents extents = makeTemporalFrameExtents({1600u, 900u}, {1600u, 900u},
+                                                                {800u, 450u}, {1600u, 900u});
+    const TemporalResetReasons stable = evaluateTemporalResetReasons(true, extents, extents, 0u, {});
+    const TemporalResetReasons reloaded = evaluateTemporalResetReasons(
+        true, extents, extents, temporalResetReasonBit(TemporalResetReason::WorldReload), {});
+    for (const TemporalHistoryOwner owner : owners) {
+        if (!requireTrue(!ownerRequiresTemporalReset(owner, stable),
+                         "continuous frames must preserve fog, cloud, denoiser, screen-space and upscaler history") ||
+            !requireTrue(ownerRequiresTemporalReset(owner, reloaded),
+                         "world replacement must still reset every temporal history owner")) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool testStableSceneIdentity() {
     using renderer::contracts::allocateStableSceneId;
     using renderer::contracts::kVoxelMaterialIdCapacity;
@@ -589,6 +635,8 @@ int main() {
     if (!testTemporalExtents())
         return 1;
     if (!testTemporalReset())
+        return 1;
+    if (!testWorldEditsPreserveTemporalContinuity())
         return 1;
     if (!testStableSceneIdentity())
         return 1;

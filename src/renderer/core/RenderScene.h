@@ -388,7 +388,6 @@ private:
     std::optional<TemporalFrameInput> m_temporalFrameInput;
     std::optional<TemporalUpscaleResult> m_temporalUpscaleResult;
     bool m_hasPreviousContext = false;
-    uint64_t m_previousWorldBlockContentRevision = 0u;
     // Active quantized scene pre-exposure; changes only across >= 1-stop
     // adapted-exposure transitions.
     float m_scenePreExposure = 1.0f;
