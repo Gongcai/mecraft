@@ -87,6 +87,9 @@ public:
     [[nodiscard]] SkyIlluminanceData computeSkyIlluminance(const SkyColors& colors, float weatherWetness = 0.0f,
                                                            float weatherStorm = 0.0f) const;
     [[nodiscard]] static glm::vec3 computeCloudDynamicWeather(int worldDay, int worldTime);
+    // Returns lunar irradiance relative to the sun for a phase angle in radians.
+    // Zero is a full moon and +/- pi is a new moon, matching the visible disk.
+    [[nodiscard]] static float computeMoonPhaseFlux(float phaseAngle);
     [[nodiscard]] glm::vec3 getLastFogColor() const;
     [[nodiscard]] static std::pair<glm::vec2, glm::vec2> getMoonPhaseUv(int phaseIndex);
 
@@ -128,7 +131,6 @@ private:
     [[nodiscard]] glm::mat4 buildSkyView(const Camera& camera) const;
     [[nodiscard]] glm::vec3 directionFromAngle(float angleRadians) const;
 
-    
     RhiDevice* m_rhiDevice = nullptr;
     RhiBufferHandle m_skyVertexBuffer;
     RhiBufferHandle m_haloVertexBuffer;

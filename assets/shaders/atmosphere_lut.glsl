@@ -50,6 +50,13 @@ vec3 atmDoNightEye(vec3 color) {
     return mix(color, luminance * vec3(0.72, 0.95, 1.2), rodFactor);
 }
 
+// Returns moon-independent airglow in scene radiance units. Solar altitude
+// blends it in through twilight so outdoor visibility does not depend on moonrise.
+vec3 atmAirglowRadiance(float sunAltitude) {
+    float nightWeight = 1.0 - smoothstep(-0.16, 0.04, sunAltitude);
+    return vec3(0.68, 0.82, 1.0) * (0.002 * nightWeight);
+}
+
 float atmClampCosine(float mu) {
     return clamp(mu, -1.0, 1.0);
 }
@@ -283,12 +290,15 @@ vec3 atmGetSkyRadiance(float eyeAltitude, vec3 viewRay, vec3 sunDirection, out v
     vec3 moonScattering = atmGetCombinedScattering(atmModel, r, mu, -muS, -nu, rayIntersectsGround, moonSingleMie);
 
     float moonFlux = max(uMoonPhaseFlux, 0.0);
-    vec3 rayleigh = sunScattering * atmRayleighPhase(nu)
-                  + moonScattering * atmRayleighPhase(-nu) * moonFlux;
-    vec3 mie = sunSingleMie * atmHenyeyGreensteinPhase(nu, atmMiePhaseG)
-             + moonSingleMie * atmHenyeyGreensteinPhase(-nu, atmMiePhaseG) * moonFlux;
-
-    return (rayleigh + mie) * 20.0;
+    vec3 solarRadiance = sunScattering * atmRayleighPhase(nu)
+                      + sunSingleMie * atmHenyeyGreensteinPhase(nu, atmMiePhaseG);
+    vec3 lunarRadiance = (moonScattering * atmRayleighPhase(-nu)
+                       + moonSingleMie * atmHenyeyGreensteinPhase(-nu, atmMiePhaseG)) * moonFlux;
+    // Desaturate dim lunar scattering consistently with direct moonlight. Airglow
+    // belongs to the sky hemisphere and is shared by SH lighting and reflections.
+    float skyVisibility = smoothstep(-0.12, 0.02, viewRay.y);
+    vec3 airglow = atmAirglowRadiance(muS) * skyVisibility * (0.65 + 0.35 * max(viewRay.y, 0.0));
+    return (solarRadiance + atmDoNightEye(lunarRadiance)) * 20.0 + airglow;
 }
 
 // Solar disk rendering with limb darkening (DerivativeMain RenderSun).
@@ -332,6 +342,9 @@ vec3 atmGetSunAndSkyIrradiance(vec3 point, vec3 sunDirection, out vec3 sunIrradi
 
     vec3 skyIrradiance = atmGetIrradiance(r, muS) + atmGetIrradiance(r, -muS) * moonFlux;
     skyIrradiance *= 1.0 + point.y / r;
+    // Integrate the upper-hemisphere airglow profile against the ground cosine,
+    // converting scene radiance back to the LUT irradiance convention.
+    skyIrradiance += atmAirglowRadiance(muS) * (atmPi * (0.65 + 0.35 * (2.0 / 3.0)) / 20.0);
     return skyIrradiance;
 }
 #endif

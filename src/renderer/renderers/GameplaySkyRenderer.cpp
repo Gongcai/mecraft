@@ -622,12 +622,9 @@ GameplaySkyRenderer::SkyIlluminanceData GameplaySkyRenderer::computeSkyIlluminan
     const float sunAltitude = std::clamp(colors.sunDirection.y, 0.0f, 1.0f);
     const float moonAltitude = std::clamp(colors.moonDirection.y, 0.0f, 1.0f);
     const float sunTransmittance = colors.sunVisibility * smoothstep(0.0f, 0.18f, sunAltitude);
-    // DerivativeMain MoonFlux includes NIGHT_BRIGHTNESS (0.0005) which scales moon
-    // contribution to physically correct levels. Without this, moon is ~2000x too bright.
-    // The GPU metadata path (mode 5) uses atmGetSunAndSkyIrradiance with uMoonPhaseFlux
-    // which already includes NIGHT_BRIGHTNESS. This CPU fallback should match.
-    constexpr float kNightBrightness = 0.0005f;
-    const float moonTransmittance = colors.moonVisibility * smoothstep(0.0f, 0.18f, moonAltitude) * kNightBrightness;
+    // Use the same phase-dependent energy as sky capture and water lighting.
+    const float moonTransmittance =
+        colors.moonVisibility * smoothstep(0.0f, 0.18f, moonAltitude) * computeMoonPhaseFlux(colors.moonPhaseAngle);
 
     data.sunIlluminance = kSolarIrradiance * colors.sunLightColor * sunTransmittance;
     data.moonIlluminance = kSolarIrradiance * colors.moonLightColor * moonTransmittance;
@@ -643,6 +640,14 @@ GameplaySkyRenderer::SkyIlluminanceData GameplaySkyRenderer::computeSkyIlluminan
     (void)weatherStorm;
 
     return data;
+}
+
+float GameplaySkyRenderer::computeMoonPhaseFlux(const float phaseAngle) {
+    // A subdued full moon provides directional contrast; earthshine retains a
+    // small contribution at new moon without reversing the visible phase.
+    constexpr float kFullMoonFlux = 0.00008f;
+    const float illuminatedFraction = 0.5f + 0.5f * std::cos(phaseAngle);
+    return kFullMoonFlux * (0.15f + 0.85f * illuminatedFraction);
 }
 
 glm::vec3 GameplaySkyRenderer::computeCloudDynamicWeather(const int worldDay, const int worldTime) {

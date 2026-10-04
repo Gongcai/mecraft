@@ -46,18 +46,13 @@ bool SkyCapturePass::execute(RhiCommandList& commandList, const DayNightSystem& 
     if (!atmosphereLut.isValid()) {
         return false;
     }
-    const int moonPhase = dayNightSystem.getMoonPhaseIndex();
-
-    // DerivativeMain MoonFlux: phase factor ranges 0.2 (full moon) to 1.2 (new moon).
-    constexpr float kNightBrightness = 0.0005f;
-    const float moonPhaseFlux = (static_cast<float>(std::abs(moonPhase - 4)) * 0.25f + 0.2f) * kNightBrightness;
-
     // Weather state for SkyCapture modulation
     const WeatherState& weather = weatherSystem.getRenderState();
     const float weatherWetness = weather.wetness;
     const float weatherStorm = weather.storm;
 
     const auto skyColors = skyRenderer.computeSkyColors(dayNightSystem);
+    const float moonPhaseFlux = GameplaySkyRenderer::computeMoonPhaseFlux(skyColors.moonPhaseAngle);
     auto illum = skyRenderer.computeSkyIlluminance(skyColors, weatherWetness, weatherStorm);
 
     // DerivativeMain worldTime: 24000 ticks/day, our timeOfDay is in seconds with 1200s/day.

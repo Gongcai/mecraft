@@ -3686,7 +3686,7 @@ bool DeferredPipeline::recordTerrainDrawPreparation(RhiCommandList& commandList,
     tfd.skyLighting.horizonScatterColor = ctx.skyColors.horizonScatterColor;
     tfd.skyLighting.skyIntensity = ctx.skyIntensity;
     tfd.skyLighting.moonVisibility = ctx.skyColors.moonVisibility;
-    tfd.skyLighting.moonPhaseFlux = (std::abs(ctx.skyColors.moonPhaseAngle) / glm::pi<float>() + 0.2f) * 0.0005f;
+    tfd.skyLighting.moonPhaseFlux = GameplaySkyRenderer::computeMoonPhaseFlux(ctx.skyColors.moonPhaseAngle);
     tfd.skyLighting.directIlluminance = ctx.skyIlluminance.directIlluminance;
     tfd.skyLighting.skyIlluminance = ctx.skyIlluminance.skyIlluminance;
     tfd.skyLighting.sunIlluminance = ctx.skyIlluminance.sunIlluminance;
@@ -3930,7 +3930,7 @@ bool DeferredPipeline::recordGenericTransparentPass(RhiCommandList& commandList,
     tfd.skyLighting.horizonScatterColor = ctx.skyColors.horizonScatterColor;
     tfd.skyLighting.skyIntensity = ctx.skyIntensity;
     tfd.skyLighting.moonVisibility = ctx.skyColors.moonVisibility;
-    tfd.skyLighting.moonPhaseFlux = (std::abs(ctx.skyColors.moonPhaseAngle) / glm::pi<float>() + 0.2f) * 0.0005f;
+    tfd.skyLighting.moonPhaseFlux = GameplaySkyRenderer::computeMoonPhaseFlux(ctx.skyColors.moonPhaseAngle);
     tfd.skyLighting.directIlluminance = ctx.skyIlluminance.directIlluminance;
     tfd.skyLighting.skyIlluminance = ctx.skyIlluminance.skyIlluminance;
     tfd.skyLighting.sunIlluminance = ctx.skyIlluminance.sunIlluminance;

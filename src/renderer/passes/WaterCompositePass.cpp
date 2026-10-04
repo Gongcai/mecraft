@@ -3,6 +3,7 @@
 #include "../mesh/TerrainRhiPipelineSet.h"
 #include "../mesh/WorldRenderBuffer.h"
 #include "../core/RenderScene.h"
+#include "../renderers/GameplaySkyRenderer.h"
 #include "../debug/RenderDebugService.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
@@ -118,7 +119,7 @@ bool WaterCompositePass::recordGraphPass(const FrameContext& ctx, const RenderSe
     waterFrame.skyAmbientColor = ctx.skyColors.skyAmbientColor;
     waterFrame.skyIntensity = ctx.skyIntensity;
     waterFrame.moonVisibility = ctx.skyColors.moonVisibility;
-    waterFrame.moonPhaseFlux = (std::abs(ctx.skyColors.moonPhaseAngle) / glm::pi<float>() + 0.2f) * 0.0005f;
+    waterFrame.moonPhaseFlux = GameplaySkyRenderer::computeMoonPhaseFlux(ctx.skyColors.moonPhaseAngle);
     waterFrame.weatherWetness = ctx.weather.wetness;
     waterFrame.skyWetness = ctx.weather.skyWetness;
     waterFrame.fogWetness = ctx.weather.fogWetness;
