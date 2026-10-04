@@ -9,6 +9,7 @@
 #include <vector>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include "../../resource/GameResources.h"
 #include "../rhi/RhiDevice.h"
@@ -115,6 +116,19 @@ glm::vec3 applyModelTransform(glm::vec3 p, const ModelTransform& transform) {
     p = rotatePointY90(p, transform.rotY);
     p = rotatePointZ90(p, transform.rotZ);
     return p;
+}
+
+glm::vec3 applyElementRotation(glm::vec3 point, const ModelElement& element) {
+    // Rotate an element corner around the origin specified by the Minecraft model format.
+    if (!element.hasRotation) {
+        return point;
+    }
+    const glm::vec3 origin(element.rotationOrigin[0] / 16.0f, element.rotationOrigin[1] / 16.0f,
+                            element.rotationOrigin[2] / 16.0f);
+    glm::vec3 axis(0.0f);
+    axis[element.rotationAxis == 'x' ? 0 : element.rotationAxis == 'y' ? 1 : 2] = 1.0f;
+    return glm::vec3(glm::translate(glm::mat4(1.0f), origin) * glm::rotate(glm::mat4(1.0f), glm::radians(element.rotationAngle), axis) *
+                     glm::translate(glm::mat4(1.0f), -origin) * glm::vec4(point, 1.0f));
 }
 
 IVec3 rotateDirectionX90(const IVec3 direction, const uint16_t rotation) {
@@ -346,6 +360,7 @@ void appendModelVertices(std::vector<BlockVertex>& vertices, const BlockStateId 
             const ModelFace& face = *facePtr;
             std::array<glm::vec3, 4> corners = buildModelFaceCorners(element, faceIndex);
             for (glm::vec3& corner : corners) {
+                corner = applyElementRotation(corner, element);
                 corner = applyModelTransform(corner, variant->transform);
             }
 

@@ -18,6 +18,10 @@ struct ModelElement {
     std::array<float, 3> from{};
     std::array<float, 3> to{};
     std::array<std::unique_ptr<ModelFace>, 6> faces{};
+    bool hasRotation = false;
+    std::array<float, 3> rotationOrigin{};
+    char rotationAxis = 'y';
+    float rotationAngle = 0.0f;
 };
 
 struct BlockModel {

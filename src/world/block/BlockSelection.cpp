@@ -142,6 +142,21 @@ glm::vec3 applyModelSelectionTransform(glm::vec3 point, const ModelTransform& tr
     return point;
 }
 
+glm::vec3 applyElementRotation(glm::vec3 point, const ModelElement& element) {
+    // Keep selection bounds aligned with the rendered rotated model element.
+    if (!element.hasRotation) {
+        return point;
+    }
+    const glm::vec3 origin(element.rotationOrigin[0] / 16.0f, element.rotationOrigin[1] / 16.0f,
+                            element.rotationOrigin[2] / 16.0f);
+    glm::vec3 axis(0.0f);
+    axis[element.rotationAxis == 'x' ? 0 : element.rotationAxis == 'y' ? 1 : 2] = 1.0f;
+    const glm::mat4 rotation = glm::translate(glm::mat4(1.0f), origin) *
+                               glm::rotate(glm::mat4(1.0f), glm::radians(element.rotationAngle), axis) *
+                               glm::translate(glm::mat4(1.0f), -origin);
+    return glm::vec3(rotation * glm::vec4(point, 1.0f));
+}
+
 BlockSelectionBox getModelBox(const BlockStateId stateId) {
     const ModelVariant* variant = BlockStateRegistry::getModelVariant(stateId);
     if (variant == nullptr || variant->model == nullptr) {
@@ -168,7 +183,7 @@ BlockSelectionBox getModelBox(const BlockStateId stateId) {
         }};
 
         for (const glm::vec3& corner : corners) {
-            const glm::vec3 transformed = applyModelSelectionTransform(corner, variant->transform);
+            const glm::vec3 transformed = applyModelSelectionTransform(applyElementRotation(corner, element), variant->transform);
             if (!hasPoint) {
                 box.min = transformed;
                 box.max = transformed;

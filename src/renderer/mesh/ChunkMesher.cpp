@@ -1284,6 +1284,21 @@ glm::vec3 applyModelTransform(glm::vec3 p, const ModelTransform& transform) {
     return p;
 }
 
+glm::vec3 applyElementRotation(glm::vec3 point, const ModelElement& element) {
+    // Rotate an element corner before applying the block-state transform.
+    if (!element.hasRotation) {
+        return point;
+    }
+    const glm::vec3 origin(element.rotationOrigin[0] / 16.0f, element.rotationOrigin[1] / 16.0f,
+                            element.rotationOrigin[2] / 16.0f);
+    glm::vec3 axis(0.0f);
+    axis[element.rotationAxis == 'x' ? 0 : element.rotationAxis == 'y' ? 1 : 2] = 1.0f;
+    const glm::mat4 rotation = glm::translate(glm::mat4(1.0f), origin) *
+                               glm::rotate(glm::mat4(1.0f), glm::radians(element.rotationAngle), axis) *
+                               glm::translate(glm::mat4(1.0f), -origin);
+    return glm::vec3(rotation * glm::vec4(point, 1.0f));
+}
+
 IVec3 rotateDirectionX90(const IVec3 direction, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
     case 1: return {direction.x, -direction.z, direction.y};
@@ -1455,6 +1470,7 @@ std::shared_ptr<const CachedModelGeometry> buildCachedModelGeometry(const ModelV
             CachedModelFace cached;
             cached.localCorners = buildModelFaceCorners(element, faceIndex);
             for (glm::vec3& corner : cached.localCorners) {
+                corner = applyElementRotation(corner, element);
                 corner = applyModelTransform(corner, variant.transform);
             }
             cached.uv = applyHorizontalUvLock(buildModelFaceUv(face), faceIndex, variant.transform);

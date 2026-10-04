@@ -320,6 +320,32 @@ bool BlockModelRegistry::parseElement(const nlohmann::json& json, ModelElement& 
         return false;
     }
 
+    if (const auto rotationIt = json.find("rotation"); rotationIt != json.end()) {
+        // Parse the optional element rotation used by lever handles and other tilted cuboids.
+        if (!rotationIt->is_object()) {
+            error = "Model element rotation must be an object";
+            return false;
+        }
+        if (!readVec3(*rotationIt, "origin", element.rotationOrigin, error)) {
+            return false;
+        }
+        const auto axisIt = rotationIt->find("axis");
+        const auto angleIt = rotationIt->find("angle");
+        if (axisIt == rotationIt->end() || !axisIt->is_string() || angleIt == rotationIt->end() ||
+            !angleIt->is_number()) {
+            error = "Model element rotation requires axis and angle";
+            return false;
+        }
+        const std::string axis = axisIt->get<std::string>();
+        if (axis.size() != 1 || (axis[0] != 'x' && axis[0] != 'y' && axis[0] != 'z')) {
+            error = "Model element rotation axis must be x, y, or z";
+            return false;
+        }
+        element.hasRotation = true;
+        element.rotationAxis = axis[0];
+        element.rotationAngle = angleIt->get<float>();
+    }
+
     const auto facesIt = json.find("faces");
     if (facesIt == json.end() || !facesIt->is_object()) {
         error = "Model element requires faces object";

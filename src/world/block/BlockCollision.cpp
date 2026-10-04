@@ -7,6 +7,7 @@
 #include <string>
 
 #include <glm/common.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include "Block.h"
 
@@ -59,6 +60,21 @@ glm::vec3 applyModelCollisionTransform(glm::vec3 point, const ModelTransform& tr
     return point;
 }
 
+glm::vec3 applyElementRotation(glm::vec3 point, const ModelElement& element) {
+    // Keep collision bounds aligned with the rendered rotated model element.
+    if (!element.hasRotation) {
+        return point;
+    }
+    const glm::vec3 origin(element.rotationOrigin[0] / 16.0f, element.rotationOrigin[1] / 16.0f,
+                            element.rotationOrigin[2] / 16.0f);
+    glm::vec3 axis(0.0f);
+    axis[element.rotationAxis == 'x' ? 0 : element.rotationAxis == 'y' ? 1 : 2] = 1.0f;
+    const glm::mat4 rotation = glm::translate(glm::mat4(1.0f), origin) *
+                               glm::rotate(glm::mat4(1.0f), glm::radians(element.rotationAngle), axis) *
+                               glm::translate(glm::mat4(1.0f), -origin);
+    return glm::vec3(rotation * glm::vec4(point, 1.0f));
+}
+
 BlockCollisionBox makeElementBox(const ModelElement& element, const ModelTransform& transform) {
     const glm::vec3 from(element.from[0] / 16.0f, element.from[1] / 16.0f, element.from[2] / 16.0f);
     const glm::vec3 to(element.to[0] / 16.0f, element.to[1] / 16.0f, element.to[2] / 16.0f);
@@ -76,7 +92,7 @@ BlockCollisionBox makeElementBox(const ModelElement& element, const ModelTransfo
     BlockCollisionBox box;
     bool hasPoint = false;
     for (const glm::vec3& corner : corners) {
-        const glm::vec3 transformed = applyModelCollisionTransform(corner, transform);
+        const glm::vec3 transformed = applyModelCollisionTransform(applyElementRotation(corner, element), transform);
         if (!hasPoint) {
             box.min = transformed;
             box.max = transformed;
