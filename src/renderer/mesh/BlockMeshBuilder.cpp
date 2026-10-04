@@ -209,9 +209,12 @@ std::array<glm::vec3, 4> buildModelFaceCorners(const ModelElement& element, cons
 
 std::array<glm::vec2, 4> buildModelFaceUv(const ModelFace& face) {
     const float x0 = face.uv[0] / 16.0f;
-    const float y0 = face.uv[1] / 16.0f;
+    // Minecraft model UVs use a top-left origin, while the block texture
+    // array is sampled with a bottom-left origin after image loading flips
+    // the source vertically. Convert both edges before applying rotation.
+    const float y0 = 1.0f - face.uv[3] / 16.0f;
     const float x1 = face.uv[2] / 16.0f;
-    const float y1 = face.uv[3] / 16.0f;
+    const float y1 = 1.0f - face.uv[1] / 16.0f;
 
     switch ((face.uvRotation / 90u) % 4u) {
     case 1: return {{{x1, y0}, {x1, y1}, {x0, y1}, {x0, y0}}};

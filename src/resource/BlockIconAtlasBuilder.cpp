@@ -209,9 +209,11 @@ std::array<glm::vec3, 4> buildIconModelFaceCorners(const ModelElement& element, 
 
 std::array<Vec2f, 4> buildIconModelFaceUv(const ModelFace& face) {
     const float x0 = face.uv[0] / 16.0f;
-    const float y0 = face.uv[1] / 16.0f;
+    // Model UVs are authored from the top-left, while atlas pixels and
+    // raster sampling use a bottom-left origin.
+    const float y0 = 1.0f - face.uv[3] / 16.0f;
     const float x1 = face.uv[2] / 16.0f;
-    const float y1 = face.uv[3] / 16.0f;
+    const float y1 = 1.0f - face.uv[1] / 16.0f;
 
     switch ((face.uvRotation / 90u) % 4u) {
     case 1: return {{{x1, y0}, {x1, y1}, {x0, y1}, {x0, y0}}};
