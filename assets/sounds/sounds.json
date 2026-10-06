@@ -35,6 +35,25 @@
         { "file": "grass4", "extension": ".wav" }
       ]
     },
+    "block.grass.place": {
+      "variants": [
+        { "file": "put1", "extension": ".wav" },
+        { "file": "put2", "extension": ".wav" },
+        { "file": "put3", "extension": ".wav" },
+        { "file": "put4", "extension": ".wav" },
+        { "file": "put5", "extension": ".wav" }
+      ]
+    },
+    "block.grass.step": {
+      "variants": [
+        { "file": "walk_grass1", "extension": ".wav" },
+        { "file": "walk_grass2", "extension": ".wav" },
+        { "file": "walk_grass3", "extension": ".wav" },
+        { "file": "walk_grass4", "extension": ".wav" },
+        { "file": "walk_grass5", "extension": ".wav" },
+        { "file": "walk_grass6", "extension": ".wav" }
+      ]
+    },
     "block.generic.place": {
       "variants": [
         { "file": "put1", "extension": ".wav" },
@@ -45,6 +64,117 @@
       ]
     },
     "block.generic.break": {
+      "variants": [
+        { "file": "put1", "extension": ".wav" },
+        { "file": "put2", "extension": ".wav" },
+        { "file": "put3", "extension": ".wav" },
+        { "file": "put4", "extension": ".wav" },
+        { "file": "put5", "extension": ".wav" }
+      ]
+    },
+    "block.stone.break": {
+      "variants": [
+        { "file": "put1", "extension": ".wav" },
+        { "file": "put2", "extension": ".wav" },
+        { "file": "put3", "extension": ".wav" },
+        { "file": "put4", "extension": ".wav" },
+        { "file": "put5", "extension": ".wav" }
+      ]
+    },
+    "block.stone.place": {
+      "variants": [
+        { "file": "put1", "extension": ".wav" },
+        { "file": "put2", "extension": ".wav" },
+        { "file": "put3", "extension": ".wav" },
+        { "file": "put4", "extension": ".wav" },
+        { "file": "put5", "extension": ".wav" }
+      ]
+    },
+    "block.gravel.break": {
+      "variants": [
+        { "file": "put1", "extension": ".wav" },
+        { "file": "put2", "extension": ".wav" },
+        { "file": "put3", "extension": ".wav" },
+        { "file": "put4", "extension": ".wav" },
+        { "file": "put5", "extension": ".wav" }
+      ]
+    },
+    "block.gravel.place": {
+      "variants": [
+        { "file": "put1", "extension": ".wav" },
+        { "file": "put2", "extension": ".wav" },
+        { "file": "put3", "extension": ".wav" },
+        { "file": "put4", "extension": ".wav" },
+        { "file": "put5", "extension": ".wav" }
+      ]
+    },
+    "block.wood.break": {
+      "variants": [
+        { "file": "put1", "extension": ".wav" },
+        { "file": "put2", "extension": ".wav" },
+        { "file": "put3", "extension": ".wav" },
+        { "file": "put4", "extension": ".wav" },
+        { "file": "put5", "extension": ".wav" }
+      ]
+    },
+    "block.wood.place": {
+      "variants": [
+        { "file": "put1", "extension": ".wav" },
+        { "file": "put2", "extension": ".wav" },
+        { "file": "put3", "extension": ".wav" },
+        { "file": "put4", "extension": ".wav" },
+        { "file": "put5", "extension": ".wav" }
+      ]
+    },
+    "block.sand.break": {
+      "variants": [
+        { "file": "put1", "extension": ".wav" },
+        { "file": "put2", "extension": ".wav" },
+        { "file": "put3", "extension": ".wav" },
+        { "file": "put4", "extension": ".wav" },
+        { "file": "put5", "extension": ".wav" }
+      ]
+    },
+    "block.sand.place": {
+      "variants": [
+        { "file": "put1", "extension": ".wav" },
+        { "file": "put2", "extension": ".wav" },
+        { "file": "put3", "extension": ".wav" },
+        { "file": "put4", "extension": ".wav" },
+        { "file": "put5", "extension": ".wav" }
+      ]
+    },
+    "block.sand.fall": {
+      "file": "fallsmall",
+      "extension": ".wav"
+    },
+    "block.glass.break": {
+      "variants": [
+        { "file": "grass1", "extension": ".wav" },
+        { "file": "grass2", "extension": ".wav" },
+        { "file": "grass3", "extension": ".wav" },
+        { "file": "grass4", "extension": ".wav" }
+      ]
+    },
+    "block.glass.place": {
+      "variants": [
+        { "file": "put1", "extension": ".wav" },
+        { "file": "put2", "extension": ".wav" },
+        { "file": "put3", "extension": ".wav" },
+        { "file": "put4", "extension": ".wav" },
+        { "file": "put5", "extension": ".wav" }
+      ]
+    },
+    "block.metal.break": {
+      "variants": [
+        { "file": "put1", "extension": ".wav" },
+        { "file": "put2", "extension": ".wav" },
+        { "file": "put3", "extension": ".wav" },
+        { "file": "put4", "extension": ".wav" },
+        { "file": "put5", "extension": ".wav" }
+      ]
+    },
+    "block.metal.place": {
       "variants": [
         { "file": "put1", "extension": ".wav" },
         { "file": "put2", "extension": ".wav" },
@@ -65,11 +195,60 @@
       "file": "foo",
       "extension": ".ogg"
     },
+    "item.bucket.fill": {
+      "file": "foo",
+      "extension": ".ogg"
+    },
+    "item.bucket.empty": {
+      "file": "foo",
+      "extension": ".ogg"
+    },
+    "item.hoe.till": {
+      "variants": [
+        { "file": "put1", "extension": ".wav" },
+        { "file": "put2", "extension": ".wav" },
+        { "file": "put3", "extension": ".wav" },
+        { "file": "put4", "extension": ".wav" },
+        { "file": "put5", "extension": ".wav" }
+      ]
+    },
     "mob.zombie.hurt": {
       "file": "foo",
       "extension": ".ogg"
     },
     "mob.zombie.death": {
+      "file": "foo",
+      "extension": ".ogg"
+    },
+    "mob.creeper.hurt": {
+      "file": "foo",
+      "extension": ".ogg"
+    },
+    "mob.creeper.death": {
+      "file": "foo",
+      "extension": ".ogg"
+    },
+    "mob.cow.hurt": {
+      "file": "foo",
+      "extension": ".ogg"
+    },
+    "mob.cow.death": {
+      "file": "foo",
+      "extension": ".ogg"
+    },
+    "mob.pig.hurt": {
+      "file": "foo",
+      "extension": ".ogg"
+    },
+    "mob.pig.death": {
+      "file": "foo",
+      "extension": ".ogg"
+    },
+    "mob.sheep.hurt": {
+      "file": "foo",
+      "extension": ".ogg"
+    },
+    "mob.sheep.death": {
       "file": "foo",
       "extension": ".ogg"
     }

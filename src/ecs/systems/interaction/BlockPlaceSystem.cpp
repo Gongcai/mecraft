@@ -6,6 +6,7 @@
 #include <string>
 
 #include "../../util/AudioEventBuffer.h"
+#include "../../util/BlockSoundEvents.h"
 #include "../../util/GameplayRuntimeContext.h"
 #include "../../components/Components.h"
 #include "../../../game/inventory/BlockEntityInventoryLifecycle.h"
@@ -365,7 +366,7 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
         }
         runtime.placeCooldownRemaining = modeRules.placeCooldownSeconds();
         recordPostPlaceSuppression(runtime, placeBlock);
-        audioBus.push({"block.generic.place", glm::vec3(placeBlock), true, 1.0f});
+        audioBus.push({blockSoundEventId(blockToPlace, "place"), glm::vec3(placeBlock), true, 1.0f});
         ++runtime.heldItemSwingSequence;
     }
 }

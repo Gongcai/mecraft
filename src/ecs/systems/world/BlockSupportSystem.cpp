@@ -3,6 +3,7 @@
 #include "../../util/DropSpawnEventBuffer.h"
 #include "../../util/FallingBlockEventBuffer.h"
 #include "../../util/AudioEventBuffer.h"
+#include "../../util/BlockSoundEvents.h"
 #include "../../util/ParticleEventBuffer.h"
 #include "../../components/Components.h"
 #include "../../../world/World.h"
@@ -163,7 +164,7 @@ size_t processQueuedPositions(World& world, const size_t budget, const SupportEv
             sinks.particleBus->push({pos, blockId});
         }
         if (sinks.audioBus != nullptr) {
-            sinks.audioBus->push({"block.generic.break", glm::vec3(pos), true, 1.0f});
+            sinks.audioBus->push({blockSoundEventId(blockId, "break"), glm::vec3(pos), true, 1.0f});
         }
     }
 

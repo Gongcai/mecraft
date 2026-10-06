@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <unordered_set>
 #include <utility>
 
 #include <nlohmann/json.hpp>
@@ -98,6 +99,20 @@ bool parseVariant(const json& node, const fs::path& rootDirectory, SoundVariant&
             }
             weight = std::max(0.0f, node["weight"].get<float>());
         }
+        if (node.contains("volume")) {
+            if (!node["volume"].is_number()) {
+                error = "variant volume must be a number";
+                return false;
+            }
+            out.volume = std::clamp(node["volume"].get<float>(), 0.0f, 4.0f);
+        }
+        if (node.contains("pitch")) {
+            if (!node["pitch"].is_number() || node["pitch"].get<float>() <= 0.0f) {
+                error = "variant pitch must be a positive number";
+                return false;
+            }
+            out.pitch = node["pitch"].get<float>();
+        }
     } else {
         error = "variant must be a string or object, got " + jsonTypeName(node);
         return false;
@@ -148,7 +163,24 @@ bool parseEntry(const std::string& soundId, const json& node, const fs::path& ro
     } else if (node.is_object()) {
         out.group = node.value("group", defaultGroup);
         out.preload = node.value("preload", defaultPreload);
-        out.volume = std::clamp(node.value("volume", 1.0f), 0.0f, 4.0f);
+        if (node.contains("volume")) {
+            if (!node["volume"].is_number()) {
+                error = "sound volume must be a number";
+                return false;
+            }
+            out.volume = std::clamp(node["volume"].get<float>(), 0.0f, 4.0f);
+        }
+        if (node.contains("pitch")) {
+            if (!node["pitch"].is_number()) {
+                error = "sound pitch must be a number";
+                return false;
+            }
+            out.pitch = node["pitch"].get<float>();
+        }
+        if (out.pitch <= 0.0f) {
+            error = "sound pitch must be a positive number";
+            return false;
+        }
 
         if (node.contains("variants")) {
             if (!appendVariantList(node["variants"], rootDirectory, out.variants, error)) {
@@ -181,7 +213,8 @@ bool parseEntry(const std::string& soundId, const json& node, const fs::path& ro
 } // namespace
 
 bool AudioCatalog::loadFromFile(const fs::path& manifestPath, const fs::path& rootDirectory,
-                                const std::string& defaultGroup, const bool defaultPreload, std::string& error) {
+                                const std::string& defaultGroup, const bool defaultPreload, std::string& error,
+                                const bool overrideExisting) {
     std::ifstream file(manifestPath);
     if (!file.is_open()) {
         error = "failed to open audio catalog: " + pathToUtf8(manifestPath);
@@ -204,7 +237,9 @@ bool AudioCatalog::loadFromFile(const fs::path& manifestPath, const fs::path& ro
     }
 
     std::vector<SoundEntry> pendingEntries;
+    std::unordered_set<std::string> pendingIds;
     pendingEntries.reserve(manifest["sounds"].size());
+    pendingIds.reserve(manifest["sounds"].size());
 
     for (auto it = manifest["sounds"].begin(); it != manifest["sounds"].end(); ++it) {
         const std::string soundId = it.key();
@@ -212,7 +247,11 @@ bool AudioCatalog::loadFromFile(const fs::path& manifestPath, const fs::path& ro
             error = "audio catalog contains an empty sound id";
             return false;
         }
-        if (m_entries.find(soundId) != m_entries.end()) {
+        if (!pendingIds.insert(soundId).second) {
+            error = "duplicate audio catalog sound id: " + soundId;
+            return false;
+        }
+        if (!overrideExisting && m_entries.find(soundId) != m_entries.end()) {
             error = "duplicate audio catalog sound id: " + soundId;
             return false;
         }
@@ -227,8 +266,13 @@ bool AudioCatalog::loadFromFile(const fs::path& manifestPath, const fs::path& ro
     }
 
     for (SoundEntry& entry : pendingEntries) {
-        m_order.push_back(entry.id);
-        m_entries.emplace(entry.id, std::move(entry));
+        const auto existing = m_entries.find(entry.id);
+        if (existing == m_entries.end()) {
+            m_order.push_back(entry.id);
+            m_entries.emplace(entry.id, std::move(entry));
+        } else {
+            existing->second = std::move(entry);
+        }
     }
 
     return true;

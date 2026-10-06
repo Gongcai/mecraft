@@ -33,3 +33,6 @@
 # Only assets/bgm/bgm.json (the track list) is tracked. Add your own local
 # .wav tracks directly into assets/bgm/ on each machine.
 /assets/bgm/*.wav
+
+# Minecraft Java sound assets are fetched locally from Mojang's asset CDN.
+/assets/sounds/vanilla/

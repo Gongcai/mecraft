@@ -150,7 +150,8 @@ AudioClip* AudioEngine::getClip(const std::string& name) {
 }
 
 bool AudioEngine::loadCatalog(const std::string& catalogPath, const std::string& rootDirectory,
-                              const std::string& defaultGroup, const bool defaultPreload) {
+                              const std::string& defaultGroup, const bool defaultPreload,
+                              const bool overrideExisting) {
     const fs::path manifestPath = catalogPath;
     const std::string catalogKey = audio::pathToUtf8(manifestPath.lexically_normal());
     if (m_loadedCatalogs.find(catalogKey) != m_loadedCatalogs.end()) {
@@ -158,8 +159,8 @@ bool AudioEngine::loadCatalog(const std::string& catalogPath, const std::string&
     }
 
     std::string error;
-    if (!m_catalog.loadFromFile(manifestPath, rootDirectory, defaultGroup, defaultPreload, error)) {
-        MECRAFT_LOG_STREAM(std::cerr << "[Audio] " << error << std::endl);
+    if (!m_catalog.loadFromFile(manifestPath, rootDirectory, defaultGroup, defaultPreload, error, overrideExisting)) {
+        std::cerr << "[Audio] " << error << std::endl;
         return false;
     }
 
@@ -184,7 +185,8 @@ AudioSource* AudioEngine::playClip(const std::string& clipName, glm::vec3 positi
         return nullptr;
     }
 
-    AudioClip* clip = loadClipVariant(clipName, chooseVariantIndex(*entry));
+    const size_t variantIndex = chooseVariantIndex(*entry);
+    AudioClip* clip = loadClipVariant(clipName, variantIndex);
     if (clip == nullptr) {
         return nullptr;
     }
@@ -196,7 +198,9 @@ AudioSource* AudioEngine::playClip(const std::string& clipName, glm::vec3 positi
 
     source->setClip(clip);
     source->setPosition(position);
-    source->setVolume(volume * entry->volume * m_masterVolume);
+    const audio::SoundVariant& variant = entry->variants[variantIndex];
+    source->setVolume(volume * entry->volume * variant.volume * m_masterVolume);
+    source->setBasePitch(entry->pitch * variant.pitch);
     source->setLooping(loop);
     if (!spatial) {
         // Non-spatial sounds must not attenuate with listener distance.
@@ -242,6 +246,13 @@ void AudioEngine::releaseSource(AudioSource* source) {
 
 void AudioEngine::loadDefaultCatalog() {
     loadCatalog(SOUNDS_CATALOG_PATH, SOUNDS_DIR, "sfx", true);
+
+    const fs::path vanillaCatalogPath = fs::path(SOUNDS_DIR) / "vanilla" / "sounds.json";
+    if (fs::exists(vanillaCatalogPath)) {
+        loadCatalog(audio::pathToUtf8(vanillaCatalogPath), SOUNDS_DIR, "sfx", true, true);
+    } else {
+        std::cerr << "[Audio] Minecraft sound assets are not imported; using project sounds." << std::endl;
+    }
 }
 
 void AudioEngine::preloadCatalogSounds() {

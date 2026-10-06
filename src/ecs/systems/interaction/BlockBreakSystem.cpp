@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "../../util/AudioEventBuffer.h"
+#include "../../util/BlockSoundEvents.h"
 #include "../../util/DropSpawnEventBuffer.h"
 #include "../../util/ParticleEventBuffer.h"
 #include "../../util/GameplayRuntimeContext.h"
@@ -233,7 +234,7 @@ void BlockBreakSystem::update(SystemContext& ctx) {
             const WireContainerParts removedWireParts =
                 removeTargetWireContainerParts(*mutableWorld, hitBlock, target.hitNormal);
             if (!removedWireParts.empty()) {
-                audioBus.push({"block.generic.break", glm::vec3(hitBlock), true, 1.0f});
+                audioBus.push({blockSoundEventId(targetBlock, "break"), glm::vec3(hitBlock), true, 1.0f});
                 particleBus.push({hitBlock, targetBlock});
                 runtime.creativeBreakCooldownRemaining = modeRules.breakDurationMs(targetBlock) / 1000.0f;
                 ++runtime.heldItemSwingSequence;
@@ -251,7 +252,7 @@ void BlockBreakSystem::update(SystemContext& ctx) {
             const bool handledMachine = handleMachineInventoryBreak(registry, brokenBlock, hitBlock, true);
             static_cast<void>(handledStorage);
             static_cast<void>(handledMachine);
-            audioBus.push({"block.generic.break", glm::vec3(hitBlock), true, 1.0f});
+            audioBus.push({blockSoundEventId(brokenBlock, "break"), glm::vec3(hitBlock), true, 1.0f});
             for (const glm::ivec3& removedPos : removedPositions) {
                 particleBus.push({removedPos, brokenBlock});
             }
@@ -297,7 +298,7 @@ void BlockBreakSystem::update(SystemContext& ctx) {
             const WireContainerParts removedWireParts =
                 removeTargetWireContainerParts(*mutableWorld, hitBlock, target.hitNormal);
             if (!removedWireParts.empty()) {
-                audioBus.push({"block.generic.break", glm::vec3(hitBlock), true, 1.0f});
+                audioBus.push({blockSoundEventId(targetBlock, "break"), glm::vec3(hitBlock), true, 1.0f});
                 particleBus.push({hitBlock, targetBlock});
                 spawnWireContainerPartDrops(registry, removedWireParts, hitBlock);
                 applySelectedToolDurabilityWear(inventoryData.inventory);
@@ -316,7 +317,7 @@ void BlockBreakSystem::update(SystemContext& ctx) {
             const bool handledMachine = handleMachineInventoryBreak(registry, brokenBlock, hitBlock, true);
             static_cast<void>(handledStorage);
             static_cast<void>(handledMachine);
-            audioBus.push({"block.generic.break", glm::vec3(hitBlock), true, 1.0f});
+            audioBus.push({blockSoundEventId(brokenBlock, "break"), glm::vec3(hitBlock), true, 1.0f});
             for (const glm::ivec3& removedPos : removedPositions) {
                 particleBus.push({removedPos, brokenBlock});
             }

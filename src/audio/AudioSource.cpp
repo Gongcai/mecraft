@@ -62,8 +62,16 @@ void AudioSource::setVolume(float vol) {
 }
 
 void AudioSource::setPitch(float pitch) {
+    m_pitchMultiplier = pitch;
     if (m_source != 0) {
-        alSourcef(m_source, AL_PITCH, pitch);
+        alSourcef(m_source, AL_PITCH, m_basePitch * m_pitchMultiplier);
+    }
+}
+
+void AudioSource::setBasePitch(float pitch) {
+    m_basePitch = pitch;
+    if (m_source != 0) {
+        alSourcef(m_source, AL_PITCH, m_basePitch * m_pitchMultiplier);
     }
 }
 

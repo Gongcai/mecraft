@@ -80,14 +80,14 @@
         }
       ],
       "hurtEffect": {
-        "sound": "mob.zombie.hurt",
+        "sound": "mob.creeper.hurt",
         "volume": 1.0,
         "flashDurationSeconds": 0.18
       },
       "deathEffect": {
         "particleBlock": "minecraft:coal_ore",
         "particleCount": 32,
-        "sound": "mob.zombie.death",
+        "sound": "mob.creeper.death",
         "volume": 1.0
       }
     },
@@ -127,14 +127,14 @@
         }
       ],
       "hurtEffect": {
-        "sound": "mob.zombie.hurt",
+        "sound": "mob.cow.hurt",
         "volume": 0.75,
         "flashDurationSeconds": 0.18
       },
       "deathEffect": {
         "particleBlock": "minecraft:brown_wool",
         "particleCount": 24,
-        "sound": "mob.zombie.death",
+        "sound": "mob.cow.death",
         "volume": 0.75
       }
     },
@@ -174,14 +174,14 @@
         }
       ],
       "hurtEffect": {
-        "sound": "mob.zombie.hurt",
+        "sound": "mob.pig.hurt",
         "volume": 0.75,
         "flashDurationSeconds": 0.18
       },
       "deathEffect": {
         "particleBlock": "minecraft:pink_wool",
         "particleCount": 22,
-        "sound": "mob.zombie.death",
+        "sound": "mob.pig.death",
         "volume": 0.75
       }
     },
@@ -221,14 +221,14 @@
         }
       ],
       "hurtEffect": {
-        "sound": "mob.zombie.hurt",
+        "sound": "mob.sheep.hurt",
         "volume": 0.75,
         "flashDurationSeconds": 0.18
       },
       "deathEffect": {
         "particleBlock": "minecraft:white_wool",
         "particleCount": 24,
-        "sound": "mob.zombie.death",
+        "sound": "mob.sheep.death",
         "volume": 0.75
       }
     },

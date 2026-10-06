@@ -29,7 +29,7 @@ public:
     AudioClip* loadClip(const std::string& name);
     AudioClip* getClip(const std::string& name);
     bool loadCatalog(const std::string& catalogPath, const std::string& rootDirectory, const std::string& defaultGroup,
-                     bool defaultPreload);
+                     bool defaultPreload, bool overrideExisting = false);
     [[nodiscard]] std::vector<std::string> getSoundNamesByGroup(const std::string& group) const;
 
     AudioSource* playClip(const std::string& clipName, glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f),

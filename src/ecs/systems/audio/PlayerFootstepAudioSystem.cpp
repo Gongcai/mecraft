@@ -42,7 +42,7 @@ void PlayerFootstepAudioSystem::update(SystemContext& ctx) {
         }
 
         const bool isBigFall = impactSpeed >= kBigFallImpactSpeed;
-        const char* clipName = isBigFall ? "player.hurt.classic" : "player.land.small";
+        const char* clipName = isBigFall ? "player.land.big" : "player.land.small";
         audioBus.push({clipName, query.getPosition(), true, 1.0f});
         if (isBigFall) {
             // Trigger classic hurt effect via ECS component

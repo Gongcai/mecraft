@@ -11,6 +11,8 @@ namespace audio {
 struct SoundVariant {
     std::filesystem::path filePath;
     float weight = 1.0f;
+    float volume = 1.0f;
+    float pitch = 1.0f;
 };
 
 struct SoundEntry {
@@ -18,6 +20,7 @@ struct SoundEntry {
     std::string group = "sfx";
     std::vector<SoundVariant> variants;
     float volume = 1.0f;
+    float pitch = 1.0f;
     bool preload = true;
 };
 
@@ -25,7 +28,7 @@ class AudioCatalog {
 public:
     [[nodiscard]] bool loadFromFile(const std::filesystem::path& manifestPath,
                                     const std::filesystem::path& rootDirectory, const std::string& defaultGroup,
-                                    bool defaultPreload, std::string& error);
+                                    bool defaultPreload, std::string& error, bool overrideExisting = false);
 
     [[nodiscard]] const SoundEntry* find(const std::string& soundId) const;
     [[nodiscard]] const std::vector<std::string>& soundIds() const { return m_order; }

@@ -104,7 +104,7 @@ void SoilTillingSystem::update(SystemContext& ctx) {
             }
         }
         runtime.placeCooldownRemaining = modeRules.placeCooldownSeconds();
-        audioBus.push({"block.generic.place", glm::vec3(tillPos), true, 1.0f});
+        audioBus.push({"item.hoe.till", glm::vec3(tillPos), true, 1.0f});
         ++runtime.heldItemSwingSequence;
     }
 }
