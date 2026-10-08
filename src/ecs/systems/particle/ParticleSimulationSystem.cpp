@@ -1,20 +1,19 @@
 #include "ParticleSimulationSystem.h"
 
 #include "../../components/Components.h"
+#include "../../util/ParticlePhysicsHelpers.h"
+#include "../../../world/World.h"
 
 namespace ecs {
-
-namespace {
-constexpr float kGravity = -14.0f;
-}
 
 void ParticleSimulationSystem::update(SystemContext& ctx) {
     auto& registry = ctx.registry;
     const float dt = ctx.dt;
 
-    if (dt <= 0.0f) {
+    if (dt <= 0.0f || !ctx.services.world) {
         return;
     }
+    const World& world = *ctx.services.world;
 
     auto view = registry.view<ParticleTag, TransformComponent, VelocityComponent, ParticleComponent>();
     for (const entt::entity e : view) {
@@ -27,8 +26,7 @@ void ParticleSimulationSystem::update(SystemContext& ctx) {
             continue;
         }
 
-        velocity.velocity.y += kGravity * dt;
-        transform.position += velocity.velocity * dt;
+        particle_detail::simulateParticleStep(transform, velocity, particle, world, dt);
     }
 }
 

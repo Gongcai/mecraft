@@ -13,6 +13,7 @@ struct ParticleComponent {
     float layer = 0.0f;
     glm::vec2 uvMin{0.0f};
     glm::vec2 uvMax{1.0f};
+    bool grounded = false; // True while resting on a solid block.
 };
 
 } // namespace ecs
