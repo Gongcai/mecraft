@@ -11,7 +11,12 @@
     "libvorbis",
     "nativefiledialog-extended",
     "nlohmann-json",
-    "openal-soft",
+    {
+      "name": "openal-soft",
+      "features": [
+        "pipewire"
+      ]
+    },
     "spirv-cross",
     "vulkan",
     {

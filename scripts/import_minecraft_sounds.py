@@ -2,6 +2,7 @@
 """Import only the Minecraft Java sound assets used by Mecraft."""
 
 import argparse
+import functools
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
@@ -63,15 +64,50 @@ def fetch_json(url):
     return json.loads(fetch_bytes(url))
 
 
-def fetch_object(object_hash, expected_size=None):
-    """Fetch one content-addressed asset and verify Mojang's SHA-1 hash."""
-    url = f"{RESOURCE_BASE_URL}/{object_hash[:2]}/{object_hash}"
-    payload = fetch_bytes(url)
+def verify_object(payload, object_hash, expected_size=None):
+    """Check that an asset payload matches its SHA-1 hash and optional expected size.
+
+    Args:
+        payload: The raw bytes of the asset.
+        object_hash: The expected lowercase hex SHA-1 digest from Mojang's asset index.
+        expected_size: The expected byte length, or None to skip the size check.
+    Raises:
+        ValueError: If the digest or the size does not match the index entry.
+    """
     actual_hash = hashlib.sha1(payload).hexdigest()
     if actual_hash != object_hash:
         raise ValueError(f"Mojang asset hash mismatch: {object_hash} != {actual_hash}")
     if expected_size is not None and len(payload) != expected_size:
         raise ValueError(f"Mojang asset size mismatch for {object_hash}")
+
+
+def fetch_object(object_hash, expected_size=None):
+    """Download one content-addressed asset from Mojang's CDN and verify it.
+
+    Args:
+        object_hash: The lowercase hex SHA-1 digest that names the asset.
+        expected_size: The expected byte length from the asset index, or None.
+    Returns:
+        The verified asset bytes.
+    """
+    url = f"{RESOURCE_BASE_URL}/{object_hash[:2]}/{object_hash}"
+    payload = fetch_bytes(url)
+    verify_object(payload, object_hash, expected_size)
+    return payload
+
+
+def read_local_object(objects_root, object_hash, expected_size=None):
+    """Read one content-addressed asset from a local Minecraft objects directory and verify it.
+
+    Args:
+        objects_root: The directory holding the hash-named objects, laid out as objects/<hash[:2]>/<hash>.
+        object_hash: The lowercase hex SHA-1 digest that names the asset.
+        expected_size: The expected byte length from the asset index, or None.
+    Returns:
+        The verified asset bytes.
+    """
+    payload = (objects_root / object_hash[:2] / object_hash).read_bytes()
+    verify_object(payload, object_hash, expected_size)
     return payload
 
 
@@ -143,31 +179,60 @@ def normalize_asset_name(name):
     return sample_path.as_posix()
 
 
-def resolve_version(version):
-    """Resolve a game version to the official asset index and sound definitions."""
-    version_manifest = fetch_json(VERSION_MANIFEST_URL)
-    version_info = next((item for item in version_manifest["versions"] if item["id"] == version), None)
-    if version_info is None:
-        raise ValueError(f"Minecraft version is not in Mojang's manifest: {version}")
+def resolve_version(version, local_assets, asset_index_id, load_object):
+    """Resolve a game version to its asset index and vanilla sound definitions.
 
-    version_metadata = fetch_json(version_info["url"])
-    asset_index = fetch_json(version_metadata["assetIndex"]["url"])
+    Args:
+        version: The Minecraft Java version id, used only when querying Mojang's manifest.
+        local_assets: A local assets directory (indexes/ and objects/), or None to query Mojang.
+        asset_index_id: The asset index id to read from local_assets, such as "17" for 1.21.1.
+        load_object: Callable(object_hash, expected_size) returning verified asset bytes.
+    Returns:
+        A tuple of (objects mapping from the asset index, parsed sounds.json definitions).
+    """
+    if local_assets is None:
+        version_manifest = fetch_json(VERSION_MANIFEST_URL)
+        version_info = next((item for item in version_manifest["versions"] if item["id"] == version), None)
+        if version_info is None:
+            raise ValueError(f"Minecraft version is not in Mojang's manifest: {version}")
+
+        version_metadata = fetch_json(version_info["url"])
+        asset_index = fetch_json(version_metadata["assetIndex"]["url"])
+    else:
+        index_path = local_assets / "indexes" / f"{asset_index_id}.json"
+        asset_index = json.loads(index_path.read_text(encoding="utf-8"))
+
     sound_object = asset_index["objects"].get("minecraft/sounds.json")
     if sound_object is None:
         raise ValueError(f"The Minecraft {version} asset index has no sounds.json")
-    sound_bytes = fetch_object(sound_object["hash"], sound_object["size"])
+    sound_bytes = load_object(sound_object["hash"], sound_object["size"])
     return asset_index["objects"], json.loads(sound_bytes)
 
 
 def main():
-    """Download mapped samples and write the local vanilla sound overlay."""
+    """Read or download mapped samples and write the local vanilla sound overlay."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version", default="1.21.1", help="Minecraft Java version (default: 1.21.1)")
+    parser.add_argument(
+        "--local-assets",
+        type=Path,
+        help="Read assets from a local assets directory with indexes/ and objects/, such as PrismLauncher's "
+        "assets folder, instead of downloading them from Mojang",
+    )
+    parser.add_argument(
+        "--asset-index",
+        default="17",
+        help="Asset index id to read from --local-assets (default: 17, the index used by 1.21.1)",
+    )
     args = parser.parse_args()
 
     repository_root = Path(__file__).resolve().parent.parent
     sounds_root = repository_root / "assets" / "sounds"
-    object_index, definitions = resolve_version(args.version)
+    if args.local_assets is None:
+        load_object = fetch_object
+    else:
+        load_object = functools.partial(read_local_object, args.local_assets / "objects")
+    object_index, definitions = resolve_version(args.version, args.local_assets, args.asset_index, load_object)
     catalog = {"version": 1, "sounds": {}}
     downloads = {}
 
@@ -204,14 +269,15 @@ def main():
             if existing_hash == asset["hash"]:
                 continue
 
-        payload = fetch_object(asset["hash"], asset["size"])
+        payload = load_object(asset["hash"], asset["size"])
         temporary_path = destination.with_suffix(destination.suffix + ".part")
         temporary_path.write_bytes(payload)
         temporary_path.replace(destination)
 
     catalog_path = sounds_root / "vanilla" / "sounds.json"
     catalog_path.write_text(json.dumps(catalog, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"已从 Mojang 官方资源导入 Minecraft Java {args.version} 音效：{len(downloads)} 个 OGG 文件")
+    source = str(args.local_assets) if args.local_assets else "Mojang 官方资源"
+    print(f"已从 {source} 导入 Minecraft Java {args.version} 音效：{len(downloads)} 个 OGG 文件")
     print(f"运行时清单：{catalog_path.relative_to(repository_root)}")
 
 
