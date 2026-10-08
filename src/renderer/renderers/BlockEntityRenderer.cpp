@@ -328,7 +328,12 @@ void BlockEntityRenderer::createGBufferRhiResources() {
     m_forwardVertexShader = createShader("BlockEntity.Forward.Vertex", RhiShaderStage::Vertex, *forwardVertexSource);
     m_forwardFragmentShader =
         createShader("BlockEntity.Forward.Fragment", RhiShaderStage::Fragment, *forwardFragmentSource);
+    // Block entity models are pixel-art textures (e.g. the 64x64 chest), so sample them with
+    // nearest-neighbour filtering to keep texels crisp instead of blending neighbouring texels.
     RhiSamplerDesc samplerDesc;
+    samplerDesc.minFilter = RhiFilter::Nearest;
+    samplerDesc.magFilter = RhiFilter::Nearest;
+    samplerDesc.mipmapMode = RhiMipmapMode::Nearest;
     samplerDesc.addressU = RhiAddressMode::ClampToEdge;
     samplerDesc.addressV = RhiAddressMode::ClampToEdge;
     m_rhiSampler = m_rhiDevice->createSampler(samplerDesc);
