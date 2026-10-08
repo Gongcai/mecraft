@@ -26,6 +26,7 @@ inline std::string_view blockSoundGroup(const uint8_t materialKind) {
     case BlockMaterialKinds::ICE:
     case BlockMaterialKinds::STAINED_GLASS: return "glass";
     case BlockMaterialKinds::METAL: return "metal";
+    case BlockMaterialKinds::WOOL: return "wool";
     case BlockMaterialKinds::DEFAULT:
     case BlockMaterialKinds::STONE:
     case BlockMaterialKinds::WATER:

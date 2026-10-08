@@ -33,6 +33,8 @@ SOUND_EVENT_MAP = {
     "block.glass.place": "block.glass.place",
     "block.metal.break": "block.metal.break",
     "block.metal.place": "block.metal.place",
+    "block.wool.break": "block.wool.break",
+    "block.wool.place": "block.wool.place",
     "block.note_block.harp": "block.note_block.harp",
     "item.apple.throw": "entity.egg.throw",
     "item.apple.impact": "entity.arrow.hit",

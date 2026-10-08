@@ -305,6 +305,9 @@ uint8_t inferBlockMaterialKind(const BlockDef& def) {
     if (path == "grass" || containsToken(path, "short_grass")) {
         return BlockMaterialKinds::GRASS;
     }
+    if (containsToken(path, "wool")) {
+        return BlockMaterialKinds::WOOL;
+    }
     if (containsAnyToken(path, {"ore", "diamond", "coal", "emerald", "lapis", "redstone", "amethyst", "quartz"})) {
         return BlockMaterialKinds::ORE;
     }

@@ -43,7 +43,8 @@ constexpr uint8_t EMISSIVE = 11;
 constexpr uint8_t METAL = 12;
 constexpr uint8_t ICE = 13;
 constexpr uint8_t STAINED_GLASS = 14;
-constexpr uint8_t MAX_BUILTIN = STAINED_GLASS;
+constexpr uint8_t WOOL = 15;
+constexpr uint8_t MAX_BUILTIN = WOOL;
 } // namespace BlockMaterialKinds
 
 namespace DerivativeMaterialIds {
@@ -133,6 +134,10 @@ inline constexpr std::array<BlockMaterialInfo, BlockMaterialKinds::MAX_BUILTIN +
     {BlockMaterialKinds::METAL, "metal",
      BlockMaterialFlags::Solid | BlockMaterialFlags::Reflective | BlockMaterialFlags::Metallic, 0.30f, 0.260f, 0.0f,
      0.0f},
+    // ICE and STAINED_GLASS have no row yet; empty rows keep their existing default material values in place.
+    {},
+    {},
+    {BlockMaterialKinds::WOOL, "wool", BlockMaterialFlags::Terrain, 1.0f, 0.0f, 0.0f, 0.0f},
 }};
 
 static_assert(BUILTIN.size() == BlockMaterialKinds::MAX_BUILTIN + 1,
@@ -161,6 +166,8 @@ static_assert(BUILTIN[BlockMaterialKinds::ORE].kind == BlockMaterialKinds::ORE, 
 static_assert(BUILTIN[BlockMaterialKinds::EMISSIVE].kind == BlockMaterialKinds::EMISSIVE,
               "Block material table order mismatch.");
 static_assert(BUILTIN[BlockMaterialKinds::METAL].kind == BlockMaterialKinds::METAL,
+              "Block material table order mismatch.");
+static_assert(BUILTIN[BlockMaterialKinds::WOOL].kind == BlockMaterialKinds::WOOL,
               "Block material table order mismatch.");
 
 [[nodiscard]] inline constexpr const BlockMaterialInfo& get(const uint8_t kind) {
