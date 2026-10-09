@@ -20,4 +20,8 @@
 ## Git提交
 
 - 提交消息使用<type>(<scope>): <subject>格式，subject使用中文，type和scope使用英文
-- 每完成一轮工作，提交代码及相关修改
+- 每完成一轮工作，用户验证通过后提交代码及相关修改
+- Strictly Forbidden: Never include text indicating the message was AI-generated.
+- No Footers: Do not append "Signed-off-by" or "Co-authored-by" lines unless explicitly told.
+- Direct Output: Output the commit message immediately without introductory text.
+

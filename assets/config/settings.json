@@ -14,7 +14,7 @@
       "normalMapsEnabled": true,
       "parallaxDepth": 0.07500000298023224,
       "parallaxMapsEnabled": false,
-      "specularMapsEnabled": true
+      "specularMapsEnabled": false
     },
     "cloud": {
       "asyncComputeEnabled": true,
@@ -24,7 +24,7 @@
       "planarAltitude": 7000.0,
       "planarCoverage": 0.5,
       "planarDensity": 1.0,
-      "sceneCloudCompositeStrength": 0.8500000238418579,
+      "sceneCloudCompositeStrength": 0.5699999928474426,
       "shadowScale": 0.0044999998062849045,
       "shadowSpeed": 0.017999999225139618,
       "shadowStrength": 0.0,
@@ -61,7 +61,7 @@
       "denoisingRange": 500.0,
       "disocclusionThreshold": 0.017000000923871994,
       "disocclusionThresholdAlternate": 0.05000000074505806,
-      "enabled": true,
+      "enabled": false,
       "method": 0,
       "reblurHitDistanceConstantScale": 3.0,
       "reblurHitDistanceRoughnessScale": 20.0,
@@ -73,7 +73,7 @@
       "reflexMode": 1
     },
     "occlusion": {
-      "hiZEnabled": false
+      "hiZEnabled": true
     },
     "pipelineMode": 1,
     "postProcess": {
@@ -135,7 +135,7 @@
       "filterEnabled": true,
       "filterStrength": 1.0,
       "historyWeight": 0.8999999761581421,
-      "sceneReflectionCompositeStrength": 1.0,
+      "sceneReflectionCompositeStrength": 0.949999988079071,
       "temporalEnabled": true
     },
     "renderGraph": {
@@ -144,10 +144,10 @@
     },
     "rtgi": {
       "cutoutTraversal": 0,
-      "enabled": true,
+      "enabled": false,
       "intensity": 1.0,
       "maxRayDistance": 64.0,
-      "maxShadowRayDistance": 123.0,
+      "maxShadowRayDistance": 49.599998474121094,
       "minimumRayOriginBias": 0.0009765625
     },
     "shadow": {
@@ -200,22 +200,22 @@
     },
     "transparent": {
       "compositeEnabled": true,
+      "underwaterFogDensity": 0.6840000152587891,
+      "underwaterScatterAnisotropy": 0.08799999952316284,
+      "underwaterScatterAnisotropySecondary": -0.05700000002980232,
+      "underwaterScatterStrength": 17.770000457763672,
       "waterAbsorption": [
-        0.4,
-        0.14,
-        0.08
+        1.3849999904632568,
+        1.4780000448226929,
+        1.11899995803833
       ],
-      "waterFogDensity": 1.0,
-      "waterIOR": 1.33,
-      "waterScatterAnisotropy": 0.65,
-      "waterScatterStrength": 28.0,
-      "waterWaveHeight": 1.0,
-      "waterWaveSpeed": 1.0,
       "waterEffectsEnabled": true,
-      "underwaterFogDensity": 0.1,
-      "underwaterScatterAnisotropy": 0.8,
-      "underwaterScatterAnisotropySecondary": 0.6,
-      "underwaterScatterStrength": 8.0
+      "waterFogDensity": 2.0399999618530273,
+      "waterIOR": 1.4869999885559082,
+      "waterScatterAnisotropy": 0.20999999344348907,
+      "waterScatterStrength": 34.40999984741211,
+      "waterWaveHeight": 2.119999885559082,
+      "waterWaveSpeed": 0.800000011920929
     },
     "upscale": {
       "debugVisualizationEnabled": false,
