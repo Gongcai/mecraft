@@ -664,6 +664,14 @@ void SettingsScreen::buildLightingTab(UIWidget* contentPanel, GameResources& res
     }
     RenderSettings s = m_renderScene->getSettings();
 
+    addSectionHeader(stack, resources, "RTGI");
+
+    addToggle(stack, resources, "RTGI", s.rtgi.enabled, [this](bool v) {
+        auto settings = m_renderScene->getSettings();
+        settings.rtgi.enabled = v;
+        m_renderScene->setSettings(settings);
+    });
+
     addSectionHeader(stack, resources, "SSGI");
 
     addToggle(stack, resources, "SSGI", s.ssgi.enabled, [this](bool v) {

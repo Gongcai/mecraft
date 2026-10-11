@@ -49,6 +49,8 @@ struct TransparentPassPlan {
 /// Cached per-column render state for hierarchical culling
 struct ChunkRenderColumnCache {
     Chunk* chunk = nullptr;
+    // Keeps the cached object alive until synchronization removes or replaces its column.
+    std::shared_ptr<Chunk> chunkRef;
     int64_t chunkKey = 0;
     int regionX = 0;
     int regionZ = 0;
@@ -94,6 +96,9 @@ public:
     [[nodiscard]] bool setOpacityMicromapEnabled(const bool enabled) {
         return m_blasCache.setOpacityMicromapEnabled(enabled);
     }
+    // Schedules fresh section revisions when ray tracing is enabled after raster-only streaming.
+    void setRayTracingEnabled(bool enabled);
+    [[nodiscard]] bool rayTracingEnabled() const { return m_blasCache.enabled(); }
 
     // Configuration injection
     void setWorldRenderBuffer(WorldRenderBuffer* buf) { m_worldRenderBuffer = buf; }
@@ -164,6 +169,8 @@ private:
     void releaseMdiAllocationOnly(const SubChunkGpuKey& key);
     void collectRetiredMdiAllocations();
     void advanceLocalShadowGeometryRevision();
+    // Invalidates old raster-only jobs before draining or submitting work for the current world.
+    void refreshRayTracingMeshRevisions(const IWorldView& worldView);
 
     struct RetiredMdiAllocation {
         WorldGpuMesh mesh;
@@ -172,6 +179,7 @@ private:
 
     // Chunk column cache
     std::vector<ChunkRenderColumnCache> m_chunkRenderColumns;
+    std::vector<ChunkRenderColumnCache> m_chunkRenderColumnsScratch;
     uint64_t m_chunkRenderColumnsRevision = 0;
     int m_chunkRenderColumnsRegionSize = 0;
     uint64_t m_frameSerial = 0;
@@ -180,6 +188,7 @@ private:
     std::unordered_map<SubChunkGpuKey, MdiMeshAllocation, SubChunkGpuKeyHash> m_mdiMeshAllocations;
     std::vector<RetiredMdiAllocation> m_retiredMdiAllocations;
     TerrainBlasCache m_blasCache;
+    bool m_rayTracingMeshRefreshPending = false;
     uint64_t m_lastMdiAllocationSweepActiveRevision = 0;
     bool m_mdiAllocationSweepInitialized = false;
     uint64_t m_localShadowGeometryRevision = 1u;

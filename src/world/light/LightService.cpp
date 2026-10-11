@@ -917,32 +917,14 @@ void LightService::updateBaseLightCacheForBlockChange(const Chunk& chunk, const 
 }
 
 std::vector<BlockID> LightService::captureBlockSnapshot(const Chunk& chunk) {
-    std::vector<BlockID> blocks;
-    blocks.resize(Chunk::BLOCK_COUNT);
-
-    for (int y = 0; y < Chunk::SIZE_Y; ++y) {
-        for (int z = 0; z < Chunk::SIZE_Z; ++z) {
-            for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                blocks[Chunk::toIndex(x, y, z)] = BlockStateRegistry::getBlockId(chunk.getBlock(x, y, z));
-            }
-        }
-    }
-
+    std::vector<BlockID> blocks(Chunk::BLOCK_COUNT);
+    chunk.copyBlockIdsTo(blocks.data());
     return blocks;
 }
 
 std::vector<uint8_t> LightService::capturePackedLightSnapshot(const Chunk& chunk) {
-    std::vector<uint8_t> packed;
-    packed.resize(Chunk::BLOCK_COUNT);
-
-    for (int y = 0; y < Chunk::SIZE_Y; ++y) {
-        for (int z = 0; z < Chunk::SIZE_Z; ++z) {
-            for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                packed[Chunk::toIndex(x, y, z)] = chunk.getPackedLight(x, y, z);
-            }
-        }
-    }
-
+    std::vector<uint8_t> packed(Chunk::BLOCK_COUNT);
+    chunk.copyPackedLightTo(packed.data());
     return packed;
 }
 

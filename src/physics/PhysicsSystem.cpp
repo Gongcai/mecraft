@@ -398,8 +398,15 @@ void applyHorizontalControl(PhysicsBody& body, const MoveIntent& intent, const P
             acceleration = tuning.airAcceleration * tuning.airControl;
         }
         const float maxDelta = acceleration * dt;
-        body.velocity.x = moveTowards(body.velocity.x, targetX, maxDelta);
-        body.velocity.z = moveTowards(body.velocity.z, targetZ, maxDelta);
+        const glm::vec2 horizontalVelocity(body.velocity.x, body.velocity.z);
+        const glm::vec2 targetVelocity(targetX, targetZ);
+        const glm::vec2 velocityDelta = targetVelocity - horizontalVelocity;
+        const float velocityDeltaLength = glm::length(velocityDelta);
+        const glm::vec2 updatedVelocity = velocityDeltaLength <= maxDelta
+                                              ? targetVelocity
+                                              : horizontalVelocity + velocityDelta * (maxDelta / velocityDeltaLength);
+        body.velocity.x = updatedVelocity.x;
+        body.velocity.z = updatedVelocity.y;
         return;
     }
 

@@ -198,6 +198,7 @@ bool TerrainBlasCache::init(RhiDevice* device) {
     m_device = device;
     m_initialized = true;
     m_healthy = true;
+    m_enabled = true;
     m_supported =
         device != nullptr && device->capabilities().accelerationStructure && device->capabilities().bufferDeviceAddress;
     if (!m_supported) {
@@ -217,6 +218,13 @@ bool TerrainBlasCache::init(RhiDevice* device) {
         m_freeQueryIndices.push_back(queryIndex);
     }
     return true;
+}
+
+void TerrainBlasCache::setEnabled(const bool enabled) {
+    if (m_enabled == enabled) {
+        return;
+    }
+    m_enabled = enabled;
 }
 
 bool TerrainBlasCache::setOpacityMicromapSource(const renderer::contracts::TerrainOpacityMicromapSource source) {
@@ -302,6 +310,7 @@ void TerrainBlasCache::shutdown() {
     m_opacityMicromapSource = {};
     m_opacityMicromapProfile = {};
     m_opacityMicromapEnabled = false;
+    m_enabled = true;
 }
 
 void TerrainBlasCache::beginFrame() {
@@ -372,7 +381,7 @@ bool TerrainBlasCache::validKey(const SubChunkGpuKey& key) {
 
 TerrainBlasRequestResult TerrainBlasCache::requestBuild(const SubChunkGpuKey& key, const uint64_t revision,
                                                         const glm::vec3& worldOrigin, TerrainBlasGeometry&& geometry) {
-    if (!m_initialized || !m_supported) {
+    if (!m_initialized || !m_supported || !m_enabled) {
         return TerrainBlasRequestResult::Unsupported;
     }
     if (!validKey(key)) {
@@ -453,7 +462,7 @@ void TerrainBlasCache::remove(const SubChunkGpuKey& key) {
 }
 
 bool TerrainBlasCache::recordFrame(RhiCommandList& commandList, RenderDebugService* const debugService) {
-    if (!m_supported) {
+    if (!m_supported || !m_enabled) {
         return true;
     }
     if (!m_healthy || !m_recordedBuilds.empty() || !m_recordedCompactions.empty()) {

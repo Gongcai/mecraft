@@ -35,10 +35,6 @@ size_t BitPackedArray::wordCountFor(const size_t count, const uint8_t bitsPerEnt
     return (totalBits + BITS_PER_WORD - 1) / BITS_PER_WORD;
 }
 
-uint64_t BitPackedArray::valueMask(const uint8_t bitsPerEntry) {
-    return bitsPerEntry == 32 ? 0xFFFFFFFFULL : ((1ULL << bitsPerEntry) - 1ULL);
-}
-
 BitPackedArray::BitPackedArray(size_t count, uint8_t bitsPerEntry)
     : m_count(count), m_bitsPerEntry(normalizeBitsPerEntry(bitsPerEntry)) {
     m_data.resize(wordCountFor(m_count, m_bitsPerEntry), 0);

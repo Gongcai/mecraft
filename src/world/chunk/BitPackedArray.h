@@ -55,5 +55,7 @@ private:
     static constexpr int BITS_PER_WORD = 64;
     [[nodiscard]] static uint8_t normalizeBitsPerEntry(uint8_t bitsPerEntry);
     [[nodiscard]] static size_t wordCountFor(size_t count, uint8_t bitsPerEntry);
-    [[nodiscard]] static uint64_t valueMask(uint8_t bitsPerEntry);
+    [[nodiscard]] static uint64_t valueMask(uint8_t bitsPerEntry) {
+        return bitsPerEntry == 32 ? 0xFFFFFFFFULL : ((1ULL << bitsPerEntry) - 1ULL);
+    }
 };

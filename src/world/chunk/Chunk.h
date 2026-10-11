@@ -90,6 +90,12 @@ public:
     [[nodiscard]] SubChunk* getOrCreateSubChunk(int scy);
 
     [[nodiscard]] uint8_t getPackedLight(int x, int y, int z) const;
+    // Copies block IDs in x + z * SIZE_X + y * SIZE_X * SIZE_Z order.
+    // Destination must hold BLOCK_COUNT entries; each section palette is resolved once.
+    void copyBlockIdsTo(BlockID* destination) const;
+    // Copies packed light in the same order, including implicit sunlight in absent sections.
+    // Destination must hold BLOCK_COUNT bytes; existing air-section light is preserved.
+    void copyPackedLightTo(uint8_t* destination) const;
     // Replaces packed light data and optionally reports changed sub-chunks and horizontal borders.
     bool replacePackedLight(const uint8_t* data, size_t size, uint32_t* outDirtySubChunkMask = nullptr,
                             uint8_t* outChangedBoundaryMask = nullptr);

@@ -226,6 +226,10 @@ public:
     void finishGraphExecution(bool succeeded, RhiSubmissionToken completionToken);
 
     [[nodiscard]] bool supported() const { return m_supported; }
+    /// Enables or disables terrain BLAS scheduling for RTGI.
+    /// @param enabled False stops new builds while retaining valid resources for re-enable.
+    void setEnabled(bool enabled);
+    [[nodiscard]] bool enabled() const { return m_enabled; }
     [[nodiscard]] bool healthy() const { return m_healthy; }
     [[nodiscard]] bool isSettled() const;
     [[nodiscard]] const std::string& lastError() const { return m_lastError; }
@@ -334,6 +338,7 @@ private:
     RhiQueryPoolHandle m_compactedSizeQueries;
     bool m_initialized = false;
     bool m_supported = false;
+    bool m_enabled = true;
     bool m_healthy = true;
     TerrainBlasBudgets m_budgets;
     renderer::contracts::TerrainOpacityMicromapSource m_opacityMicromapSource;

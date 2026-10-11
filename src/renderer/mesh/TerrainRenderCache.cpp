@@ -7,6 +7,7 @@
 #include "../../world/chunk/SubChunk.h"
 #include <algorithm>
 #include <chrono>
+#include <utility>
 
 namespace {
 
@@ -92,7 +93,11 @@ void TerrainRenderCache::shutdown() {
     }
     m_retiredMdiAllocations.clear();
     m_blasCache.shutdown();
+    m_rayTracingMeshRefreshPending = false;
     m_chunkRenderColumns.clear();
+    m_chunkRenderColumnsScratch.clear();
+    m_chunkRenderColumnsRevision = 0;
+    m_chunkRenderColumnsRegionSize = 0;
     m_frameSerial = 0;
     m_mdiMeshAllocations.clear();
     m_mdiAllocationSweepInitialized = false;
@@ -117,6 +122,27 @@ void TerrainRenderCache::setMeshingBudgets(const int submitBudget, const int max
     m_meshingDrainVertexBudget = std::max(1, drainVertexBudget);
 }
 
+void TerrainRenderCache::setRayTracingEnabled(const bool enabled) {
+    if (m_blasCache.enabled() == enabled) {
+        return;
+    }
+    m_blasCache.setEnabled(enabled);
+    m_rayTracingMeshRefreshPending = enabled && m_blasCache.supported();
+}
+
+void TerrainRenderCache::refreshRayTracingMeshRevisions(const IWorldView& worldView) {
+    if (!m_rayTracingMeshRefreshPending) {
+        return;
+    }
+    // New revisions reject in-flight raster-only results and regenerate geometry for resident sections.
+    for (const auto& entry : worldView.getActiveChunks()) {
+        if (entry.second) {
+            entry.second->markExistingSubChunksDirty();
+        }
+    }
+    m_rayTracingMeshRefreshPending = false;
+}
+
 // ---------------------------------------------------------------------------
 // Chunk column cache
 // ---------------------------------------------------------------------------
@@ -129,38 +155,67 @@ void TerrainRenderCache::syncChunkRenderColumns(const IWorldView& worldView) {
     }
 
     const auto& activeChunks = worldView.getActiveChunks();
-    m_chunkRenderColumns.clear();
-    m_chunkRenderColumns.reserve(activeChunks.size());
+    std::unordered_map<int64_t, size_t> previousIndices;
+    previousIndices.reserve(m_chunkRenderColumns.size());
+    for (size_t index = 0; index < m_chunkRenderColumns.size(); ++index) {
+        previousIndices.emplace(m_chunkRenderColumns[index].chunkKey, index);
+    }
+
+    // Sort lightweight references instead of repeatedly swapping all section mesh metadata.
+    struct ColumnEntry {
+        int64_t key;
+        const std::shared_ptr<Chunk>* chunkRef;
+        int regionX;
+        int regionZ;
+    };
+    std::vector<ColumnEntry> entries;
+    entries.reserve(activeChunks.size());
 
     for (const auto& pair : activeChunks) {
         if (!pair.second) {
             continue;
         }
 
-        ChunkRenderColumnCache column;
-        column.chunk = pair.second.get();
-        column.chunkKey = pair.first;
-        column.chunkX = column.chunk->m_chunkX;
-        column.chunkZ = column.chunk->m_chunkZ;
-        column.regionX = floorDiv(column.chunkX, regionChunkSize);
-        column.regionZ = floorDiv(column.chunkZ, regionChunkSize);
-        column.worldOffset = glm::vec3(column.chunk->getWorldOffset());
-        m_chunkRenderColumns.push_back(column);
+        entries.push_back({pair.first, &pair.second, floorDiv(pair.second->m_chunkX, regionChunkSize),
+                           floorDiv(pair.second->m_chunkZ, regionChunkSize)});
     }
 
-    std::sort(m_chunkRenderColumns.begin(), m_chunkRenderColumns.end(),
-              [](const ChunkRenderColumnCache& a, const ChunkRenderColumnCache& b) {
-                  if (a.regionX != b.regionX) {
-                      return a.regionX < b.regionX;
-                  }
-                  if (a.regionZ != b.regionZ) {
-                      return a.regionZ < b.regionZ;
-                  }
-                  if (a.chunkX != b.chunkX) {
-                      return a.chunkX < b.chunkX;
-                  }
-                  return a.chunkZ < b.chunkZ;
-              });
+    std::sort(entries.begin(), entries.end(), [](const ColumnEntry& a, const ColumnEntry& b) {
+        if (a.regionX != b.regionX) {
+            return a.regionX < b.regionX;
+        }
+        if (a.regionZ != b.regionZ) {
+            return a.regionZ < b.regionZ;
+        }
+        if ((*a.chunkRef)->m_chunkX != (*b.chunkRef)->m_chunkX) {
+            return (*a.chunkRef)->m_chunkX < (*b.chunkRef)->m_chunkX;
+        }
+        return (*a.chunkRef)->m_chunkZ < (*b.chunkRef)->m_chunkZ;
+    });
+
+    m_chunkRenderColumnsScratch.clear();
+    m_chunkRenderColumnsScratch.reserve(entries.size());
+    for (const ColumnEntry& entry : entries) {
+        const auto previous = previousIndices.find(entry.key);
+        if (previous != previousIndices.end() &&
+            m_chunkRenderColumns[previous->second].chunk == entry.chunkRef->get()) {
+            m_chunkRenderColumnsScratch.push_back(std::move(m_chunkRenderColumns[previous->second]));
+        } else {
+            m_chunkRenderColumnsScratch.emplace_back();
+        }
+
+        ChunkRenderColumnCache& column = m_chunkRenderColumnsScratch.back();
+        column.chunkRef = *entry.chunkRef;
+        column.chunk = column.chunkRef.get();
+        column.chunkKey = entry.key;
+        column.chunkX = column.chunk->m_chunkX;
+        column.chunkZ = column.chunk->m_chunkZ;
+        column.regionX = entry.regionX;
+        column.regionZ = entry.regionZ;
+        column.worldOffset = glm::vec3(column.chunk->getWorldOffset());
+    }
+    m_chunkRenderColumns.swap(m_chunkRenderColumnsScratch);
+    m_chunkRenderColumnsScratch.clear();
 
     m_chunkRenderColumnsRevision = activeChunkRevision;
     m_chunkRenderColumnsRegionSize = regionChunkSize;
@@ -364,6 +419,7 @@ void TerrainRenderCache::releaseStaleMdiAllocations(const IWorldView& worldView)
 // ---------------------------------------------------------------------------
 
 void TerrainRenderCache::submitMeshingJobs(const IWorldView& worldView, const glm::vec3& cameraPos) {
+    refreshRayTracingMeshRevisions(worldView);
     std::vector<MeshingCandidate> candidates;
     const auto& activeChunks = worldView.getActiveChunks();
 
@@ -483,7 +539,7 @@ void TerrainRenderCache::submitMeshingJobs(const IWorldView& worldView, const gl
         if (!job.snapshot) {
             continue;
         }
-        job.snapshot->buildRayTracingGeometry = m_blasCache.supported();
+        job.snapshot->buildRayTracingGeometry = m_blasCache.supported() && m_blasCache.enabled();
 
         const int priority = candidate.interactiveLightDirty ? (-1000000000 + static_cast<int>(candidate.distanceSq))
                                                              : static_cast<int>(candidate.distanceSq);
@@ -498,8 +554,9 @@ void TerrainRenderCache::submitMeshingJobs(const IWorldView& worldView, const gl
 }
 
 bool TerrainRenderCache::isMeshingSettled(const IWorldView& worldView) const {
-    if (m_meshingService == nullptr || m_meshingService->inFlightCount() != 0 || !m_meshingInFlight.empty() ||
-        !m_deferredMeshResults.empty() || (m_blasCache.supported() && !m_blasCache.isSettled())) {
+    if (m_rayTracingMeshRefreshPending || m_meshingService == nullptr || m_meshingService->inFlightCount() != 0 ||
+        !m_meshingInFlight.empty() || !m_deferredMeshResults.empty() ||
+        (m_blasCache.supported() && m_blasCache.enabled() && !m_blasCache.isSettled())) {
         return false;
     }
 
@@ -522,6 +579,7 @@ bool TerrainRenderCache::isMeshingSettled(const IWorldView& worldView) const {
 
 bool TerrainRenderCache::drainMeshingResults(const IWorldView& worldView, RhiCommandList& commandList,
                                              RenderDebugService* const debugService) {
+    refreshRayTracingMeshRevisions(worldView);
     // Phase 1: Drain all completed results from the service into the deferred buffer.
     // This avoids interleaving tryPopCompleted with budget checks, and lets us
     // process results in order with strict vertex/time budgets.
@@ -629,7 +687,7 @@ bool TerrainRenderCache::drainMeshingResults(const IWorldView& worldView, RhiCom
 #endif
 
             TerrainBlasGeometry blasGeometry;
-            if (m_blasCache.supported()) {
+            if (m_blasCache.supported() && m_blasCache.enabled()) {
                 if (!result.meshData.rayTracingGeometryBuilt) {
                     recycleResultMeshData();
                     succeeded = false;
@@ -700,7 +758,7 @@ bool TerrainRenderCache::drainMeshingResults(const IWorldView& worldView, RhiCom
             mesh.inGlobalPool = true;
 
             const SubChunkGpuKey gpuKey{result.chunkKey, result.scy};
-            if (m_blasCache.supported()) {
+            if (m_blasCache.supported() && m_blasCache.enabled()) {
                 const TerrainBlasRequestResult request =
                     m_blasCache.requestBuild(gpuKey, result.revision, boundsWorldOffset, std::move(blasGeometry));
                 if (request != TerrainBlasRequestResult::Queued && request != TerrainBlasRequestResult::Cleared &&

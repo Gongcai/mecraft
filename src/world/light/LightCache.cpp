@@ -29,13 +29,15 @@ CachedBaseLight buildBaseLightFromChunk(const Chunk& chunk) {
     CachedBaseLight cache;
     cache.packed.assign(Chunk::BLOCK_COUNT, 0);
     cache.sources.reserve(256);
+    std::vector<BlockID> blocks(Chunk::BLOCK_COUNT);
+    chunk.copyBlockIdsTo(blocks.data());
 
     // Sky light: top-down scan for each column.
     for (int z = 0; z < Chunk::SIZE_Z; ++z) {
         for (int x = 0; x < Chunk::SIZE_X; ++x) {
             uint8_t skyLevel = 15;
             for (int y = Chunk::SIZE_Y - 1; y >= 0; --y) {
-                const BlockID blockId = BlockStateRegistry::getBlockId(chunk.getBlock(x, y, z));
+                const BlockID blockId = blocks[packedIndex(x, y, z)];
                 const uint8_t opacity = BlockRegistry::getOpacityFast(blockId);
                 if (opacity >= 15) {
                     skyLevel = 0;
@@ -56,7 +58,7 @@ CachedBaseLight buildBaseLightFromChunk(const Chunk& chunk) {
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                const BlockID blockId = BlockStateRegistry::getBlockId(chunk.getBlock(x, y, z));
+                const BlockID blockId = blocks[packedIndex(x, y, z)];
                 if (!BlockRegistry::isLightSourceFast(blockId)) {
                     continue;
                 }

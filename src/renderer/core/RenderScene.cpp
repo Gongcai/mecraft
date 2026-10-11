@@ -791,6 +791,10 @@ void RenderScene::setSettings(const RenderSettings& settings) {
                                                              RtgiCutoutTraversalMode::OpacityMicromap)) {
         return;
     }
+    if (normalizedSettings.rtgi.enabled != m_settings.rtgi.enabled) {
+        m_terrainStreamingService.setRayTracingEnabled(normalizedSettings.rtgi.enabled);
+        m_sceneTlasCache.setEnabled(normalizedSettings.rtgi.enabled);
+    }
     m_settings = normalizedSettings;
 
     if (requiresTemporalReset(resetReasons)) {
@@ -958,6 +962,8 @@ void RenderScene::setupResources(ThreadPool* threadPool, RhiDevice* rhiDevice, R
     if (!m_sceneTlasCache.init(rhiDevice)) {
         std::abort();
     }
+    m_terrainStreamingService.setRayTracingEnabled(initialSettings.rtgi.enabled);
+    m_sceneTlasCache.setEnabled(initialSettings.rtgi.enabled);
     m_shared.globalBindlessSet = nullptr;
     m_publishedSceneTlasRevision = 0u;
     if (rhiDevice->backend() == RhiBackend::Vulkan) {

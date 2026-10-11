@@ -113,16 +113,23 @@ bool ForwardPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSet
         return false;
     }
 
-    RenderGraphPassBuilder sceneTlas =
-        m_renderGraph.addPass({"Forward.SceneTLAS", RgPassType::Graphics, RhiQueueType::Graphics});
-    sceneTlas.setExecute([&](RgPassContext& pass) {
-        return m_shared->sceneTlasCache == nullptr ||
-               m_shared->sceneTlasCache->recordFrame(pass.commandList(), ctx.debugService);
-    });
+    RgPassHandle sceneTlasHandle;
+    if (m_shared->sceneTlasCache != nullptr && m_shared->sceneTlasCache->supported() &&
+        m_shared->sceneTlasCache->enabled()) {
+        RenderGraphPassBuilder sceneTlas =
+            m_renderGraph.addPass({"Forward.SceneTLAS", RgPassType::Graphics, RhiQueueType::Graphics});
+        sceneTlas.setExecute([&](RgPassContext& pass) {
+            return m_shared->sceneTlasCache->recordFrame(pass.commandList(), ctx.debugService);
+        });
+        sceneTlasHandle = sceneTlas.handle();
+    }
 
     RenderGraphPassBuilder prepare =
         m_renderGraph.addPass({"Forward.Prepare", RgPassType::Graphics, RhiQueueType::Graphics});
-    prepare.dependsOn(sceneTlas.handle()).setExecute([&](RgPassContext& pass) {
+    if (sceneTlasHandle.isValid()) {
+        prepare.dependsOn(sceneTlasHandle);
+    }
+    prepare.setExecute([&](RgPassContext& pass) {
         return prepareGraphFrame(ctx, settings, gameplaySnapshot, pass.commandList());
     });
 
@@ -165,7 +172,7 @@ bool ForwardPipeline::prepareSceneTlas(const glm::vec3& cameraPosition) {
         return true;
     }
     renderer::rt::SceneTlasCache& cache = *m_shared->sceneTlasCache;
-    if (!cache.supported()) {
+    if (!cache.supported() || !cache.enabled()) {
         return true;
     }
     if (!cache.healthy()) {

@@ -197,6 +197,10 @@ public:
     void finishGraphExecution(bool succeeded, RhiSubmissionToken completionToken);
 
     [[nodiscard]] bool supported() const { return m_supported; }
+    /// Enables or disables TLAS generation scheduling for RTGI.
+    /// @param enabled False retires the active generation after GPU completion.
+    void setEnabled(bool enabled);
+    [[nodiscard]] bool enabled() const { return m_enabled; }
     [[nodiscard]] bool healthy() const { return m_healthy; }
     [[nodiscard]] bool isSettled() const;
     [[nodiscard]] const std::string& lastError() const { return m_lastError; }
@@ -290,6 +294,7 @@ private:
     RhiDevice* m_device = nullptr;
     bool m_initialized = false;
     bool m_supported = false;
+    bool m_enabled = true;
     bool m_healthy = true;
     uint64_t m_nextRevision = 1u;
     uint64_t m_buildsRecorded = 0u;

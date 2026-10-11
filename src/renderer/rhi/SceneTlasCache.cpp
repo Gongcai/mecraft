@@ -132,8 +132,25 @@ bool SceneTlasCache::init(RhiDevice* device) {
     m_device = device;
     m_initialized = true;
     m_healthy = true;
+    m_enabled = true;
     m_supported = device->capabilities().accelerationStructure && device->capabilities().bufferDeviceAddress;
     return true;
+}
+
+void SceneTlasCache::setEnabled(const bool enabled) {
+    if (m_enabled == enabled) {
+        return;
+    }
+    m_enabled = enabled;
+    if (m_enabled) {
+        return;
+    }
+
+    if (m_nextRevision != std::numeric_limits<uint64_t>::max()) {
+        m_desiredRevision = m_nextRevision++;
+    }
+    m_desiredInputs.clear();
+    applyEmptyDesiredGeneration();
 }
 
 void SceneTlasCache::shutdown() {
@@ -152,6 +169,7 @@ void SceneTlasCache::shutdown() {
     m_device = nullptr;
     m_initialized = false;
     m_supported = false;
+    m_enabled = true;
     m_healthy = true;
     m_nextRevision = 1u;
     m_buildsRecorded = 0u;
@@ -202,7 +220,7 @@ void SceneTlasCache::pollCompletedWork() {
 
 SceneTlasSetResult SceneTlasCache::setInstances(std::vector<SceneTlasInstanceInput> instances,
                                                 const glm::vec3& sceneOrigin) {
-    if (!m_initialized || !m_supported) {
+    if (!m_initialized || !m_supported || !m_enabled) {
         return SceneTlasSetResult::Unsupported;
     }
     if (!m_healthy) {
@@ -298,7 +316,7 @@ SceneTlasSetResult SceneTlasCache::setInstances(std::vector<SceneTlasInstanceInp
 }
 
 bool SceneTlasCache::recordFrame(RhiCommandList& commandList, RenderDebugService* const debugService) {
-    if (!m_supported) {
+    if (!m_supported || !m_enabled) {
         return true;
     }
     if (!m_healthy || (m_pending.has_value() && m_pending->state == PendingState::Recorded)) {

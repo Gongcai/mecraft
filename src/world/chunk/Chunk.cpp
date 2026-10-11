@@ -204,6 +204,61 @@ uint8_t Chunk::getPackedLight(const int x, const int y, const int z) const {
     return sc->m_lightMap[SubChunk::toIndex(x, toSubChunkLocalY(y), z)];
 }
 
+void Chunk::copyBlockIdsTo(BlockID* destination) const {
+    const BlockID airId = BlockStateRegistry::getBlockId(NULL_BLOCK_STATE);
+    std::vector<BlockID> paletteIds;
+    for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
+        BlockID* sectionDestination = destination + static_cast<size_t>(scy) * SubChunk::BLOCK_COUNT;
+        const SubChunk* section = m_subChunks[scy].get();
+        if (section == nullptr) {
+            std::fill_n(sectionDestination, SubChunk::BLOCK_COUNT, airId);
+            continue;
+        }
+
+        const Palette& palette = section->blockPalette();
+        paletteIds.resize(palette.size());
+        for (size_t index = 0; index < paletteIds.size(); ++index) {
+            paletteIds[index] = BlockStateRegistry::getBlockId(palette.getStateIdUnchecked(index));
+        }
+        if (paletteIds.size() == 1) {
+            std::fill_n(sectionDestination, SubChunk::BLOCK_COUNT, paletteIds.front());
+            continue;
+        }
+
+        const BitPackedArray& data = section->blockData();
+        for (size_t index = 0; index < SubChunk::BLOCK_COUNT; ++index) {
+            sectionDestination[index] = paletteIds[data.getUnchecked(index)];
+        }
+    }
+}
+
+void Chunk::copyPackedLightTo(uint8_t* destination) const {
+    constexpr size_t layerSize = static_cast<size_t>(SIZE_X) * SIZE_Z;
+    const auto heightRange = std::minmax_element(m_heightMap.begin(), m_heightMap.end());
+    for (int scy = 0; scy < NUM_SUB_CHUNKS; ++scy) {
+        uint8_t* sectionDestination = destination + static_cast<size_t>(scy) * SubChunk::BLOCK_COUNT;
+        const SubChunk* section = m_subChunks[scy].get();
+        if (section != nullptr) {
+            std::copy(section->m_lightMap.begin(), section->m_lightMap.end(), sectionDestination);
+            continue;
+        }
+
+        const int yBase = scy * SUB_CHUNK_SIZE;
+        if (yBase >= *heightRange.second) {
+            std::fill_n(sectionDestination, SubChunk::BLOCK_COUNT, uint8_t{0xF0});
+        } else if (yBase + SUB_CHUNK_SIZE <= *heightRange.first) {
+            std::fill_n(sectionDestination, SubChunk::BLOCK_COUNT, uint8_t{0});
+        } else {
+            for (int ly = 0; ly < SUB_CHUNK_SIZE; ++ly) {
+                for (size_t index = 0; index < layerSize; ++index) {
+                    sectionDestination[static_cast<size_t>(ly) * layerSize + index] =
+                        yBase + ly >= m_heightMap[index] ? 0xF0 : 0;
+                }
+            }
+        }
+    }
+}
+
 bool Chunk::replacePackedLight(const uint8_t* data, const size_t size, uint32_t* outDirtySubChunkMask,
                                uint8_t* outChangedBoundaryMask) {
     if (data == nullptr || size != BLOCK_COUNT) {

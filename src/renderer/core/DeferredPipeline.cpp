@@ -1906,7 +1906,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
         return failGraphSetup(__LINE__);
     }
     skyIblGraphPrepared = true;
-    if (m_shared->sceneTlasCache != nullptr && m_shared->sceneTlasCache->supported()) {
+    if (m_shared->sceneTlasCache != nullptr && m_shared->sceneTlasCache->supported() &&
+        m_shared->sceneTlasCache->enabled()) {
         RenderGraphPassBuilder sceneTlas =
             m_renderGraph.addPass({"Deferred.SceneTLAS", RgPassType::Graphics, RhiQueueType::Graphics});
         sceneTlas.dependsOn(graphTail).setExecute([&](RgPassContext& pass) {
@@ -3545,7 +3546,7 @@ bool DeferredPipeline::prepareSceneTlas(const glm::vec3& cameraPosition) {
         return true;
     }
     renderer::rt::SceneTlasCache& cache = *m_shared->sceneTlasCache;
-    if (!cache.supported()) {
+    if (!cache.supported() || !cache.enabled()) {
         return true;
     }
     if (!cache.healthy()) {

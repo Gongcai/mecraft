@@ -69,6 +69,9 @@ public:
     [[nodiscard]] bool setOpacityMicromapEnabled(const bool enabled) {
         return m_terrainCache.setOpacityMicromapEnabled(enabled);
     }
+    /// Enables or disables terrain BLAS scheduling independently of hardware support.
+    void setRayTracingEnabled(const bool enabled) { m_terrainCache.setRayTracingEnabled(enabled); }
+    [[nodiscard]] bool rayTracingEnabled() const { return m_terrainCache.rayTracingEnabled(); }
 
     // Accessors for sub-components
     [[nodiscard]] TerrainRenderCache& terrainCache() { return m_terrainCache; }

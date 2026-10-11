@@ -1334,8 +1334,9 @@ void GameServer::executeServerCommand(ConnectedClient& client, const net::Client
 
     if (primary == "help") {
         sendCommandResult(client, request.sequence, true,
-                          "Commands: /help, /list, /gamemode <survival|creative> [clientId], /give <item> [count] "
-                          "[clientId], /time set <0..1200>, /weather <clear|rain|storm|snow>, /summon <entity>");
+                          "Commands: /help, /list, /gamemode <survival|creative> [clientId], /player speed <0.1..100>, "
+                          "/give <item> [count] [clientId], /time set <0..1200>, /weather <clear|rain|storm|snow>, "
+                          "/summon <entity>");
         return;
     }
 
@@ -1388,6 +1389,45 @@ void GameServer::executeServerCommand(ConnectedClient& client, const net::Client
         const std::string message = "Set " + playerName(target->id) + " to " + modeName(mode) + " mode.";
         sendCommandResult(client, request.sequence, true, message);
         broadcastSystemMessage(message, net::ChatMessageKind::Success);
+        return;
+    }
+
+    if (primary == "player") {
+        std::string action;
+        std::string valueStr;
+        std::string extra;
+        iss >> action >> valueStr;
+        const bool hasExtraArgument = static_cast<bool>(iss >> extra);
+        if (action != "speed" || valueStr.empty() || hasExtraArgument) {
+            sendCommandResult(client, request.sequence, false, "Usage: /player speed <0.1..100>");
+            return;
+        }
+
+        char* endPtr = nullptr;
+        const float speed = std::strtof(valueStr.c_str(), &endPtr);
+        constexpr float kMinimumPlayerMoveSpeed = 0.1f;
+        constexpr float kMaximumPlayerMoveSpeed = 100.0f;
+        if (endPtr == valueStr.c_str() || *endPtr != '\0' || !std::isfinite(speed) ||
+            speed < kMinimumPlayerMoveSpeed || speed > kMaximumPlayerMoveSpeed) {
+            sendCommandResult(client, request.sequence, false, "Usage: /player speed <0.1..100>");
+            return;
+        }
+
+        const entt::entity playerEntity = resolvePlayerEntity(client);
+        if (playerEntity == entt::null || m_ecsRegistry == nullptr || !m_ecsRegistry->valid(playerEntity)) {
+            sendCommandResult(client, request.sequence, false, "Player movement controller is not available.");
+            return;
+        }
+
+        auto* controller = m_ecsRegistry->try_get<ecs::CharacterControllerComponent>(playerEntity);
+        if (controller == nullptr) {
+            sendCommandResult(client, request.sequence, false, "Player movement controller is not available.");
+            return;
+        }
+
+        controller->tuning.moveSpeed = speed;
+        const std::string message = "Player base movement speed set to " + std::to_string(speed) + " blocks/s.";
+        sendCommandResult(client, request.sequence, true, message);
         return;
     }
 
