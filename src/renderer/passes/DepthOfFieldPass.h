@@ -20,11 +20,13 @@ public:
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "DepthOfField"; }
 
-    /// Graph handles for the scene ping-pong pair and depth input.
+    /// Graph handles for the scene ping-pong pair, depth input, and object IDs.
     struct GraphResources {
         RgTextureHandle sceneResolved;
         RgTextureHandle temporalCurrent;
         RgTextureHandle depth;
+        RgTextureHandle objectMaterialId;
+        uint32_t firstPersonObjectId = 0u;
     };
 
     /// Adds the depth-of-field resolve stage to the graph. The pass reads the
@@ -42,11 +44,12 @@ public:
 
 private:
     [[nodiscard]] bool recordDof(RhiCommandList& commandList, const FrameContext& ctx, const RenderSettings& settings,
-                                 DeferredRenderTargets& targets, int inputIndex);
+                                 DeferredRenderTargets& targets, int inputIndex, uint32_t firstPersonObjectId);
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
     bool ensureNoiseTextureView(RhiDevice& rhiDevice);
     bool ensureRhiBindGroup(RhiDevice& rhiDevice, int historyIndex, RhiTextureViewHandle sceneView,
-                            RhiTextureViewHandle depthView, RhiTextureViewHandle noiseView);
+                            RhiTextureViewHandle depthView, RhiTextureViewHandle noiseView,
+                            RhiTextureViewHandle objectMaterialIdView);
     void destroyRhiBindGroup();
     void destroyRhiResources();
 
@@ -55,6 +58,7 @@ private:
     RhiTextureHandle m_noiseViewTexture;
     RhiTextureViewHandle m_noiseTextureView;
     RhiSamplerHandle m_sampler;
+    RhiSamplerHandle m_nearestSampler;
     RhiBindGroupLayoutHandle m_bindGroupLayout;
     RhiPipelineLayoutHandle m_pipelineLayout;
     RhiShaderHandle m_vertexShader;
@@ -64,6 +68,7 @@ private:
     RhiTextureViewHandle m_boundSceneView[2];
     RhiTextureViewHandle m_boundDepthView[2];
     RhiTextureViewHandle m_boundNoiseView[2];
+    RhiTextureViewHandle m_boundObjectMaterialIdView[2];
 };
 
 #endif // MECRAFT_DEPTH_OF_FIELD_PASS_H

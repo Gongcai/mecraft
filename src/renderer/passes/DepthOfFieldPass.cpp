@@ -20,6 +20,7 @@ struct DofPushConstants {
     glm::mat4 invProjection;
     glm::vec4 params;
     glm::vec4 screenParams;
+    uint32_t firstPersonObjectId = 0u;
 };
 
 [[nodiscard]] bool sameTextureHandle(const RhiTextureHandle lhs, const RhiTextureHandle rhs) {
@@ -44,7 +45,7 @@ RgPassHandle DepthOfFieldPass::addGraphPasses(RenderGraph& graph, const FrameCon
                                               const RenderSettings& settings, DeferredRenderTargets& targets,
                                               const GraphResources& resources, const RgPassHandle dependency) {
     if (!dependency.isValid() || !resources.sceneResolved.isValid() || !resources.temporalCurrent.isValid() ||
-        !resources.depth.isValid()) {
+        !resources.depth.isValid() || !resources.objectMaterialId.isValid()) {
         return {};
     }
 
@@ -61,16 +62,18 @@ RgPassHandle DepthOfFieldPass::addGraphPasses(RenderGraph& graph, const FrameCon
     dof.dependsOn(dependency)
         .readTexture(inputTexture, RhiResourceState::ShaderRead)
         .readTexture(resources.depth, RhiResourceState::DepthRead)
+        .readTexture(resources.objectMaterialId, RhiResourceState::ShaderRead)
         .writeTexture(outputTexture, RhiResourceState::RenderTarget)
-        .setExecute([this, frame, frameTargets, settings, inputIndex](RgPassContext& pass) {
-            return recordDof(pass.commandList(), *frame, settings, *frameTargets, inputIndex);
+        .setExecute([this, frame, frameTargets, settings, inputIndex, firstPersonObjectId = resources.firstPersonObjectId](
+                        RgPassContext& pass) {
+            return recordDof(pass.commandList(), *frame, settings, *frameTargets, inputIndex, firstPersonObjectId);
         });
     targets.flipSceneColor();
     return dof.handle();
 }
 
 bool DepthOfFieldPass::recordDof(RhiCommandList& commandList, const FrameContext& ctx, const RenderSettings& settings,
-                                 DeferredRenderTargets& targets, const int inputIndex) {
+                                 DeferredRenderTargets& targets, const int inputIndex, const uint32_t firstPersonObjectId) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr || inputIndex < 0 || inputIndex > 1) {
         return false;
     }
@@ -80,7 +83,8 @@ bool DepthOfFieldPass::recordDof(RhiCommandList& commandList, const FrameContext
         !targets.ensureGBufferTextureViews(rhiDevice) || !ensureRhiPipeline(rhiDevice) ||
         !ensureNoiseTextureView(rhiDevice) ||
         !ensureRhiBindGroup(rhiDevice, inputIndex, targets.sceneColorTextureViewHandle(inputIndex),
-                            targets.depthTextureViewHandle(), m_noiseTextureView)) {
+                            targets.depthTextureViewHandle(), m_noiseTextureView,
+                            targets.objectMaterialIdTextureViewHandle())) {
         return false;
     }
 
@@ -104,7 +108,8 @@ bool DepthOfFieldPass::recordDof(RhiCommandList& commandList, const FrameContext
                                                    settings.postProcess.dofAperture, settings.postProcess.dofIntensity,
                                                    1.0f),
                                          glm::vec4(static_cast<float>(std::max(1, targets.width())),
-                                                   static_cast<float>(std::max(1, targets.height())), 0.0f, 0.0f)};
+                                                   static_cast<float>(std::max(1, targets.height())), 0.0f, 0.0f),
+                                         firstPersonObjectId};
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
@@ -158,9 +163,18 @@ bool DepthOfFieldPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
         return false;
     }
 
+    RhiSamplerDesc nearestSamplerDesc = samplerDesc;
+    nearestSamplerDesc.minFilter = RhiFilter::Nearest;
+    nearestSamplerDesc.magFilter = RhiFilter::Nearest;
+    m_nearestSampler = rhiDevice.createSampler(nearestSamplerDesc);
+    if (!m_nearestSampler.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "DepthOfField.BindGroupLayout";
-    for (uint32_t binding = 0u; binding < 3u; ++binding) {
+    for (uint32_t binding = 0u; binding < 4u; ++binding) {
         bindGroupLayoutDesc.entries.push_back(
             {binding, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u});
     }
@@ -242,15 +256,17 @@ bool DepthOfFieldPass::ensureNoiseTextureView(RhiDevice& rhiDevice) {
 
 bool DepthOfFieldPass::ensureRhiBindGroup(RhiDevice& rhiDevice, const int historyIndex,
                                           const RhiTextureViewHandle sceneView, const RhiTextureViewHandle depthView,
-                                          const RhiTextureViewHandle noiseView) {
+                                          const RhiTextureViewHandle noiseView,
+                                          const RhiTextureViewHandle objectMaterialIdView) {
     if (!ensureRhiPipeline(rhiDevice) || historyIndex < 0 || historyIndex >= 2 || !sceneView.isValid() ||
-        !depthView.isValid() || !noiseView.isValid()) {
+        !depthView.isValid() || !noiseView.isValid() || !objectMaterialIdView.isValid()) {
         return false;
     }
 
     if (m_bindGroup[historyIndex].isValid() && sameTextureView(m_boundSceneView[historyIndex], sceneView) &&
         sameTextureView(m_boundDepthView[historyIndex], depthView) &&
-        sameTextureView(m_boundNoiseView[historyIndex], noiseView)) {
+        sameTextureView(m_boundNoiseView[historyIndex], noiseView) &&
+        sameTextureView(m_boundObjectMaterialIdView[historyIndex], objectMaterialIdView)) {
         return true;
     }
 
@@ -259,15 +275,15 @@ bool DepthOfFieldPass::ensureRhiBindGroup(RhiDevice& rhiDevice, const int histor
         m_bindGroup[historyIndex] = {};
     }
 
-    const RhiTextureViewHandle views[3] = {sceneView, depthView, noiseView};
+    const RhiTextureViewHandle views[4] = {sceneView, depthView, noiseView, objectMaterialIdView};
 
     RhiBindGroupDesc bindGroupDesc;
     bindGroupDesc.layout = m_bindGroupLayout;
-    for (uint32_t binding = 0u; binding < 3u; ++binding) {
+    for (uint32_t binding = 0u; binding < 4u; ++binding) {
         RhiBindGroupEntry entry;
         entry.binding = binding;
         entry.resource.combinedTextureSampler.textureView = views[binding];
-        entry.resource.combinedTextureSampler.sampler = m_sampler;
+        entry.resource.combinedTextureSampler.sampler = binding == 3u ? m_nearestSampler : m_sampler;
         bindGroupDesc.entries.push_back(entry);
     }
 
@@ -276,12 +292,14 @@ bool DepthOfFieldPass::ensureRhiBindGroup(RhiDevice& rhiDevice, const int histor
         m_boundSceneView[historyIndex] = {};
         m_boundDepthView[historyIndex] = {};
         m_boundNoiseView[historyIndex] = {};
+        m_boundObjectMaterialIdView[historyIndex] = {};
         return false;
     }
 
     m_boundSceneView[historyIndex] = sceneView;
     m_boundDepthView[historyIndex] = depthView;
     m_boundNoiseView[historyIndex] = noiseView;
+    m_boundObjectMaterialIdView[historyIndex] = objectMaterialIdView;
     return true;
 }
 
@@ -302,6 +320,7 @@ void DepthOfFieldPass::destroyRhiBindGroup() {
         m_boundSceneView[i] = {};
         m_boundDepthView[i] = {};
         m_boundNoiseView[i] = {};
+        m_boundObjectMaterialIdView[i] = {};
     }
 }
 
@@ -329,6 +348,9 @@ void DepthOfFieldPass::destroyRhiResources() {
         if (m_sampler.isValid()) {
             m_rhiDevice->destroySampler(m_sampler);
         }
+        if (m_nearestSampler.isValid()) {
+            m_rhiDevice->destroySampler(m_nearestSampler);
+        }
     }
 
     m_noiseTextureView = {};
@@ -339,5 +361,6 @@ void DepthOfFieldPass::destroyRhiResources() {
     m_pipelineLayout = {};
     m_bindGroupLayout = {};
     m_sampler = {};
+    m_nearestSampler = {};
     m_rhiDevice = nullptr;
 }

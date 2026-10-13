@@ -17,6 +17,7 @@
 #include "../renderers/DropRenderer.h"
 #include "../renderers/FallingBlockRenderer.h"
 #include "../renderers/HumanoidRenderer.h"
+#include "../renderers/FirstPersonHeldItemRenderer.h"
 #include "../mesh/TerrainRhiPipelineSet.h"
 #include "../mesh/TerrainRenderer.h"
 #include "../mesh/WorldRenderBuffer.h"
@@ -2845,6 +2846,11 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx, const RenderSe
             dofResources.sceneResolved = sceneResolved;
             dofResources.temporalCurrent = temporalCurrent;
             dofResources.depth = depth;
+            dofResources.objectMaterialId = objectMaterialId;
+            dofResources.firstPersonObjectId =
+                m_shared != nullptr && m_shared->firstPersonHeldItemRenderer != nullptr
+                    ? m_shared->firstPersonHeldItemRenderer->firstPersonObjectId()
+                    : 0u;
             graphTail = m_dofPass->addGraphPasses(m_renderGraph, ctx, settings, targets, dofResources, graphTail);
             if (!graphTail.isValid()) {
                 return failGraphSetup(__LINE__);

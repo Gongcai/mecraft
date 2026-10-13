@@ -111,6 +111,8 @@ public:
     void prepareFrame(const glm::mat4& cameraView, const Inventory& inventory,
                       const FirstPersonHeldItemMotion& motion, float timeSeconds);
     [[nodiscard]] bool hasPreparedDraw() const;
+    /// Returns the stable object ID used by the prepared first-person GBuffer draw.
+    [[nodiscard]] uint32_t firstPersonObjectId() const { return hasPreparedDraw() ? m_objectId : 0u; }
 
     /// Forward pipeline: vanilla lightmap shading on the scene capture target.
     void renderPreparedForward(RhiCommandList& commandList, const glm::mat4& viewProj, float skyIntensity,
