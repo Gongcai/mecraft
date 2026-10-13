@@ -8,6 +8,7 @@ layout(location = 4) out vec4 gMaterialAux;
 layout(location = 5) out vec4 gF0Metallic;
 layout(location = 6) out uvec2 gObjectMaterialId;
 layout(location = 7) out vec2 gVelocity;
+layout(location = 8) in vec3 vNormal;
 layout(location = 0) in vec2 vUv;
 layout(location = 1) in vec4 vVertexData;
 layout(location = 2) in vec4 vAnimationData;
@@ -53,16 +54,6 @@ vec3 redstoneTintSrgb(vec2 tintUv) {
         vec3(.82,.40,1),vec3(.25,1,.92),vec3(1,.56,.25),vec3(1));
     return mix(low[tint], high[tint], power);
 }
-vec3 decodeFaceNormal(float face) {
-    if (face > -2.5 && face < -0.5) return vec3(0.0, 1.0, 0.0);
-    int index = int(round(face));
-    if (index == 0) return vec3(0.0, 1.0, 0.0);
-    if (index == 1) return vec3(0.0, -1.0, 0.0);
-    if (index == 2) return vec3(0.0, 0.0, 1.0);
-    if (index == 3) return vec3(0.0, 0.0, -1.0);
-    if (index == 4) return vec3(-1.0, 0.0, 0.0);
-    return vec3(1.0, 0.0, 0.0);
-}
 void main() {
     float normalMarker = vVertexData.w;
     bool crossVegetation = normalMarker > -2.5 && normalMarker < -0.5;
@@ -82,7 +73,7 @@ void main() {
     if (vMaterialTint.y == 1u) albedo *= srgbToLinear(texture(uGrassColormap, vTintUv).rgb);
     else if (vMaterialTint.y == 2u) albedo *= srgbToLinear(texture(uFoliageColormap, vTintUv).rgb);
     else if (vMaterialTint.y == 3u) albedo *= srgbToLinear(redstoneTintSrgb(vTintUv));
-    vec3 normal = crossVegetation ? vec3(0.0, 1.0, 0.0) : decodeFaceNormal(normalMarker);
+    vec3 normal = normalize(vNormal);
     float ao = clamp(vVertexData.z / 3.0, 0.0, 1.0);
     int derivativeMaterialId = derivativeFragmentMaterialId(materialKindId(float(vMaterialTint.x)));
     bool emissiveMaterial = isDerivativeEmissiveMaterialId(derivativeMaterialId) ||

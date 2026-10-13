@@ -21,6 +21,7 @@ layout(location = 4) out vec2 vTintUv;
 layout(location = 5) out vec3 vWorldPosition;
 layout(location = 6) out vec2 vVelocity;
 layout(location = 7) flat out uvec2 vIdentity;
+layout(location = 8) out vec3 vNormal;
 
 layout(push_constant) uniform RhiPushConstants {
     mat4 uModelViewProj;
@@ -36,6 +37,17 @@ layout(push_constant) uniform RhiPushConstants {
 #endif
 };
 
+vec3 decodeFaceNormal(float face) {
+    if (face > -2.5 && face < -0.5) return vec3(0.0, 1.0, 0.0);
+    int index = int(round(face));
+    if (index == 0) return vec3(0.0, 1.0, 0.0);
+    if (index == 1) return vec3(0.0, -1.0, 0.0);
+    if (index == 2) return vec3(0.0, 0.0, 1.0);
+    if (index == 3) return vec3(0.0, 0.0, -1.0);
+    if (index == 4) return vec3(-1.0, 0.0, 0.0);
+    return vec3(1.0, 0.0, 0.0);
+}
+
 void main() {
     vec4 worldPosition = uModel * vec4(aPosition, 1.0);
     gl_Position = uModelViewProj * vec4(aPosition, 1.0);
@@ -43,6 +55,10 @@ void main() {
     vVertexData = vec4(aSunlight, aBlockLight, float(aAo), float(aNormal));
     vAnimationData = vec4(float(aLayer), float(aAnimationFrameCount),
                           float(aAnimationFps), float(aAnimated));
+    const vec3 localNormal = decodeFaceNormal(float(aNormal));
+    // GBuffer normals are stored in world space, so apply the inverse-transpose
+    // of the object transform before deferred lighting evaluates the surface.
+    vNormal = normalize(transpose(inverse(mat3(uModel))) * localNormal);
     vMaterialTint = uvec2((aTintPacked >> 8u) & 63u, (aTintPacked >> 14u) & 3u);
     vTintUv = (vec2(float((aTintPacked >> 4u) & 15u), float(aTintPacked & 15u)) + 0.5) / 16.0;
     vWorldPosition = worldPosition.xyz;

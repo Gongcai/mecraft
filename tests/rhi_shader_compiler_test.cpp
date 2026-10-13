@@ -320,6 +320,26 @@ void main() {
     return true;
 }
 
+[[nodiscard]] bool validateObjectNormalTransformContracts() {
+    const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/falling_block_gbuffer_rhi.vert");
+    const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/falling_block_gbuffer_rhi.frag");
+    if (!vertexSource.has_value() || !fragmentSource.has_value()) {
+        std::cerr << "Falling-block GBuffer sources failed to load\n";
+        return false;
+    }
+    const std::string normalizedVertex = normalizedShaderSource(*vertexSource);
+    const std::string normalizedFragment = normalizedShaderSource(*fragmentSource);
+    if (!sourceContainsAll(normalizedVertex,
+                           {"constvec3localNormal=decodeFaceNormal(float(aNormal));",
+                            "vNormal=normalize(transpose(inverse(mat3(uModel)))*localNormal);"}) ||
+        !sourceContainsAll(normalizedFragment, {"layout(location=8)invec3vNormal;",
+                                                "vec3normal=normalize(vNormal);"})) {
+        std::cerr << "Object GBuffer normals must be transformed to world space before fragment shading\n";
+        return false;
+    }
+    return true;
+}
+
 [[nodiscard]] bool validateVelocityPixelCenterContracts() {
     const auto opaqueSource = renderer::rhi::loadShaderSource("assets/shaders/velocity_resolve.frag");
     const auto transparentSource = renderer::rhi::loadShaderSource("assets/shaders/velocity_transparent_resolve.frag");
@@ -512,6 +532,7 @@ int main() {
     success = validateAccelerationStructureReflection() && success;
     success = validateSpirvBytecodeInput() && success;
     success = validateGBufferWriterContracts() && success;
+    success = validateObjectNormalTransformContracts() && success;
     success = validateVelocityPixelCenterContracts() && success;
     return success ? 0 : 1;
 }
