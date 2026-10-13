@@ -54,7 +54,9 @@ vec3 atmDoNightEye(vec3 color) {
 // blends it in through twilight so outdoor visibility does not depend on moonrise.
 vec3 atmAirglowRadiance(float sunAltitude) {
     float nightWeight = 1.0 - smoothstep(-0.16, 0.04, sunAltitude);
-    return vec3(0.68, 0.82, 1.0) * (0.0003 * nightWeight);
+    // Keep a visible outdoor baseline after night exposure is capped. This
+    // radiance is independent of moon phase, so moonless nights remain readable.
+    return vec3(0.68, 0.82, 1.0) * (0.002 * nightWeight);
 }
 
 float atmClampCosine(float mu) {
