@@ -205,9 +205,9 @@
       "underwaterScatterAnisotropySecondary": -0.05700000002980232,
       "underwaterScatterStrength": 17.770000457763672,
       "waterAbsorption": [
-        1.3849999904632568,
-        1.4780000448226929,
-        1.11899995803833
+        0.193,
+        0.132,
+        0.193
       ],
       "waterEffectsEnabled": true,
       "waterFogDensity": 2.0399999618530273,

@@ -36,3 +36,6 @@
 
 # Minecraft Java sound assets are fetched locally from Mojang's asset CDN.
 /assets/sounds/vanilla/
+
+# Vtune profiling output directory.
+/vtune-results/

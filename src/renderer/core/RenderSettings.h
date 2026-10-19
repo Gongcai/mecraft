@@ -162,7 +162,7 @@ struct TransparentSettings {
     bool waterEffectsEnabled = true;
     bool compositeEnabled = true;
     /// RGB Beer-Lambert absorption coefficients used by water fog and volumetric light.
-    glm::vec3 waterAbsorption = glm::vec3(0.40f, 0.14f, 0.08f);
+    glm::vec3 waterAbsorption = glm::vec3(0.193f, 0.132f, 0.193f);
     /// Refractive index of water used by Fresnel and screen-space refraction.
     float waterIOR = 1.33f;
     /// Procedural wave normal displacement and animation speed.

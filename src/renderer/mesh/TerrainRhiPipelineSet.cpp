@@ -124,7 +124,7 @@ struct alignas(16) TerrainProbeCaptureFrameParams {
     glm::vec4 sunColor = glm::vec4(1.0f);
     glm::vec4 ambientColor = glm::vec4(0.0f);
     glm::uvec4 lightCount = glm::uvec4(0u);
-    glm::vec4 waterAbsorptionIor = glm::vec4(0.4f, 0.14f, 0.08f, 1.33f);
+    glm::vec4 waterAbsorptionIor = glm::vec4(0.193f, 0.132f, 0.193f, 1.33f);
     glm::vec4 waterWaveParams = glm::vec4(1.0f, 1.0f, 0.0f, 0.0f);
 };
 

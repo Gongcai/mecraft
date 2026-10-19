@@ -48,7 +48,7 @@ struct TerrainWaterFrameData {
     float fogWetness = 0.0f;
     float cloudWetness = 0.0f;
     float surfaceWetness = 0.0f;
-    glm::vec3 waterAbsorption = glm::vec3(0.40f, 0.14f, 0.08f);
+    glm::vec3 waterAbsorption = glm::vec3(0.193f, 0.132f, 0.193f);
     float waterIOR = 1.33f;
     float waterWaveHeight = 1.0f;
     float waterWaveSpeed = 1.0f;
